@@ -3,20 +3,52 @@
   "version": "1.0.0",
   "main": "index.ts",
   "dependencies": {
+    "@expo-google-fonts/geist": "^0.4.2",
+    "@expo-google-fonts/geist-mono": "^0.4.2",
+    "@expo-google-fonts/inter": "^0.4.2",
+    "@expo-google-fonts/space-mono": "^0.4.2",
+    "@expo/metro-runtime": "^56.0.15",
+    "@gluestack-ui/nativewind-utils": "^1.0.28",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-native-community/datetimepicker": "9.1.0",
+    "@tanstack/react-query": "^5.101.1",
+    "autoprefixer": "^10.5.2",
+    "axios": "^1.18.1",
+    "babel-preset-expo": "^56.0.15",
     "expo": "~56.0.12",
+    "expo-camera": "^56.0.8",
+    "expo-font": "~56.0.7",
+    "expo-router": "~56.2.11",
+    "expo-splash-screen": "~56.0.10",
     "expo-status-bar": "~56.0.4",
+    "lucide-react-native": "^1.21.0",
+    "moment": "^2.30.1",
+    "moti": "^0.30.0",
+    "nativewind": "^4.2.6",
+    "postcss": "^8.5.15",
     "react": "19.2.3",
-    "react-native": "0.85.3"
+    "react-dom": "19.2.3",
+    "react-native": "0.85.3",
+    "react-native-pager-view": "8.0.1",
+    "react-native-reanimated": "4.3.1",
+    "react-native-svg": "15.15.4",
+    "react-native-toast-message": "^2.3.3",
+    "react-native-web": "^0.21.2",
+    "tailwindcss": "^3.4.19",
+    "zustand": "^5.0.14"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
+    "swagger-typescript-api": "^13.12.3",
     "typescript": "~6.0.3"
   },
   "scripts": {
     "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web"
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web",
+    "generate:api": "swagger-typescript-api generate -p ./swagger.yaml -o ./src/services/generated -n Api.ts --axios --single-http-client --module-name-first-tag",
+    "postinstall": "find node_modules/expo-modules-jsi/apple/Sources -name '*.swift' -exec sed -i '' 's/weak let /weak var /g' {} \\; && sed -i '' 's/swiftLanguageModes: \\[.v6\\]/swiftLanguageModes: [.v5]/' node_modules/expo-modules-jsi/apple/Package.swift && sed -i '' 's|name.wholeMatch(of: /\\^\\[a-zA-Z_\\$\\]\\[a-zA-Z0-9_\\$\\]\\*\\$/))|name.range(of: #\"^[a-zA-Z_$][a-zA-Z0-9_$]*$\"#, options: .regularExpression))|' node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI/Runtime/JavaScriptRuntime.swift"
   },
   "private": true
 }

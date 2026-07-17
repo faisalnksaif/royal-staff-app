@@ -1,0 +1,3498 @@
+openapi: 3.0.0
+info:
+  title: Royal App Backend API
+  description: Website monitoring and staff management system with bill tracking
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: faisalnkpadi@gmail.com
+
+servers:
+  - url: http://localhost:9999/api
+    description: Development Server
+  - url: https://api.rowbest.com/api
+    description: Production Server
+
+paths:
+  /health:
+    get:
+      tags:
+        - System
+      summary: Health check
+      description: Returns the health status of the API server
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Server is running
+                  timestamp:
+                    type: string
+                    format: date-time
+                    example: 2026-06-27T16:47:00.000Z
+
+  /auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register a new user
+      description: Create a new user account with email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: user@example.com
+                name:
+                  type: string
+                  nullable: true
+                  example: ANAS
+                password:
+                  type: string
+                  minLength: 4
+                  example: "1234"
+                user_id:
+                  type: integer
+                  example: 3027
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: User registered successfully
+                  data:
+                    $ref: '#/components/schemas/UserResponse'
+        '400':
+          description: Bad request - validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: Login user
+      description: Authenticate user with email and password, returns JWT token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: ANASROYAL@GMAIL.COM
+                password:
+                  type: string
+                  example: "1234"
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Login successful
+                  token:
+                    type: string
+                    example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                  data:
+                    $ref: '#/components/schemas/UserResponse'
+        '401':
+          description: Unauthorized - invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/me:
+    get:
+      tags:
+        - Authentication
+      summary: Get current user profile
+      description: Retrieve the authenticated user's profile information
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Current user profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/UserResponse'
+        '401':
+          description: Unauthorized - no token or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/users:
+    get:
+      tags:
+        - Authentication
+      summary: Get all users
+      description: Retrieve list of all users (requires authentication)
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of all users
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  count:
+                    type: integer
+                    example: 7
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/UserResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /staff:
+    get:
+      tags:
+        - Staff
+      summary: Get all staff
+      description: Retrieve list of all staff members (MANAGER ONLY)
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of all staff
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  count:
+                    type: integer
+                    example: 7
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StaffResponse'
+        '401':
+          description: Unauthorized - no token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - insufficient permissions (staff role cannot access)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /staff/{id}:
+    get:
+      tags:
+        - Staff
+      summary: Get staff by ID
+      description: Retrieve a specific staff member (staff can only access their own record, managers can access any)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Staff ID
+          schema:
+            type: integer
+            example: 2645
+      responses:
+        '200':
+          description: Staff details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/StaffResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - staff can only access their own record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Staff not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /ledger/customers:
+    get:
+      tags:
+        - Ledger
+      summary: List ledger customers
+      description: Paginated list of all rowbest ledger customers with dr/cr summary - managers only
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: search
+          in: query
+          description: Filter by customer name
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Paginated ledger customers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  pagination:
+                    type: object
+                    properties:
+                      page:
+                        type: integer
+                      limit:
+                        type: integer
+                      total:
+                        type: integer
+                      pages:
+                        type: integer
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LedgerCustomerResponse'
+        '403':
+          description: Forbidden - managers only
+
+  /ledger/customers/{ledgerId}:
+    get:
+      tags:
+        - Ledger
+      summary: Get a customer's ledger detail
+      description: Returns the customer record and its synced transactions, optionally filtered by date range
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ledgerId
+          in: path
+          required: true
+          description: Rowbest ledger id
+          schema:
+            type: integer
+        - name: from_date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to_date
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Ledger customer and its transactions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      customer:
+                        $ref: '#/components/schemas/LedgerCustomerResponse'
+                      entries:
+                        type: array
+                        description: Synced transactions for this customer
+                        items:
+                          type: object
+        '404':
+          description: Ledger customer not found
+
+  /ledger/customers/{ledgerId}/opening-balance:
+    get:
+      tags:
+        - Ledger
+      summary: Get opening/closing balance for a date range
+      description: Computed live against rowbest (not from locally-synced data) for accuracy over arbitrary date ranges
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ledgerId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: from_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: to_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Opening and closing balance for the period
+        '400':
+          description: from_date and to_date are required
+
+  /ledger/staff/{userId}:
+    get:
+      tags:
+        - Ledger
+      summary: Get a staff member's ledger entries
+      description: Staff can only access their own, managers can access any
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Paginated ledger entries with debit/credit totals
+        '403':
+          description: Forbidden - staff can only access their own entries
+        '404':
+          description: Staff record not found
+
+  /ledger/staff/{userId}/outstanding:
+    get:
+      tags:
+        - Ledger
+      summary: Get customers currently owned by a staff member, with outstanding
+      description: >
+        Returns customers currently assigned to this staff (per the
+        ownership cutoff rule in Settings key `ledger_ownership_cutoff_date`
+        - before the cutoff, ownership comes from the manually-maintained
+        staff-customer mapping spreadsheet; after it, ownership is derived
+        dynamically from each customer's most recent matched Sales voucher).
+        Each customer includes its live outstanding balance and a breakdown
+        of which staff have historically sold to them (no single "owner" is
+        forced on the sales-contribution side). Staff can only access their
+        own, managers can access any.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: search
+          in: query
+          description: Filter by customer name
+          schema:
+            type: string
+        - name: filter
+          in: query
+          description: >
+            Filter by follow-up status. `paid` means the customer has at
+            least one follow-up resolved by a payment. `follow_up_insights`
+            in the response is always computed over the full owned set,
+            regardless of this filter.
+          schema:
+            type: string
+            enum: [all, followed_up, not_followed_up, paid, overdue, open_followup]
+            default: all
+      responses:
+        '200':
+          description: Paginated customers owned by this staff, with outstanding and sales-contribution totals
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  pagination:
+                    type: object
+                    properties:
+                      page:
+                        type: integer
+                      limit:
+                        type: integer
+                      total:
+                        type: integer
+                      pages:
+                        type: integer
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        ledger_id:
+                          type: integer
+                          example: 688580
+                        name:
+                          type: string
+                          example: C- ANEES
+                        mobile:
+                          type: string
+                          nullable: true
+                          description: Customer's mobile number from rowbest, if on file
+                          example: "9846220088"
+                        outstanding_balance:
+                          type: number
+                          example: 8064269
+                        outstanding_dr_cr:
+                          type: string
+                          enum: [Dr, Cr]
+                        ownership_source:
+                          type: string
+                          enum: [assigned, dynamic, unassigned]
+                          description: Whether ownership came from the spreadsheet (assigned), derived post-cutoff (dynamic), or is unset
+                        staff_sales_total:
+                          type: number
+                          description: This staff's share of total Sales debit to this customer
+                        other_contributors:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              staff_id:
+                                type: integer
+                              staff_name:
+                                type: string
+                              sales_total:
+                                type: number
+                        follow_up:
+                          type: object
+                          description: Follow-up activity for this specific customer
+                          properties:
+                            total:
+                              type: integer
+                            open:
+                              type: integer
+                              description: Not yet resolved by a payment
+                            resolved:
+                              type: integer
+                            last_logged_at:
+                              type: string
+                              format: date-time
+                              nullable: true
+                            last_outcome:
+                              type: string
+                              nullable: true
+                              enum: [promisedToPay, promisedPartial, dispute, noContact, paid]
+                            next_followup_date:
+                              type: string
+                              format: date-time
+                              nullable: true
+                            is_overdue:
+                              type: boolean
+                              description: Has an open follow-up whose nextFollowUpDate has passed
+                            total_promised_amount:
+                              type: number
+                              description: Sum of promisedAmount across still-open follow-ups
+                  filter:
+                    type: string
+                    enum: [all, followed_up, not_followed_up, paid, overdue, open_followup]
+                    description: The filter that was applied to `data`
+                  totals:
+                    type: object
+                    properties:
+                      total_outstanding:
+                        type: number
+                      total_staff_sales:
+                        type: number
+                  follow_up_insights:
+                    type: object
+                    description: >
+                      Staff-wide follow-up effectiveness, computed across all
+                      owned customers (not just the current page) - answers
+                      "how much did we follow up, how much did we actually
+                      receive".
+                    properties:
+                      customers_total:
+                        type: integer
+                      customers_never_followed_up:
+                        type: integer
+                        description: Owned customers with zero follow-up records ever - a coverage gap
+                      customers_overdue_followup:
+                        type: integer
+                        description: Owned customers with an open follow-up whose next-followup date has passed
+                      total_followups:
+                        type: integer
+                      open_followups:
+                        type: integer
+                      resolved_followups:
+                        type: integer
+                      resolution_rate_pct:
+                        type: number
+                        description: resolved_followups / total_followups * 100
+                      by_outcome:
+                        type: object
+                        additionalProperties:
+                          type: integer
+                        example: { promisedToPay: 12, dispute: 2, noContact: 5 }
+                      total_promised_amount:
+                        type: number
+                        description: Sum of promisedAmount across still-open follow-ups
+                      total_received_via_resolved_followups:
+                        type: number
+                        description: Actual credit amount on the vouchers that resolved a follow-up (promised vs. actually collected)
+                      avg_days_to_resolve:
+                        type: number
+                        nullable: true
+                        description: Average days between a follow-up being logged and being resolved by payment
+        '400':
+          description: Invalid filter value
+        '403':
+          description: Forbidden - staff can only access their own customers
+        '404':
+          description: Staff record not found
+
+  /ledger/summary/by-group:
+    get:
+      tags:
+        - Ledger
+      summary: Ledger balance summary by group
+      description: Aggregates customer dr/cr/balance by ledger group (e.g. Sundry Debtors) - managers only
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Balances grouped by ledger group
+        '403':
+          description: Forbidden - managers only
+
+  /ledger/unmatched:
+    get:
+      tags:
+        - Ledger
+      summary: List entries with unresolved sales executive
+      description: Ledger entries whose sales_executive name couldn't be matched to a Staff record - managers only
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Paginated unmatched entries
+        '403':
+          description: Forbidden - managers only
+
+  /ledger/resolve-unmatched:
+    post:
+      tags:
+        - Ledger
+      summary: Re-run staff-name matching
+      description: DB-only re-resolution pass against already-stored unmatched entries (no rowbest calls) - managers only
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Number of entries checked and resolved
+        '403':
+          description: Forbidden - managers only
+
+  /followups:
+    post:
+      tags:
+        - Follow-ups
+      summary: Log a follow-up
+      description: Create a new follow-up record for a customer
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - customerId
+                - customerName
+                - staffId
+                - staffName
+                - contactMethod
+                - outcome
+              properties:
+                customerId:
+                  type: string
+                  example: "CUST001"
+                customerName:
+                  type: string
+                  example: "ABC Company"
+                ledgerId:
+                  type: integer
+                  description: >
+                    Optional. Rowbest ledger id (LedgerCustomer.ledger_id).
+                    If omitted, best-effort resolved server-side by matching
+                    customerName - pass it explicitly when known for a
+                    reliable join instead of relying on name matching.
+                  example: 688580
+                staffId:
+                  type: integer
+                  example: 2645
+                userId:
+                  type: integer
+                  example: 3027
+                staffName:
+                  type: string
+                  example: ANAS
+                loggedAt:
+                  type: string
+                  format: date-time
+                  example: 2026-06-19T10:30:00Z
+                contactMethod:
+                  type: string
+                  enum:
+                    - phoneCall
+                    - sms
+                    - email
+                    - inPerson
+                    - whatsapp
+                  example: phoneCall
+                outcome:
+                  type: string
+                  enum:
+                    - promisedToPay
+                    - promisedPartial
+                    - dispute
+                    - noContact
+                    - paid
+                  example: promisedToPay
+                promisedAmount:
+                  type: number
+                  nullable: true
+                  example: 5000
+                promisedDate:
+                  type: string
+                  format: date
+                  nullable: true
+                  example: 2026-06-26
+                nextFollowUpDate:
+                  type: string
+                  format: date
+                  nullable: true
+                  example: 2026-06-25
+                quickRemarks:
+                  type: array
+                  items:
+                    type: string
+                  example:
+                    - Customer interested
+                    - Will call back
+                freeTextRemark:
+                  type: string
+                  nullable: true
+                  example: Customer is in a difficult situation
+                disputeDetails:
+                  type: string
+                  nullable: true
+                  example: Customer claims amount is incorrect
+      responses:
+        '201':
+          description: Follow-up logged successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Follow-up logged successfully
+                  data:
+                    $ref: '#/components/schemas/FollowUpResponse'
+        '400':
+          description: Bad request - validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /followups/{id}:
+    get:
+      tags:
+        - Follow-ups
+      summary: Get follow-up by ID
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Follow-up ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Follow-up details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/FollowUpResponse'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden - staff can only access their own follow-ups
+        '404':
+          description: Follow-up not found
+    put:
+      tags:
+        - Follow-ups
+      summary: Update follow-up
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                outcome:
+                  type: string
+                  enum:
+                    - promisedToPay
+                    - promisedPartial
+                    - dispute
+                    - noContact
+                    - paid
+                promisedAmount:
+                  type: number
+                promisedDate:
+                  type: string
+                  format: date
+                nextFollowUpDate:
+                  type: string
+                  format: date
+                freeTextRemark:
+                  type: string
+      responses:
+        '200':
+          description: Follow-up updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  data:
+                    $ref: '#/components/schemas/FollowUpResponse'
+        '403':
+          description: Forbidden
+        '404':
+          description: Follow-up not found
+    delete:
+      tags:
+        - Follow-ups
+      summary: Delete follow-up
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Follow-up deleted successfully
+        '403':
+          description: Forbidden
+        '404':
+          description: Follow-up not found
+
+  /followups/customer/{customerId}:
+    get:
+      tags:
+        - Follow-ups
+      summary: Get follow-ups by customer
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Customer's follow-ups
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  count:
+                    type: integer
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FollowUpResponse'
+
+  /followups/staff/{staffId}:
+    get:
+      tags:
+        - Follow-ups
+      summary: Get follow-ups by staff
+      description: Staff can only access their own, managers can access any
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Staff's follow-ups
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  count:
+                    type: integer
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FollowUpResponse'
+
+  /followups/stats/total:
+    get:
+      tags:
+        - Follow-ups
+      summary: Get total follow-up summary across all staff
+      description: Retrieve aggregated follow-up statistics for all staff (MANAGER ONLY)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Total follow-up summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      totalFollowUps:
+                        type: integer
+                      uniqueStaffCount:
+                        type: integer
+                      uniqueCustomerCount:
+                        type: integer
+                      promisedToPay:
+                        type: integer
+                      promisedPartial:
+                        type: integer
+                      dispute:
+                        type: integer
+                      noContact:
+                        type: integer
+                      paid:
+                        type: integer
+                      totalPromisedAmount:
+                        type: number
+        '403':
+          description: Forbidden - managers only
+
+  /followups/stats/summary/{staffId}:
+    get:
+      tags:
+        - Follow-ups
+      summary: Get follow-up summary for specific staff
+      description: Retrieve aggregated follow-up statistics for a staff member (Managers can view any staff, staff can only view their own)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Staff follow-up summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      totalFollowUps:
+                        type: integer
+                      promisedToPay:
+                        type: integer
+                      promisedPartial:
+                        type: integer
+                      dispute:
+                        type: integer
+                      noContact:
+                        type: integer
+                      paid:
+                        type: integer
+                      totalPromisedAmount:
+                        type: number
+        '403':
+          description: Forbidden - staff can only view their own data, managers can view any staff
+
+  /attendance/scan:
+    post:
+      tags:
+        - Attendance
+      summary: Scan fingerprint for attendance (check-in/check-out)
+      description: Scan staff member's fingerprint for attendance marking. Public endpoint (no auth required). Toggle between check-in and check-out automatically. Supports multiple sessions per day.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - staffId
+                - fingerprintTemplate
+                - timestamp
+              properties:
+                staffId:
+                  type: integer
+                  example: 2645
+                  description: Staff ID to identify the employee
+                fingerprintTemplate:
+                  type: string
+                  format: byte
+                  example: "QmFzZTY0RW5jb2RlZEZpbmdlcnByaW50VGVtcGxhdGU="
+                  description: Base64 encoded fingerprint template from device sensor
+                timestamp:
+                  type: string
+                  format: date-time
+                  example: 2026-06-29T09:30:45.123Z
+      responses:
+        '200':
+          description: Fingerprint scan result (matched)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  matched:
+                    type: boolean
+                    example: true
+                  staff:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        example: 2645
+                      name:
+                        type: string
+                        example: ANAS
+                  confidence:
+                    type: number
+                    example: 0.95
+                    description: Fingerprint match confidence (0-1), 0.90+ required
+                  action:
+                    type: string
+                    enum: [checkIn, checkOut]
+                    example: checkIn
+                  attendance:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      staffId:
+                        type: integer
+                      date:
+                        type: string
+                        example: 2026-06-29
+                      sessionCount:
+                        type: integer
+                        example: 1
+                      sessions:
+                        type: array
+                        description: Multiple sessions for breaks and meals
+                        items:
+                          type: object
+                          properties:
+                            sessionNumber:
+                              type: integer
+                            checkIn:
+                              type: string
+                              format: date-time
+                            checkOut:
+                              type: string
+                              format: date-time
+                              nullable: true
+                            workHours:
+                              type: number
+                              nullable: true
+                      totalWorkHours:
+                        type: number
+                        example: 2.5
+                      totalBreakTime:
+                        type: number
+                        example: 0.5
+                      status:
+                        type: string
+                        enum: [present, absent, late]
+        '400':
+          description: Bad request - invalid fingerprint or staff not found
+
+  /attendance/enroll/{staffId}:
+    post:
+      tags:
+        - Attendance
+      summary: Enroll staff member's fingerprint
+      description: Register a staff member's fingerprint for attendance recognition. Requires 3 scans minimum for optimal accuracy. Progressive enrollment (call this endpoint 3 times).
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+            example: 2645
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - fingerprintTemplate
+              properties:
+                fingerprintTemplate:
+                  type: string
+                  format: byte
+                  example: "QmFzZTY0RW5jb2RlZEZpbmdlcnByaW50VGVtcGxhdGU="
+                  description: Base64 encoded fingerprint template from device sensor
+      responses:
+        '200':
+          description: Fingerprint enrollment successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Fingerprint enrolled successfully
+                  enrollmentCount:
+                    type: integer
+                    example: 1
+                    description: Current enrollment count (1, 2, or 3)
+                  readyForAttendance:
+                    type: boolean
+                    example: false
+                    description: true when enrollmentCount reaches 3
+        '400':
+          description: Invalid fingerprint template format
+        '404':
+          description: Staff not found
+
+  /attendance:
+    get:
+      tags:
+        - Attendance
+      summary: Get attendance records by date
+      description: Retrieve attendance records for a specific date. Shows all staff with their attendance status (present/absent/late) including multiple sessions per day. Managers can view all, staff can only view own.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+            example: 2026-06-29
+        - name: staffId
+          in: query
+          schema:
+            type: integer
+            example: 2645
+      responses:
+        '200':
+          description: Attendance records for date
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  date:
+                    type: string
+                    example: 2026-06-29
+                  summary:
+                    type: object
+                    properties:
+                      present:
+                        type: integer
+                        example: 45
+                      absent:
+                        type: integer
+                        example: 5
+                      late:
+                        type: integer
+                        example: 3
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        staffId:
+                          type: integer
+                        staffName:
+                          type: string
+                        sessionCount:
+                          type: integer
+                          description: Number of check-in/check-out sessions
+                        sessions:
+                          type: array
+                          description: Multiple sessions for breaks and meals
+                          items:
+                            type: object
+                        totalWorkHours:
+                          type: number
+                          nullable: true
+                        totalBreakTime:
+                          type: number
+                          nullable: true
+                        status:
+                          type: string
+                          enum: [present, absent, late]
+        '400':
+          description: Invalid date format
+        '403':
+          description: Forbidden
+
+  /attendance/my-history:
+    get:
+      tags:
+        - Attendance
+      summary: Get personal attendance history
+      description: Retrieve staff member's own attendance history for a date range. Includes multiple sessions per day with break tracking.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: startDate
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+            example: 2026-06-01
+        - name: endDate
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+            example: 2026-06-30
+      responses:
+        '200':
+          description: Attendance history with sessions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      name:
+                        type: string
+                      period:
+                        type: object
+                        properties:
+                          start:
+                            type: string
+                          end:
+                            type: string
+                      summary:
+                        type: object
+                        properties:
+                          presentDays:
+                            type: integer
+                          absentDays:
+                            type: integer
+                          lateDays:
+                            type: integer
+                          totalWorkHours:
+                            type: number
+                      records:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            date:
+                              type: string
+                            sessionCount:
+                              type: integer
+                              description: Number of sessions (breaks/meals)
+                            sessions:
+                              type: array
+                              description: Detailed session breakdown
+                              items:
+                                type: object
+                            totalWorkHours:
+                              type: number
+                            totalBreakTime:
+                              type: number
+                            status:
+                              type: string
+
+  /attendance/biometric-status/{staffId}:
+    get:
+      tags:
+        - Attendance
+      summary: Get biometric fingerprint enrollment status
+      description: Check if staff member has completed fingerprint enrollment and is ready for attendance scanning.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Fingerprint enrollment status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  staffId:
+                    type: integer
+                  name:
+                    type: string
+                  enrolled:
+                    type: boolean
+                  enrollmentCount:
+                    type: integer
+                    description: Number of fingerprints enrolled (0-3)
+                  readyForAttendance:
+                    type: boolean
+                    description: true when enrollmentCount >= 3
+                  enrolledAt:
+                    type: string
+                    format: date-time
+                    nullable: true
+
+  /attendance/biometric-enrollment/{staffId}:
+    delete:
+      tags:
+        - Attendance
+      summary: Delete fingerprint enrollment (reset)
+      description: Remove all fingerprint enrollment data for a staff member. They can re-enroll afterward. Requires owner or superAdmin role.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Fingerprint enrollment cleared
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                    example: Biometric enrollment cleared
+        '403':
+          description: Forbidden - insufficient permissions
+        '404':
+          description: Staff not found
+
+  /leaves/request:
+    post:
+      tags:
+        - Leaves
+      summary: Request a leave
+      description: Staff requests a leave. Requires approval from superAdmin. Maximum 3 leaves per month, 12 per year.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - startDate
+                - endDate
+                - leaveType
+                - reason
+              properties:
+                startDate:
+                  type: string
+                  format: date
+                  example: 2026-07-01
+                  description: Leave start date (IST)
+                endDate:
+                  type: string
+                  format: date
+                  example: 2026-07-03
+                  description: Leave end date (inclusive)
+                leaveType:
+                  type: string
+                  enum: [Personal, Medical]
+                  example: Personal
+                reason:
+                  type: string
+                  example: Family vacation
+                isException:
+                  type: boolean
+                  default: false
+                  description: For medical leaves exceeding monthly limit
+      responses:
+        '201':
+          description: Leave request created (pending approval)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      status:
+                        type: string
+                        example: pending
+                      numberOfDays:
+                        type: integer
+                      remainingLeaves:
+                        type: integer
+        '400':
+          description: Bad request - exceeds quota or overlapping leave
+
+  /leaves/my-requests:
+    get:
+      tags:
+        - Leaves
+      summary: Get my leave requests
+      description: Retrieve personal leave requests with optional status filter
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, approved, rejected]
+      responses:
+        '200':
+          description: Leave requests list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      count:
+                        type: integer
+                      leaves:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                            leaveType:
+                              type: string
+                            startDate:
+                              type: string
+                              format: date
+                            endDate:
+                              type: string
+                              format: date
+                            numberOfDays:
+                              type: integer
+                            reason:
+                              type: string
+                            status:
+                              type: string
+                            approvedAt:
+                              type: string
+                              format: date-time
+                              nullable: true
+
+  /leaves/balance/{staffId}:
+    get:
+      tags:
+        - Leaves
+      summary: Get leave balance
+      description: Check leave balance and usage statistics. Staff can view own, managers/superadmin can view any.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Leave balance details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      name:
+                        type: string
+                      totalLeavePerYear:
+                        type: integer
+                        example: 12
+                      leaveBalance:
+                        type: integer
+                        description: Remaining leaves for the year
+                      leaveUsedThisYear:
+                        type: integer
+                      leaveUsedThisMonth:
+                        type: integer
+                      monthlyLimit:
+                        type: integer
+                        example: 3
+
+  /leaves:
+    get:
+      tags:
+        - Leaves
+      summary: Get all leave requests (SUPER ADMIN ONLY)
+      description: Retrieve all leave requests across all staff with optional status filter
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, approved, rejected]
+      responses:
+        '200':
+          description: All leave requests
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      count:
+                        type: integer
+                      leaves:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                            staffId:
+                              type: integer
+                            staffName:
+                              type: string
+                            leaveType:
+                              type: string
+                            startDate:
+                              type: string
+                              format: date
+                            endDate:
+                              type: string
+                              format: date
+                            numberOfDays:
+                              type: integer
+                            reason:
+                              type: string
+                            status:
+                              type: string
+                            createdAt:
+                              type: string
+                              format: date-time
+        '403':
+          description: Forbidden - superadmin only
+
+  /leaves/{leaveId}/approve:
+    put:
+      tags:
+        - Leaves
+      summary: Approve leave request (SUPER ADMIN ONLY)
+      description: Approve a pending leave request. Automatically deducts from leave balance.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: leaveId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Leave approved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      status:
+                        type: string
+                        example: approved
+                      approvedAt:
+                        type: string
+                        format: date-time
+        '403':
+          description: Forbidden - superadmin only
+        '400':
+          description: Bad request - invalid status
+
+  /leaves/{leaveId}/reject:
+    put:
+      tags:
+        - Leaves
+      summary: Reject leave request (SUPER ADMIN ONLY)
+      description: Reject a pending leave request with reason
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: leaveId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - rejectionReason
+              properties:
+                rejectionReason:
+                  type: string
+                  example: Insufficient notice
+      responses:
+        '200':
+          description: Leave rejected successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      status:
+                        type: string
+                        example: rejected
+        '403':
+          description: Forbidden - superadmin only
+        '400':
+          description: Bad request - invalid status
+
+  /leaves/{leaveId}:
+    delete:
+      tags:
+        - Leaves
+      summary: Delete a pending leave request
+      description: Delete a pending leave request. Staff can only delete their own, superadmin can delete any.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: leaveId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Leave request deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      message:
+                        type: string
+                        example: Leave request deleted successfully
+        '400':
+          description: Bad request - only pending leaves can be deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                    example: Cannot delete leave with status approved
+        '403':
+          description: Forbidden - staff can only delete their own leaves
+        '404':
+          description: Leave request not found
+
+  /leaves/stats/overview:
+    get:
+      tags:
+        - Leaves
+      summary: Get leave statistics (SUPER ADMIN ONLY)
+      description: Retrieve aggregated leave statistics across the organization
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Leave statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      total:
+                        type: integer
+                      byStatus:
+                        type: object
+                        properties:
+                          pending:
+                            type: integer
+                          approved:
+                            type: integer
+                          rejected:
+                            type: integer
+                      byType:
+                        type: object
+                        properties:
+                          personal:
+                            type: integer
+                          medical:
+                            type: integer
+                      currentMonth:
+                        type: integer
+        '403':
+          description: Forbidden - superadmin only
+
+  /appearance/{staffId}:
+    put:
+      tags:
+        - Appearance
+      summary: Update staff appearance (SUPER ADMIN ONLY)
+      description: Update appearance status for a staff member. Use status "ok" to reset, or "bad" with violations to mark violations.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [ok, bad]
+                  example: bad
+                violations:
+                  type: array
+                  description: Required if status is "bad"
+                  items:
+                    type: string
+                    enum: [uniform, socks_banyan, hair_beard_moustache]
+                  example: [uniform, socks_banyan]
+                remarks:
+                  type: string
+                  nullable: true
+                  example: "Wrinkled uniform, mismatched socks"
+      responses:
+        '200':
+          description: Appearance updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+        '400':
+          description: Bad request - issues required when status is bad
+        '403':
+          description: Forbidden - superadmin only
+        '404':
+          description: Staff not found
+
+  /appearance/today:
+    get:
+      tags:
+        - Appearance
+      summary: Get today's appearance for all staff (SUPER ADMIN ONLY)
+      description: Retrieve appearance status for all staff members for today. Defaults to OK for all staff.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Today's appearance records
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      date:
+                        type: string
+                        format: date
+                        example: "2026-06-30"
+                      count:
+                        type: integer
+                        example: 50
+                      badCount:
+                        type: integer
+                        example: 3
+                      staff:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            staffId:
+                              type: integer
+                            staffName:
+                              type: string
+                            date:
+                              type: string
+                            status:
+                              type: string
+                              enum: [ok, bad]
+                            violations:
+                              type: array
+                              items:
+                                type: string
+                                enum: [uniform, socks_banyan, hair_beard_moustache]
+                            remarks:
+                              type: string
+                              nullable: true
+                            markedAt:
+                              type: string
+                              format: date-time
+                              nullable: true
+        '403':
+          description: Forbidden - superadmin only
+
+  /appearance/mark-bad/{staffId}:
+    post:
+      tags:
+        - Appearance
+      summary: Mark staff appearance as bad (SUPER ADMIN ONLY)
+      description: Mark specific appearance violations for a staff member for today
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - violations
+              properties:
+                status:
+                  type: string
+                  enum: [ok, bad]
+                  default: bad
+                violations:
+                  type: array
+                  description: Appearance violations to mark
+                  items:
+                    type: string
+                    enum: [uniform, socks_banyan, hair_beard_moustache]
+                  example: [uniform, socks_banyan]
+                remarks:
+                  type: string
+                  nullable: true
+                  example: "Wrinkled uniform, mismatched socks"
+      responses:
+        '200':
+          description: Appearance marked successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      status:
+                        type: string
+                      violations:
+                        type: array
+                        items:
+                          type: string
+                      remarks:
+                        type: string
+                      markedAt:
+                        type: string
+                        format: date-time
+        '400':
+          description: Bad request
+        '403':
+          description: Forbidden - superadmin only
+        '404':
+          description: Staff not found
+
+  /appearance/reset/{staffId}:
+    post:
+      tags:
+        - Appearance
+      summary: Reset appearance to OK (SUPER ADMIN ONLY)
+      description: Reset staff appearance status back to OK for today
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Appearance reset successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      status:
+                        type: string
+                        example: ok
+        '403':
+          description: Forbidden - superadmin only
+        '404':
+          description: Staff not found
+
+  /appearance/history/{staffId}:
+    get:
+      tags:
+        - Appearance
+      summary: Get appearance history (SUPER ADMIN ONLY)
+      description: Get appearance history for a specific staff member
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: days
+          in: query
+          description: Number of days to look back (default 30)
+          schema:
+            type: integer
+            default: 30
+      responses:
+        '200':
+          description: Appearance history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      period:
+                        type: string
+                      stats:
+                        type: object
+                        properties:
+                          totalDays:
+                            type: integer
+                          badDays:
+                            type: integer
+                          okDays:
+                            type: integer
+                          badPercentage:
+                            type: string
+                      history:
+                        type: array
+                        items:
+                          type: object
+        '403':
+          description: Forbidden - superadmin only
+        '404':
+          description: Staff not found
+
+  /appearance/stats/overview:
+    get:
+      tags:
+        - Appearance
+      summary: Get appearance statistics (SUPER ADMIN ONLY)
+      description: Get aggregated appearance statistics across staff
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Appearance statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      period:
+                        type: object
+                      totalStaff:
+                        type: integer
+                      staffWithBadAppearance:
+                        type: integer
+                      stats:
+                        type: array
+                        items:
+                          type: object
+        '403':
+          description: Forbidden - superadmin only
+
+  /scores/{staffId}/month/{month}:
+    get:
+      tags:
+        - Scoring
+      summary: Get staff score for a specific month
+      description: Retrieve score breakdown for a staff member for a given month. Shows total score, breakdown by category, and detailed metrics.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Staff ID
+          example: 2645
+        - name: month
+          in: path
+          required: true
+          schema:
+            type: string
+            format: date
+            pattern: '^\d{4}-\d{2}$'
+          description: Month in YYYY-MM format
+          example: "2026-06"
+      responses:
+        '200':
+          description: Staff score for the month
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/StaffScoreResponse'
+        '404':
+          description: Score not found
+        '403':
+          description: Forbidden - staff can only view their own score
+
+  /scores/{staffId}/history:
+    get:
+      tags:
+        - Scoring
+      summary: Get staff score history
+      description: Retrieve score history for a staff member for the last N months. Shows trend over time.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Staff ID
+          example: 2645
+        - name: months
+          in: query
+          schema:
+            type: integer
+            default: 6
+          description: Number of months to look back
+      responses:
+        '200':
+          description: Staff score history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      period:
+                        type: string
+                        example: Last 6 months
+                      scores:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/StaffScoreResponse'
+        '404':
+          description: Staff not found
+        '403':
+          description: Forbidden
+
+  /scores/monthly-overview:
+    get:
+      tags:
+        - Scoring
+      summary: Get all staff scores for a month with statistics (SUPER ADMIN ONLY)
+      description: |
+        Retrieve all staff scores for a given month with detailed statistics.
+
+        **Scoring Framework (Total 100 points):**
+        - Attendance: 10 points (late arrivals tracking)
+        - Leaves: 10 points (approved leaves per month)
+        - Appearance: 5 points (dress code violations)
+        - Future rules: 75 points (reserved for expansion)
+
+        Returns: Staff scores sorted by performance, plus aggregated statistics and performance distribution.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: month
+          in: query
+          schema:
+            type: string
+            format: date
+            pattern: '^\d{4}-\d{2}$'
+          description: Month in YYYY-MM format (default current month)
+          example: "2026-06"
+      responses:
+        '200':
+          description: All staff scores for the month
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      month:
+                        type: string
+                      count:
+                        type: integer
+                      scores:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/StaffScoreResponse'
+        '403':
+          description: Forbidden - superadmin only
+
+  /scores/calculate-monthly:
+    post:
+      tags:
+        - Scoring
+      summary: Calculate monthly scores for all staff (SUPER ADMIN ONLY)
+      description: |
+        Trigger score calculation for all active staff for a given month.
+
+        This endpoint analyzes:
+        - **Attendance**: Late arrivals (>30 mins) vs max allowed (3)
+        - **Leaves**: Approved leaves vs monthly limit (2)
+        - **Appearance**: Dress code violation days vs max violations
+
+        Scores are saved to database for fast retrieval. Can be called:
+        - At month-end to finalize scores
+        - Anytime to recalculate if rules or data changed
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                month:
+                  type: string
+                  format: date
+                  pattern: '^\d{4}-\d{2}$'
+                  example: "2026-06"
+                  description: Month in YYYY-MM format to calculate (default current month)
+      responses:
+        '200':
+          description: Scores calculated and saved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      month:
+                        type: string
+                        example: "2026-06"
+                      calculatedCount:
+                        type: integer
+                        description: Number of staff scores calculated/updated
+                        example: 13
+                      totalStaff:
+                        type: integer
+                        description: Total active staff
+                        example: 13
+                      scores:
+                        type: array
+                        description: All calculated scores
+                        items:
+                          $ref: '#/components/schemas/StaffScoreResponse'
+                      errors:
+                        type: array
+                        items:
+                          type: string
+                        nullable: true
+                        description: Any errors encountered during calculation
+        '403':
+          description: Forbidden - superadmin only
+
+  /extra-performance:
+    get:
+      tags:
+        - Extra Performance
+      summary: Get all performances
+      description: |
+        Retrieve all performances (pending, approved, rejected) for authenticated user or specific user (SuperAdmin only).
+
+        **Default behavior:** Returns authenticated user's all performances.
+        **With userId param:** SuperAdmin can view any user's performances.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: userId
+          in: query
+          schema:
+            type: integer
+          description: (SuperAdmin only) View specific user's performances instead of own
+          example: 2645
+      responses:
+        '200':
+          description: All performances with status breakdown
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      userId:
+                        type: integer
+                      staffName:
+                        type: string
+                      stats:
+                        type: object
+                        properties:
+                          total:
+                            type: integer
+                          approved:
+                            type: integer
+                          pending:
+                            type: integer
+                          rejected:
+                            type: integer
+                      performances:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ExtraPerformanceResponse'
+        '400':
+          description: Bad request - user not associated with staff
+        '403':
+          description: Forbidden - staff can only view their own
+        '404':
+          description: Staff not found
+
+    post:
+      tags:
+        - Extra Performance
+      summary: Submit extra performance for approval
+      description: Staff submit evidence of extra performance/achievement for approval by SuperAdmin. Approved submissions award 10 points to monthly score.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - title
+                - description
+                - date
+              properties:
+                title:
+                  type: string
+                  description: Brief title of the performance
+                  example: "Led customer training session"
+                description:
+                  type: string
+                  description: Detailed description of what was accomplished
+                  example: "Conducted comprehensive training for 15 customers on new product features"
+                date:
+                  type: string
+                  format: date
+                  description: Date when performance occurred (IST)
+                  example: "2026-06-28"
+                category:
+                  type: string
+                  description: Performance category
+                  enum: [Training, "Process Improvement", "Customer Excellence", "Team Leadership", Other]
+                  example: "Training"
+      responses:
+        '201':
+          description: Performance submitted successfully (pending approval)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/ExtraPerformanceResponse'
+        '400':
+          description: Bad request - missing required fields
+        '401':
+          description: Unauthorized
+
+  /extra-performance/pending:
+    get:
+      tags:
+        - Extra Performance
+      summary: Get pending performances for approval (SUPER ADMIN ONLY)
+      description: Retrieve all pending performance submissions across all staff for a given month. SuperAdmin uses this to review and approve/reject submissions.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: month
+          in: query
+          schema:
+            type: string
+            format: date
+            pattern: '^\d{4}-\d{2}$'
+          description: Month in YYYY-MM format (default current month)
+          example: "2026-06"
+      responses:
+        '200':
+          description: List of pending performances
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      month:
+                        type: string
+                      count:
+                        type: integer
+                      performances:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ExtraPerformanceResponse'
+        '403':
+          description: Forbidden - superadmin only
+
+  /extra-performance/{performanceId}/approve:
+    put:
+      tags:
+        - Extra Performance
+      summary: Approve extra performance (SUPER ADMIN ONLY)
+      description: Approve a pending performance submission. Staff will receive 10 points on monthly score.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: performanceId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Performance submission ID
+      responses:
+        '200':
+          description: Performance approved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/ExtraPerformanceResponse'
+        '403':
+          description: Forbidden - superadmin only
+        '404':
+          description: Performance not found
+
+  /extra-performance/{performanceId}/reject:
+    put:
+      tags:
+        - Extra Performance
+      summary: Reject extra performance (SUPER ADMIN ONLY)
+      description: Reject a pending performance submission with a reason.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: performanceId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - rejectionReason
+              properties:
+                rejectionReason:
+                  type: string
+                  description: Reason for rejection
+                  example: "Insufficient detail provided"
+      responses:
+        '200':
+          description: Performance rejected successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/ExtraPerformanceResponse'
+        '400':
+          description: Bad request - missing rejectionReason
+        '403':
+          description: Forbidden - superadmin only
+        '404':
+          description: Performance not found
+
+  /extra-performance/approved:
+    get:
+      tags:
+        - Extra Performance
+      summary: Get approved performances
+      description: |
+        Retrieve approved extra performances for authenticated user or specific user (SuperAdmin only).
+
+        **Default behavior:** Returns authenticated user's approved performances.
+        **With userId param:** SuperAdmin can view any user's approved performances.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: userId
+          in: query
+          schema:
+            type: integer
+          description: (SuperAdmin only) View specific user's performances instead of own
+          example: 2645
+        - name: month
+          in: query
+          schema:
+            type: string
+            format: date
+            pattern: '^\d{4}-\d{2}$'
+          description: Month in YYYY-MM format (default current month)
+          example: "2026-06"
+      responses:
+        '200':
+          description: Approved performances with points summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      month:
+                        type: string
+                      count:
+                        type: integer
+                      totalPoints:
+                        type: integer
+                        description: Total points earned (count × 10)
+                      performances:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ExtraPerformanceResponse'
+        '400':
+          description: Bad request - user not associated with staff
+        '403':
+          description: Forbidden - staff can only view their own
+        '404':
+          description: Staff not found
+
+  /scoring-config:
+    get:
+      tags:
+        - Scoring
+      summary: Get scoring configuration (SUPER ADMIN ONLY)
+      description: Retrieve the scoring rules and parameters for a given month.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: month
+          in: query
+          schema:
+            type: string
+            format: date
+            pattern: '^\d{4}-\d{2}$'
+          description: Month in YYYY-MM format (default current month)
+          example: "2026-06"
+      responses:
+        '200':
+          description: Scoring configuration
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/ScoringConfigResponse'
+        '403':
+          description: Forbidden - superadmin only
+        '404':
+          description: Configuration not found
+
+    put:
+      tags:
+        - Scoring
+      summary: Update scoring configuration (SUPER ADMIN ONLY)
+      description: Update the scoring rules and parameters for a month. SuperAdmin only.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                month:
+                  type: string
+                  format: date
+                  pattern: '^\d{4}-\d{2}$'
+                  example: "2026-06"
+                  description: Month to update
+                attendance:
+                  type: object
+                  properties:
+                    maxLateCases:
+                      type: integer
+                      example: 3
+                    pointsIfNoLate:
+                      type: integer
+                      example: 10
+                    penaltyIfExceeds:
+                      type: integer
+                      example: -10
+                    lateThresholdMinutes:
+                      type: integer
+                      example: 30
+                leaves:
+                  type: object
+                  properties:
+                    maxAllowedPerMonth:
+                      type: integer
+                      example: 2
+                    pointsIfWithinLimit:
+                      type: integer
+                      example: 10
+                    penaltyIfExceeds:
+                      type: integer
+                      example: -10
+                appearance:
+                  type: object
+                  properties:
+                    enabled:
+                      type: boolean
+                      example: true
+                    pointsPerViolation:
+                      type: integer
+                      example: -5
+                    maxPoints:
+                      type: integer
+                      example: 5
+                    violations:
+                      type: array
+                      items:
+                        type: string
+                      example: ["uniform", "socks_banyan", "hair_beard_moustache"]
+      responses:
+        '200':
+          description: Configuration updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/ScoringConfigResponse'
+        '403':
+          description: Forbidden - superadmin only
+        '400':
+          description: Bad request - invalid configuration
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token obtained from /auth/login
+
+  schemas:
+    LedgerCustomerResponse:
+      type: object
+      description: A rowbest customer ledger, as synced into LedgerCustomer
+      properties:
+        ledger_id:
+          type: integer
+          description: Rowbest ledger id - source of truth key
+          example: 688580
+        name:
+          type: string
+          example: C- ANEES
+        group:
+          type: string
+          example: Sundry Debtors
+        mobile:
+          type: string
+          nullable: true
+          description: Customer's mobile number from rowbest, if on file
+          example: "9846220088"
+        dr:
+          type: number
+          example: 8064269
+        cr:
+          type: number
+          example: 0
+        balance:
+          type: number
+          description: dr - cr
+          example: 8064269
+        assigned_staff_id:
+          type: integer
+          nullable: true
+          description: Staff currently responsible for this customer (see ownership cutoff rule)
+          example: 2646
+        assigned_staff_name:
+          type: string
+          nullable: true
+          example: ANSARKA
+        fetchedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    UserResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          description: MongoDB user ID
+          example: 507f1f77bcf86cd799439011
+        email:
+          type: string
+          format: email
+          example: ANASROYAL@GMAIL.COM
+        name:
+          type: string
+          nullable: true
+          example: ANAS
+        user_id:
+          type: integer
+          nullable: true
+          example: 3027
+        role:
+          type: string
+          enum:
+            - staff
+            - manager
+            - superAdmin
+          example: staff
+        isActive:
+          type: boolean
+          example: true
+      required:
+        - id
+        - email
+        - role
+        - isActive
+
+    StaffResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 2645
+        user_id:
+          type: integer
+          example: 3027
+        name:
+          type: string
+          example: ANAS
+        email:
+          type: string
+          format: email
+          example: ANASROYAL@GMAIL.COM
+        phone:
+          type: string
+          nullable: true
+          example: null
+        sales_target:
+          type: number
+          nullable: true
+          example: null
+        collection_target:
+          type: number
+          nullable: true
+          example: null
+        createdAt:
+          type: string
+          format: date-time
+          example: 2026-06-19T18:00:00.000Z
+        updatedAt:
+          type: string
+          format: date-time
+          example: 2026-06-19T18:00:00.000Z
+      required:
+        - id
+        - user_id
+        - name
+
+    BillResponse:
+      type: object
+      properties:
+        _id:
+          type: string
+          description: MongoDB bill ID
+          example: 507f1f77bcf86cd799439012
+        staff_id:
+          type: integer
+          example: 2645
+        user_id:
+          type: integer
+          example: 3027
+        staff_name:
+          type: string
+          example: ANAS
+        voucher_id:
+          type: string
+          example: INV001
+        voucher_date:
+          type: string
+          format: date
+          example: 2026-06-19
+        voucher_number:
+          type: string
+          example: VOL-001
+        amount:
+          type: number
+          example: 10000
+        aging_balance:
+          type: number
+          example: 10000
+        aging:
+          type: integer
+          description: Days overdue
+          example: 30
+        period:
+          type: string
+          enum: [historical, current]
+          description: Whether bill is before (historical) or after (current) cutoff date
+          example: current
+        remarks:
+          type: string
+          nullable: true
+          example: null
+        createdAt:
+          type: string
+          format: date-time
+          example: 2026-06-19T18:00:00.000Z
+        updatedAt:
+          type: string
+          format: date-time
+          example: 2026-06-19T18:00:00.000Z
+
+    FollowUpResponse:
+      type: object
+      properties:
+        _id:
+          type: string
+          description: MongoDB follow-up ID
+          example: 507f1f77bcf86cd799439013
+        customerId:
+          type: string
+          example: CUST001
+        customerName:
+          type: string
+          example: ABC Company
+        ledgerId:
+          type: integer
+          nullable: true
+          description: Rowbest ledger id, resolved from customerName if not supplied
+          example: 688580
+        staffId:
+          type: integer
+          example: 2645
+        userId:
+          type: integer
+          example: 3027
+        staffName:
+          type: string
+          example: ANAS
+        resolvedByPayment:
+          type: boolean
+          description: Set automatically when a Receipt lands for this customer during ledger sync - never affects `outcome`
+          example: false
+        resolvedAt:
+          type: string
+          format: date-time
+          nullable: true
+        resolvedVoucherId:
+          type: integer
+          nullable: true
+          description: Rowbest voucher id of the Receipt that triggered auto-resolution
+        loggedAt:
+          type: string
+          format: date-time
+          example: 2026-06-19T10:30:00.000Z
+        contactMethod:
+          type: string
+          enum:
+            - phoneCall
+            - sms
+            - email
+            - inPerson
+            - whatsapp
+          example: phoneCall
+        outcome:
+          type: string
+          enum:
+            - promisedToPay
+            - promisedPartial
+            - dispute
+            - noContact
+            - paid
+          example: promisedToPay
+        promisedAmount:
+          type: number
+          nullable: true
+          example: 5000
+        promisedDate:
+          type: string
+          format: date
+          nullable: true
+          example: 2026-06-26
+        nextFollowUpDate:
+          type: string
+          format: date
+          nullable: true
+          example: 2026-06-25
+        quickRemarks:
+          type: array
+          items:
+            type: string
+          example:
+            - Customer interested
+            - Will call back
+        freeTextRemark:
+          type: string
+          nullable: true
+          example: Customer is in a difficult situation
+        disputeDetails:
+          type: string
+          nullable: true
+          example: Customer claims amount is incorrect
+        createdAt:
+          type: string
+          format: date-time
+          example: 2026-06-19T10:30:00.000Z
+        updatedAt:
+          type: string
+          format: date-time
+          example: 2026-06-19T10:30:00.000Z
+      required:
+        - _id
+        - customerId
+        - customerName
+        - staffId
+        - staffName
+        - loggedAt
+        - contactMethod
+        - outcome
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+          example: Unauthorized - no token provided
+
+    StaffScoreResponse:
+      type: object
+      description: Monthly performance score for a staff member based on attendance, leaves, and appearance
+      properties:
+        _id:
+          type: string
+          description: MongoDB score ID
+          example: 6a4417ccd5ddf48055605a22
+        staffId:
+          type: integer
+          example: 2645
+        staffName:
+          type: string
+          example: ANAS
+        month:
+          type: string
+          example: "2026-06"
+        year:
+          type: integer
+          example: 2026
+        monthNumber:
+          type: integer
+          example: 6
+        totalScore:
+          type: number
+          description: Total earned score (sum of all categories)
+          example: 25
+        maxPossibleScore:
+          type: number
+          description: |
+            Maximum possible score for active rules.
+            Total framework is 100 points:
+            - Attendance: 10 points
+            - Leaves: 10 points
+            - Appearance: 5 points
+            - Future rules: 75 points (reserved)
+          example: 25
+        percentageScore:
+          type: number
+          description: Score as percentage (0-100)
+          example: 100
+        breakdown:
+          type: array
+          description: Detailed score breakdown by category (Attendance, Leave, Appearance)
+          items:
+            type: object
+            properties:
+              rule:
+                type: string
+                enum: [AttendanceRule, LeaveRule, AppearanceRule]
+                example: "AttendanceRule"
+              category:
+                type: string
+                enum: [Attendance, Leave, Appearance]
+                example: "Attendance"
+              earned:
+                type: integer
+                description: Points earned for this category
+                example: 10
+              possible:
+                type: integer
+                description: Maximum possible points for this category
+                example: 10
+              passed:
+                type: boolean
+                description: Whether staff met the criteria for this category
+                example: true
+              explanation:
+                type: string
+                description: Human-readable explanation of the score
+                example: "0 late arrivals (max 3 allowed)"
+              metrics:
+                type: array
+                description: Detailed metrics that contributed to this score
+                items:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                      description: Metric name (e.g., lateCases, leaveCount, violationDays)
+                      example: "lateCases"
+                    value:
+                      type: integer
+                      description: Actual metric value
+                      example: 0
+                    contribution:
+                      type: integer
+                      description: Points contributed by this metric
+                      example: 10
+        calculatedAt:
+          type: string
+          format: date-time
+          description: When this score was calculated
+        calculatedBy:
+          type: string
+          example: "system"
+        remarks:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ExtraPerformanceResponse:
+      type: object
+      description: Extra performance submission with approval status
+      properties:
+        _id:
+          type: string
+          description: MongoDB performance submission ID
+          example: 6a4417ccd5ddf48055605a23
+        staffId:
+          type: integer
+          example: 2645
+        staffName:
+          type: string
+          example: ANAS
+        month:
+          type: string
+          example: "2026-06"
+        year:
+          type: integer
+          example: 2026
+        monthNumber:
+          type: integer
+          example: 6
+        title:
+          type: string
+          description: Performance title
+          example: "Led customer training session"
+        description:
+          type: string
+          description: Detailed description
+          example: "Conducted comprehensive training for 15 customers"
+        date:
+          type: string
+          format: date
+          description: Date performance occurred (IST)
+          example: "2026-06-28"
+        category:
+          type: string
+          enum: [Training, "Process Improvement", "Customer Excellence", "Team Leadership", Other]
+          example: "Training"
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+          description: Approval status
+          example: "approved"
+        points:
+          type: integer
+          description: Points awarded (10 when approved)
+          example: 10
+        approvedBy:
+          type: string
+          description: MongoDB user ID of superadmin who approved (if approved)
+          nullable: true
+        approvedAt:
+          type: string
+          format: date-time
+          description: Approval timestamp (if approved)
+          nullable: true
+        rejectionReason:
+          type: string
+          description: Reason for rejection (if rejected)
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+          description: When performance was submitted
+        updatedAt:
+          type: string
+          format: date-time
+
+    ScoringConfigResponse:
+      type: object
+      description: |
+        Scoring rules configuration for a specific month. Controls point allocation for all scoring categories.
+
+        **Total Score: 100 points**
+        - Attendance: 10 points
+        - Leaves: 10 points
+        - Appearance: 5 points
+        - Extra Performance: 10 points
+        - Future rules: 65 points (reserved)
+      properties:
+        _id:
+          type: string
+          description: MongoDB config ID
+        month:
+          type: string
+          description: Month in YYYY-MM format
+          example: "2026-06"
+        year:
+          type: integer
+          example: 2026
+        monthNumber:
+          type: integer
+          minimum: 1
+          maximum: 12
+          example: 6
+        attendance:
+          type: object
+          description: Attendance scoring rules (Late arrivals)
+          properties:
+            maxLateCases:
+              type: integer
+              description: Maximum late cases allowed (> lateThresholdMinutes) before penalty
+              example: 3
+            pointsIfNoLate:
+              type: integer
+              description: Points awarded if late cases within limit
+              example: 10
+            penaltyIfExceeds:
+              type: integer
+              description: Penalty points if exceeds maxLateCases
+              example: -10
+            lateThresholdMinutes:
+              type: integer
+              description: Minutes after work start (9:00 AM) to be considered late
+              example: 30
+        leaves:
+          type: object
+          description: Leave scoring rules (Approved leaves per month)
+          properties:
+            maxAllowedPerMonth:
+              type: integer
+              description: Maximum approved leaves allowed per month
+              example: 2
+            pointsIfWithinLimit:
+              type: integer
+              description: Points awarded if leaves within limit
+              example: 10
+            penaltyIfExceeds:
+              type: integer
+              description: Penalty points if exceeds maxAllowedPerMonth
+              example: -10
+        appearance:
+          type: object
+          description: Appearance scoring rules (Dress code violations)
+          properties:
+            enabled:
+              type: boolean
+              description: Enable/disable appearance scoring
+              example: true
+            pointsPerViolation:
+              type: integer
+              description: Points deducted per violation day
+              example: -5
+            maxPoints:
+              type: integer
+              description: Maximum points for appearance category
+              example: 5
+            violations:
+              type: array
+              description: Types of violations to track
+              items:
+                type: string
+                enum: [uniform, socks_banyan, hair_beard_moustache]
+              example: ["uniform", "socks_banyan", "hair_beard_moustache"]
+        extraPerformance:
+          type: object
+          description: Extra performance scoring rules (Approved submissions)
+          properties:
+            pointsPerPerformance:
+              type: integer
+              description: Points awarded per approved performance
+              example: 10
+            maxPointsAllowed:
+              type: integer
+              description: Maximum points allowed per month for extra performance
+              example: 10
+        isActive:
+          type: boolean
+          description: Whether this config is active
+          example: true
+        createdAt:
+          type: string
+          format: date-time
+          description: When this config was created
+        updatedAt:
+          type: string
+          format: date-time
+          description: When this config was last updated
+
+tags:
+  - name: System
+    description: System health and status endpoints
+  - name: Authentication
+    description: User authentication and profile management
+  - name: Staff
+    description: Staff management (view staff information)
+  - name: Ledger
+    description: Rowbest ledger customers, transactions, and staff attribution
+  - name: Follow-ups
+    description: Customer follow-up tracking and management
+  - name: Attendance
+    description: Biometric fingerprint attendance tracking and management
+  - name: Leaves
+    description: Leave request and approval tracking
+  - name: Appearance
+    description: Staff appearance and dress code tracking
+  - name: Extra Performance
+    description: Staff extra performance submissions and approval workflow
+  - name: Scoring
+    description: |
+      Staff performance scoring system (100 points total):
+      - Attendance: 10 points (late arrivals tracking)
+      - Leaves: 10 points (approved leaves per month)
+      - Appearance: 5 points (dress code violations)
+      - Extra Performance: 10 points (approved submissions)
+      - Future rules: 65 points (reserved for expansion)
+
+security:
+  - BearerAuth: []
