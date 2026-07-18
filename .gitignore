@@ -40,5 +40,4 @@ yarn-error.*
 /ios
 /android
 
-# generated API client (rebuild with: npm run generate:api)
-src/services/generated/
+# generated API client is committed so EAS builds can access it
