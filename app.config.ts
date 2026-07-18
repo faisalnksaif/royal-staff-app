@@ -30,9 +30,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     url: "https://u.expo.dev/b25217cd-b963-4c83-9e11-650f8bdf097f",
     checkAutomatically: "ON_LOAD",
   },
-  runtimeVersion: {
-    policy: "appVersion",
-  },
+  runtimeVersion: "1.0.0",
   plugins: [
     ["expo-router", { root: "src/app" }],
     "expo-font",
