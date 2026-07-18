@@ -16,6 +16,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   android: {
     package: appConstants.bundleId,
     googleServicesFile: "./google-services.json",
+    usesCleartextTraffic: true,
     adaptiveIcon: {
       foregroundImage: "./assets/android-icon-foreground.png",
       monochromeImage: "./assets/android-icon-monochrome.png",
