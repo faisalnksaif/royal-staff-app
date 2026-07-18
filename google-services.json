@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "587769825850",
+    "project_id": "royal-c6b7c",
+    "storage_bucket": "royal-c6b7c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:587769825850:android:af38e2c602695eebd18303",
+        "android_client_info": {
+          "package_name": "com.royal.royalpulse"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAuBWLfGy6gTzIdtAYBvxqlOH8aaGLy1tE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -52,7 +52,7 @@
     "deploy": "eas update --channel production --message \"$(git log -1 --pretty=%s)\"",
     "deploy:msg": "eas update --channel production --message",
     "generate:api": "swagger-typescript-api generate -p ./swagger.yaml -o ./src/services/generated -n Api.ts --axios --single-http-client --module-name-first-tag",
-    "postinstall": "find node_modules/expo-modules-jsi/apple/Sources -name '*.swift' -exec sed -i '' 's/weak let /weak var /g' {} \\; && sed -i '' 's/swiftLanguageModes: \\[.v6\\]/swiftLanguageModes: [.v5]/' node_modules/expo-modules-jsi/apple/Package.swift && sed -i '' 's|name.wholeMatch(of: /\\^\\[a-zA-Z_\\$\\]\\[a-zA-Z0-9_\\$\\]\\*\\$/))|name.range(of: #\"^[a-zA-Z_$][a-zA-Z0-9_$]*$\"#, options: .regularExpression))|' node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI/Runtime/JavaScriptRuntime.swift"
+    "postinstall": "if [ \"$(uname)\" = \"Darwin\" ]; then find node_modules/expo-modules-jsi/apple/Sources -name '*.swift' -exec sed -i '' 's/weak let /weak var /g' {} \\; && sed -i '' 's/swiftLanguageModes: \\[.v6\\]/swiftLanguageModes: [.v5]/' node_modules/expo-modules-jsi/apple/Package.swift && sed -i '' 's|name.wholeMatch(of: /\\^\\[a-zA-Z_\\$\\]\\[a-zA-Z0-9_\\$\\]\\*\\$/))|name.range(of: #\"^[a-zA-Z_$][a-zA-Z0-9_$]*$\"#, options: .regularExpression))|' node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI/Runtime/JavaScriptRuntime.swift; fi"
   },
   "private": true
 }
