@@ -199,6 +199,8 @@ export interface FollowUp {
   _id: string
   customerId: string
   customerName: string
+  ledgerId: number | null
+  mobile: string | null
   staffId: number
   userId: number
   staffName: string
@@ -214,8 +216,46 @@ export interface FollowUp {
   resolvedByPayment: boolean
   resolvedAt: string | null
   resolvedVoucherId: number | null
+  outstandingAmount: number | null
+  outstandingDrCr: "Dr" | "Cr" | null
+  outstandingAmountAtResolution: number | null
+  outstandingDrCrAtResolution: "Dr" | "Cr" | null
+  amountRecovered: number | null
+  outstandingBackfilled: boolean
+  whatsapp: {
+    lastReceiptSentAt: string | null
+    lastReminderSentAt: string | null
+  } | null
   createdAt: string
   updatedAt: string
+}
+
+export interface AppNotification {
+  _id: string
+  staffId: number
+  userId: number
+  type: "new_transaction"
+  title: string
+  message: string
+  ledgerId: number | null
+  ledgerName: string | null
+  metadata: Record<string, unknown> | null
+  isRead: boolean
+  readAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface NotificationsResponse {
+  success: boolean
+  pagination: BillsPagination
+  unread_count: number
+  data: AppNotification[]
+}
+
+export interface UnreadCountResponse {
+  success: boolean
+  data: { unread_count: number }
 }
 
 export interface AttendanceSession {
@@ -260,10 +300,29 @@ export interface AttendanceDayResponse {
   data: AttendanceRecord[]
 }
 
+export interface FollowupsSummary {
+  totalFollowUps: number
+  byOutcome: {
+    promisedToPay: number
+    promisedPartial: number
+    dispute: number
+    noContact: number
+    paid: number
+  }
+  byResolution: {
+    resolved: number
+    open: number
+  }
+  totalFollowedUpAmount: number
+  totalPromisedAmount: number
+  totalPaidAmount: number
+}
+
 export interface StaffFollowupsResponse {
   success: boolean
   count: number
   data: FollowUp[]
+  summary?: FollowupsSummary
 }
 
 export type LeaveStatus = "pending" | "approved" | "rejected"

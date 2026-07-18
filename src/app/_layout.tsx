@@ -10,11 +10,15 @@ import { toastConfig } from "../components/shared/ToastConfig"
 import { fontAssets } from "../constants/fonts"
 import { setUnauthorizedHandler } from "../services/apiClient"
 import useAuthStore from "../stores/useAuthStore"
+import { usePushNotifications } from "../hooks/usePushNotifications"
 
 SplashScreen.preventAutoHideAsync()
 
 function RootStack() {
   const { isDark } = useTheme()
+  const user = useAuthStore((s) => s.user)
+  usePushNotifications(user != null)
+
   return (
     <>
       <StatusBar style={isDark ? "light" : "dark"} />
@@ -25,6 +29,8 @@ function RootStack() {
         <Stack.Screen name="(manager)" />
         <Stack.Screen name="(super-admin)" />
         <Stack.Screen name="customer" />
+        <Stack.Screen name="notifications" />
+        <Stack.Screen name="followups" />
       </Stack>
     </>
   )

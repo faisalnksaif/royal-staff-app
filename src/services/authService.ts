@@ -37,4 +37,14 @@ async function getMe(): Promise<UserResponse | null> {
   }
 }
 
-export const authService = { login, register, logout, getMe }
+async function savePushToken(expoPushToken: string): Promise<void> {
+  await api.http.request({
+    path: "/auth/push-token",
+    method: "PUT",
+    secure: true,
+    format: "json",
+    body: { expoPushToken },
+  })
+}
+
+export const authService = { login, register, logout, getMe, savePushToken }

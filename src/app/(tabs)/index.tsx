@@ -1,7 +1,7 @@
-import { View, ScrollView, StyleSheet, Pressable, ActivityIndicator } from "react-native"
+import { View, ScrollView, StyleSheet, Pressable, TouchableOpacity, ActivityIndicator } from "react-native"
 import { useRouter } from "expo-router"
 import { useQuery } from "@tanstack/react-query"
-import { Users, CalendarClock, ChevronRight, Award, MessageSquare } from "lucide-react-native"
+import { Users, CalendarClock, ChevronRight, Award, Bell, ClipboardList } from "lucide-react-native"
 import moment from "moment"
 import AppText from "../../components/ui/AppText"
 import AppCard from "../../components/ui/AppCard"
@@ -11,6 +11,7 @@ import useAuthStore from "../../stores/useAuthStore"
 import { useStaffBillsSummary } from "../../hooks/useStaffBillsSummary"
 import { leaveService } from "../../services/leaveService"
 import { extraPerformanceService } from "../../services/extraPerformanceService"
+import { notificationService } from "../../services/notificationService"
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -96,6 +97,14 @@ export default function HomeScreen() {
   const user = useAuthStore((s) => s.user)
 
   const summary = useStaffBillsSummary(user?.user_id)
+  const { data: unreadData } = useQuery({
+    queryKey: ["unread-count", user?.user_id],
+    queryFn: () => notificationService.getUnreadCount(user!.user_id!),
+    enabled: user?.user_id != null,
+    refetchInterval: 60_000,
+  })
+  const unreadCount = unreadData ?? 0
+
   const { data: balanceData, isLoading: balanceLoading } = useQuery({
     queryKey: ["leave-balance", user?.user_id],
     queryFn: () => leaveService.getLeaveBalance(user!.user_id!),
@@ -120,9 +129,23 @@ export default function HomeScreen() {
     >
       {/* Header */}
       <View style={styles.header}>
-        <AppText variant="caption" color="tertiary">{greeting()}</AppText>
-        <AppText variant="heading2">{user?.name ?? "Welcome"}</AppText>
-        <AppText variant="caption" color="tertiary">{moment().format("dddd, D MMM YYYY")}</AppText>
+        <View style={styles.headerRow}>
+          <View style={{ flex: 1 }}>
+            <AppText variant="caption" color="tertiary">{greeting()}</AppText>
+            <AppText variant="heading2">{user?.name ?? "Welcome"}</AppText>
+            <AppText variant="caption" color="tertiary">{moment().format("dddd, D MMM YYYY")}</AppText>
+          </View>
+          <TouchableOpacity activeOpacity={0.7} onPress={() => router.push("/notifications")} style={styles.bellBtn}>
+            <Bell size={22} color={colors.text.primary} strokeWidth={1.75} />
+            {unreadCount > 0 && (
+              <View style={[styles.badge, { backgroundColor: colors.accent }]}>
+                <AppText variant="caption" style={{ color: "#fff", fontSize: 10, lineHeight: 14 }}>
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </AppText>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Feature cards — 2-column grid */}
@@ -144,22 +167,15 @@ export default function HomeScreen() {
             onPress={() => router.push("/(tabs)/customers")}
           />
           <FeatureCard
-            icon={<CalendarClock size={24} color={palette.warning.default} strokeWidth={1.6} />}
-            label="My Leaves"
-            subtitle={
-              balanceLoading
-                ? ""
-                : leaveBalance != null
-                ? `${leaveBalance} days remaining`
-                : "View leave requests"
-            }
-            accent={palette.warning.default}
-            isLoading={balanceLoading}
-            onPress={() => router.push("/(tabs)/leaves")}
+            icon={<ClipboardList size={24} color={palette.info.default} strokeWidth={1.6} />}
+            label="Follow-ups"
+            subtitle="View all logged contacts"
+            accent={palette.info.default}
+            onPress={() => router.push("/followups")}
           />
         </View>
 
-        {/* Row 2 — coming soon */}
+        {/* Row 2 */}
         <View style={styles.gridRow}>
           <FeatureCard
             icon={<Award size={24} color={palette.success.default} strokeWidth={1.6} />}
@@ -176,12 +192,18 @@ export default function HomeScreen() {
             onPress={() => router.push("/(tabs)/extra-performance")}
           />
           <FeatureCard
-            icon={<MessageSquare size={24} color={palette.primary[500]} strokeWidth={1.6} />}
-            label="Announcements"
-            subtitle="Team updates"
-            accent={palette.primary[500]}
-            disabled
-            soon
+            icon={<CalendarClock size={24} color={palette.warning.default} strokeWidth={1.6} />}
+            label="My Leaves"
+            subtitle={
+              balanceLoading
+                ? ""
+                : leaveBalance != null
+                ? `${leaveBalance} days remaining`
+                : "View leave requests"
+            }
+            accent={palette.warning.default}
+            isLoading={balanceLoading}
+            onPress={() => router.push("/(tabs)/leaves")}
           />
         </View>
       </View>
@@ -233,5 +255,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[2],
     paddingVertical: 2,
     borderRadius: radii.sm,
+  },
+  headerRow: { flexDirection: "row", alignItems: "flex-start" },
+  bellBtn: { padding: spacing[2], position: "relative" },
+  badge: {
+    position: "absolute",
+    top: 4,
+    right: 2,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 3,
   },
 })

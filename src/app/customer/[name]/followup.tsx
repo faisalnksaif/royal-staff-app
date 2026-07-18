@@ -188,8 +188,8 @@ export default function AddFollowupScreen() {
         freeTextRemark: freeRemark.trim() || null,
       })
       await queryClient.invalidateQueries({ queryKey: ["staff-followups"] })
-      await queryClient.invalidateQueries({ queryKey: ["staff-customers"] })
-      await queryClient.invalidateQueries({ queryKey: ["staff-bills-summary"] })
+      await queryClient.invalidateQueries({ queryKey: ["customer-followups", customerId] })
+      await queryClient.invalidateQueries({ queryKey: ["staff-outstanding"] })
       router.back()
     } catch (err: unknown) {
       const msg =

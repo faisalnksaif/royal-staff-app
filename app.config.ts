@@ -15,27 +15,43 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   android: {
     package: appConstants.bundleId,
+    googleServicesFile: "./android/app/google-services.json",
     adaptiveIcon: {
-      foregroundImage: "./assets/adaptive-icon.png",
-      backgroundColor: "#312E81",
+      foregroundImage: "./assets/android-icon-foreground.png",
+      monochromeImage: "./assets/android-icon-monochrome.png",
+      backgroundColor: "#000000",
     },
   },
   web: {
     favicon: "./assets/favicon.png",
   },
+  updates: {
+    url: "https://u.expo.dev/b25217cd-b963-4c83-9e11-650f8bdf097f",
+    checkAutomatically: "ON_LOAD",
+  },
+  runtimeVersion: {
+    policy: "appVersion",
+  },
   plugins: [
     ["expo-router", { root: "src/app" }],
     "expo-font",
+    "expo-updates",
+    "expo-notifications",
     [
       "expo-splash-screen",
       {
-        backgroundColor: "#312E81",
+        backgroundColor: "#000000",
         image: "./assets/splash-icon.png",
-        imageWidth: 200,
+        imageWidth: 400,
       },
     ],
   ],
   scheme: appConstants.slug,
+  extra: {
+    eas: {
+      projectId: "b25217cd-b963-4c83-9e11-650f8bdf097f",
+    },
+  },
   experiments: {
     typedRoutes: true,
   },

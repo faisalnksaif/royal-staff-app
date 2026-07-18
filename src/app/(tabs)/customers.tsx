@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react"
 import { View, FlatList, ActivityIndicator, StyleSheet, TouchableOpacity, Pressable, Animated, Easing, LayoutAnimation, Platform, UIManager, ScrollView } from "react-native"
 import { useRouter } from "expo-router"
-import { MessageCircle, CheckCircle2 } from "lucide-react-native"
+import { MessageCircle, CheckCircle2, X } from "lucide-react-native"
 import BackButton from "../../components/shared/BackButton"
 import AppText from "../../components/ui/AppText"
 import AppCard from "../../components/ui/AppCard"
@@ -28,7 +28,7 @@ function toTitleCase(str: string): string {
 }
 
 const OUTCOME_LABELS: Record<FollowUpOutcome, string> = {
-  promisedToPay: "Promised Full",
+  promisedToPay: "Promised Full Payment",
   promisedPartial: "Promised Partial",
   paid: "Paid",
   noContact: "No Contact",
@@ -153,7 +153,7 @@ function InsightsPanel({ insights }: { insights: LedgerFollowUpInsights }) {
               <AppText variant="caption" style={{ color: palette.error.dark }}>{insights.open_followups} open</AppText>
             </View>
             <View style={[styles.insightPill, { backgroundColor: palette.success.light }]}>
-              <AppText variant="caption" style={{ color: palette.success.dark }}>{insights.resolved_followups} resolved</AppText>
+              <AppText variant="caption" style={{ color: palette.success.dark }}>{insights.resolved_followups} paid</AppText>
             </View>
             <View style={[styles.insightPill, { backgroundColor: colors.background.secondary }]}>
               <AppText variant="caption" color="secondary">{insights.total_followups} total</AppText>
@@ -224,10 +224,10 @@ function InsightsPanel({ insights }: { insights: LedgerFollowUpInsights }) {
 // ─── SummaryStrip ─────────────────────────────────────────────────────────────
 
 function SummaryStrip({
-  totalCustomers, overdueFollowups, totalOutstanding, totalPromised, isLoading, accent,
+  totalCustomers, totalReceived, totalOutstanding, totalPromised, isLoading, accent,
 }: {
   totalCustomers: number
-  overdueFollowups: number
+  totalReceived: number
   totalOutstanding: number
   totalPromised: number
   isLoading: boolean
@@ -246,11 +246,13 @@ function SummaryStrip({
       </View>
       <View style={[styles.stripDivider, { backgroundColor: colors.border }]} />
       <View style={styles.stripItem}>
-        <AppText variant="caption" color="tertiary">Overdue</AppText>
+        <AppText variant="caption" color="tertiary">Collected</AppText>
         {isLoading ? (
-          <ActivityIndicator size="small" color={palette.warning.default} />
+          <ActivityIndicator size="small" color={palette.success.default} />
         ) : (
-          <AppText variant="heading3" style={{ color: palette.warning.default }}>{overdueFollowups}</AppText>
+          <AppText variant="heading3" style={{ color: palette.success.default }}>
+            ₹{formatAmount(totalReceived)}
+          </AppText>
         )}
       </View>
       <View style={[styles.stripDivider, { backgroundColor: colors.border }]} />
@@ -268,9 +270,9 @@ function SummaryStrip({
       <View style={styles.stripItem}>
         <AppText variant="caption" color="tertiary">Promised</AppText>
         {isLoading ? (
-          <ActivityIndicator size="small" color={palette.success.default} />
+          <ActivityIndicator size="small" color={palette.warning.default} />
         ) : (
-          <AppText variant="heading3" style={{ color: palette.success.default }}>
+          <AppText variant="heading3" style={{ color: palette.warning.default }}>
             ₹{formatAmount(totalPromised)}
           </AppText>
         )}
@@ -317,6 +319,7 @@ function CustomerRow({ item }: { item: LedgerCustomerOutstanding }) {
           params: {
             name: item.name,
             totalBalance: String(item.outstanding_balance),
+            drCr: item.outstanding_dr_cr,
             customerId: String(item.ledger_id),
             mobile: item.mobile ?? "",
           },
@@ -365,7 +368,7 @@ function CustomerRow({ item }: { item: LedgerCustomerOutstanding }) {
                       <View style={[styles.outcomePill, { backgroundColor: palette.success.default + "22" }]}>
                         <CheckCircle2 size={10} color={palette.success.default} strokeWidth={1.75} />
                         <AppText variant="caption" style={{ color: palette.success.default, fontSize: 10 }}>
-                          {fu.resolved} resolved
+                          {fu.resolved} paid
                         </AppText>
                       </View>
                     )}
@@ -387,11 +390,11 @@ function CustomerRow({ item }: { item: LedgerCustomerOutstanding }) {
               <AppText
                 variant="mono"
                 style={{
-                  color: item.outstanding_balance <= 0 ? palette.success.default : palette.error.default,
+                  color: (isSettled || item.outstanding_dr_cr === "Cr") ? palette.success.default : palette.error.default,
                   fontSize: 16,
                 }}
               >
-                ₹{formatAmount(item.outstanding_balance)}
+                ₹{formatAmount(item.outstanding_balance)}{item.outstanding_dr_cr === "Cr" ? " Cr" : ""}
               </AppText>
               {totalPromised > 0 && (
                 <AppText variant="mono" style={{ color: palette.warning.default, fontSize: 11, textAlign: "right" }}>
@@ -441,7 +444,7 @@ export default function CustomersScreen() {
   const firstPage = data?.pages[0]
   const insights = firstPage?.follow_up_insights
   const totalCustomers = insights?.customers_total ?? 0
-  const overdueFollowups = insights?.customers_overdue_followup ?? 0
+  const totalReceived = insights?.total_received_via_resolved_followups ?? 0
   const totalOutstanding = firstPage?.totals?.total_outstanding ?? 0
   const totalPromised = insights?.total_promised_amount ?? 0
 
@@ -454,7 +457,7 @@ export default function CustomersScreen() {
 
       <SummaryStrip
         totalCustomers={totalCustomers}
-        overdueFollowups={overdueFollowups}
+        totalReceived={totalReceived}
         totalOutstanding={totalOutstanding}
         totalPromised={totalPromised}
         isLoading={isLoading}
@@ -469,6 +472,13 @@ export default function CustomersScreen() {
           value={searchInput}
           onChangeText={setSearchInput}
           returnKeyType="search"
+          rightIcon={
+            searchInput.length > 0 ? (
+              <TouchableOpacity onPress={() => setSearchInput("")} hitSlop={8}>
+                <X size={16} color={colors.text.tertiary} strokeWidth={2} />
+              </TouchableOpacity>
+            ) : undefined
+          }
         />
       </View>
 

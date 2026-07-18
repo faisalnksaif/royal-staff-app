@@ -1,5 +1,5 @@
 import React, { useState } from "react"
-import { View, Pressable, StyleSheet, Modal, Platform } from "react-native"
+import { View, Pressable, TouchableOpacity, StyleSheet, Modal, Platform } from "react-native"
 import DateTimePicker, { DateTimePickerAndroid } from "@react-native-community/datetimepicker"
 import { CalendarDays } from "lucide-react-native"
 import AppText from "../ui/AppText"
@@ -124,14 +124,14 @@ export default function DatePickerField({
             {label}
           </AppText>
         )}
-        <Pressable
+        <TouchableOpacity
+          activeOpacity={0.7}
           onPress={handleOpen}
-          style={({ pressed }) => [
+          style={[
             styles.row,
             {
               borderColor: iosVisible ? colors.accent : colors.border,
               backgroundColor: colors.background.secondary,
-              opacity: pressed ? 0.7 : 1,
             },
           ]}
         >
@@ -142,7 +142,7 @@ export default function DatePickerField({
           >
             {displayText || placeholder}
           </AppText>
-        </Pressable>
+        </TouchableOpacity>
       </View>
 
       {/* iOS bottom-sheet spinner */}

@@ -170,6 +170,50 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /auth/push-token:
+    put:
+      tags:
+        - Authentication
+      summary: Save the current user's Expo push token
+      description: Stores the device's Expo push token on the authenticated user's staff record, for sending push notifications later
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - expoPushToken
+              properties:
+                expoPushToken:
+                  type: string
+                  example: ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]
+      responses:
+        '200':
+          description: Push token saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      expoPushToken:
+                        type: string
+        '400':
+          description: expoPushToken missing from request body
+        '401':
+          description: Unauthorized - no token or invalid token
+        '404':
+          description: Staff record not found for this user
+
   /auth/users:
     get:
       tags:
@@ -943,6 +987,75 @@ paths:
         '404':
           description: Follow-up not found
 
+  /followups/{id}/whatsapp:
+    post:
+      tags:
+        - Follow-ups
+      summary: Log a WhatsApp message send
+      description: |
+        Records that a WhatsApp message was sent for this follow-up - the
+        actual send happens client-side (e.g. via a WhatsApp deep link),
+        this just logs it. Fire-and-forget from the frontend's perspective.
+        Updates whatsapp.lastReceiptSentAt/lastReminderSentAt on the
+        follow-up (see FollowUpResponse) so the card can show send status
+        without an extra query, and appends a full audit entry.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - staffId
+                - type
+                - mobile
+              properties:
+                staffId:
+                  type: integer
+                  example: 12
+                type:
+                  type: string
+                  enum: [receipt, reminder]
+                mobile:
+                  type: string
+                  example: "919876543210"
+                amountMentioned:
+                  type: number
+                  nullable: true
+                  example: 5000
+      responses:
+        '201':
+          description: WhatsApp send logged
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      _id:
+                        type: string
+                      sentAt:
+                        type: string
+                        format: date-time
+        '400':
+          description: Missing required fields or invalid type
+        '403':
+          description: Forbidden - staff can only log sends for their own follow-ups
+        '404':
+          description: Follow-up not found
+
   /followups/customer/{customerId}:
     get:
       tags:
@@ -982,8 +1095,12 @@ paths:
     get:
       tags:
         - Follow-ups
-      summary: Get follow-ups by staff
-      description: Staff can only access their own, managers can access any
+      summary: Get follow-ups by staff, with filters and a summary
+      description: |
+        Staff can only access their own, managers can access any.
+        Returns a paginated list plus a `summary` block (outcome
+        breakdown, resolved/open counts, promised/recovered totals)
+        computed over the same filtered set, not just the current page.
       security:
         - BearerAuth: []
       parameters:
@@ -992,14 +1109,60 @@ paths:
           required: true
           schema:
             type: integer
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
         - name: limit
           in: query
           schema:
             type: integer
             default: 50
+        - name: dateField
+          in: query
+          description: Which date period/startDate/endDate applies to. Defaults to loggedAt (when the call was made).
+          schema:
+            type: string
+            enum: [loggedAt, promisedDate, resolvedAt]
+            default: loggedAt
+        - name: period
+          in: query
+          description: Shorthand date filter - `today`, `yesterday`, or `this_month`. Overrides startDate/endDate if both given.
+          schema:
+            type: string
+            enum: [today, yesterday, this_month]
+        - name: startDate
+          in: query
+          description: Custom range start (YYYY-MM-DD), ignored if period is set
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          description: Custom range end (YYYY-MM-DD), ignored if period is set
+          schema:
+            type: string
+            format: date
+        - name: customerId
+          in: query
+          description: Filter to a single customer by the legacy string customerId
+          schema:
+            type: string
+        - name: ledgerId
+          in: query
+          description: Filter to a single customer by ledger_id (takes precedence over customerId if both given)
+          schema:
+            type: integer
+        - name: outcome
+          in: query
+          description: Filter to a single outcome (e.g. noContact)
+          schema:
+            type: string
+            enum: [promisedToPay, promisedPartial, dispute, noContact, paid]
       responses:
         '200':
-          description: Staff's follow-ups
+          description: Paginated follow-ups with a summary block
           content:
             application/json:
               schema:
@@ -1007,12 +1170,61 @@ paths:
                 properties:
                   success:
                     type: boolean
-                  count:
-                    type: integer
+                  pagination:
+                    type: object
+                    properties:
+                      page:
+                        type: integer
+                      limit:
+                        type: integer
+                      total:
+                        type: integer
+                      pages:
+                        type: integer
                   data:
                     type: array
                     items:
                       $ref: '#/components/schemas/FollowUpResponse'
+                  summary:
+                    type: object
+                    description: Two independent classifications - byOutcome is human-entered, byResolution is system-detected. A follow-up can be `open` in byResolution while its outcome is anything, or `resolved` while its outcome is still e.g. promisedToPay if the staff never updated it after payment landed.
+                    properties:
+                      totalFollowUps:
+                        type: integer
+                      byOutcome:
+                        type: object
+                        description: What the staff member selected when logging the call
+                        properties:
+                          promisedToPay:
+                            type: integer
+                          promisedPartial:
+                            type: integer
+                          dispute:
+                            type: integer
+                          noContact:
+                            type: integer
+                          paid:
+                            type: integer
+                      byResolution:
+                        type: object
+                        description: Whether the ledger sync has detected a real payment for this customer since the follow-up was logged
+                        properties:
+                          resolved:
+                            type: integer
+                          open:
+                            type: integer
+                      totalFollowedUpAmount:
+                        type: number
+                        description: Sum of each customer's outstanding balance at the moment they were followed up on
+                      totalPromisedAmount:
+                        type: number
+                      totalPaidAmount:
+                        type: number
+                        description: Sum of amountRecovered across resolved follow-ups - actual money collected as a result
+        '400':
+          description: Invalid dateField or outcome value
+        '403':
+          description: Forbidden - staff can only access their own follow-ups
 
   /followups/stats/total:
     get:
@@ -1103,23 +1315,196 @@ paths:
                     type: boolean
                   data:
                     type: object
+                    description: Two independent classifications - byOutcome is human-entered, byResolution is system-detected (see /followups/staff/{staffId})
                     properties:
                       totalFollowUps:
                         type: integer
-                      promisedToPay:
-                        type: integer
-                      promisedPartial:
-                        type: integer
-                      dispute:
-                        type: integer
-                      noContact:
-                        type: integer
-                      paid:
-                        type: integer
+                      byOutcome:
+                        type: object
+                        properties:
+                          promisedToPay:
+                            type: integer
+                          promisedPartial:
+                            type: integer
+                          dispute:
+                            type: integer
+                          noContact:
+                            type: integer
+                          paid:
+                            type: integer
+                      byResolution:
+                        type: object
+                        properties:
+                          resolved:
+                            type: integer
+                          open:
+                            type: integer
+                      totalFollowedUpAmount:
+                        type: number
                       totalPromisedAmount:
+                        type: number
+                      totalPaidAmount:
                         type: number
         '403':
           description: Forbidden - staff can only view their own data, managers can view any staff
+
+  /notifications/staff/{userId}:
+    get:
+      tags:
+        - Notifications
+      summary: Get a staff member's notifications
+      description: Staff can only access their own, managers can access any. Newest first.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: unread_only
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Paginated notifications with unread_count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  pagination:
+                    type: object
+                    properties:
+                      page:
+                        type: integer
+                      limit:
+                        type: integer
+                      total:
+                        type: integer
+                      pages:
+                        type: integer
+                  unread_count:
+                    type: integer
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/NotificationResponse'
+        '403':
+          description: Forbidden - staff can only access their own notifications
+        '404':
+          description: Staff record not found
+
+  /notifications/staff/{userId}/unread-count:
+    get:
+      tags:
+        - Notifications
+      summary: Get a staff member's unread notification count
+      description: Staff can only access their own, managers can access any
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Unread count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      unread_count:
+                        type: integer
+        '403':
+          description: Forbidden - staff can only access their own notifications
+        '404':
+          description: Staff record not found
+
+  /notifications/staff/{userId}/read-all:
+    put:
+      tags:
+        - Notifications
+      summary: Mark all of a staff member's notifications as read
+      description: Staff can only access their own, managers can access any
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Number of notifications updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      updated:
+                        type: integer
+        '403':
+          description: Forbidden - staff can only access their own notifications
+        '404':
+          description: Staff record not found
+
+  /notifications/{id}/read:
+    put:
+      tags:
+        - Notifications
+      summary: Mark a single notification as read
+      description: Ownership is enforced against the authenticated user's own staff record, not a URL param
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The updated notification
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/NotificationResponse'
+        '404':
+          description: Notification not found
 
   /attendance/scan:
     post:
@@ -3079,6 +3464,11 @@ components:
           nullable: true
           description: Rowbest ledger id, resolved from customerName if not supplied
           example: 688580
+        mobile:
+          type: string
+          nullable: true
+          description: Customer's mobile number, snapshotted from LedgerCustomer.mobile at logging time
+          example: "9846220088"
         staffId:
           type: integer
           example: 2645
@@ -3100,6 +3490,44 @@ components:
           type: integer
           nullable: true
           description: Rowbest voucher id of the Receipt that triggered auto-resolution
+        outstandingAmount:
+          type: number
+          nullable: true
+          description: Customer's outstanding balance at the moment this follow-up was logged
+          example: 15000
+        outstandingDrCr:
+          type: string
+          enum: [Dr, Cr]
+          nullable: true
+        outstandingAmountAtResolution:
+          type: number
+          nullable: true
+          description: Customer's outstanding balance at the moment this follow-up was auto-resolved by a payment
+          example: 5000
+        outstandingDrCrAtResolution:
+          type: string
+          enum: [Dr, Cr]
+          nullable: true
+        amountRecovered:
+          type: number
+          nullable: true
+          description: Sign-aware diff (outstandingAmount minus outstandingAmountAtResolution) - positive means the outstanding balance went down. Compare against promisedAmount to see if the promise was kept.
+        outstandingBackfilled:
+          type: boolean
+          description: True if the outstanding-balance fields were filled in by a one-time migration using the balance as of the migration run (not a true historical snapshot), rather than captured live
+          example: false
+        whatsapp:
+          type: object
+          description: Denormalized WhatsApp send history, updated by POST /followups/{id}/whatsapp - lets the card show status without an extra query
+          properties:
+            lastReceiptSentAt:
+              type: string
+              format: date-time
+              nullable: true
+            lastReminderSentAt:
+              type: string
+              format: date-time
+              nullable: true
         loggedAt:
           type: string
           format: date-time
@@ -3168,6 +3596,70 @@ components:
         - loggedAt
         - contactMethod
         - outcome
+
+    NotificationResponse:
+      type: object
+      properties:
+        _id:
+          type: string
+          description: MongoDB notification ID
+          example: 507f1f77bcf86cd799439099
+        staffId:
+          type: integer
+          example: 2645
+        userId:
+          type: integer
+          example: 3027
+        type:
+          type: string
+          description: new_transaction is legacy (no longer emitted - was too noisy, fired on every ledger entry). payment_received fires only when a payment resolves an open follow-up.
+          enum:
+            - new_transaction
+            - promise_due
+            - promise_reminder
+            - payment_received
+          example: payment_received
+        title:
+          type: string
+          example: 5 new transactions for ABC Company
+        message:
+          type: string
+          example: ABC Company has 5 new ledger entries (debit ₹25,000, credit ₹10,000)
+        ledgerId:
+          type: integer
+          nullable: true
+          example: 882028
+        ledgerName:
+          type: string
+          nullable: true
+          example: ABC Company
+        metadata:
+          type: object
+          nullable: true
+          description: Extra event-specific data (e.g. new entry count, debit/credit totals)
+        isRead:
+          type: boolean
+          example: false
+        readAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+          example: 2026-07-17T14:15:03.787Z
+        updatedAt:
+          type: string
+          format: date-time
+          example: 2026-07-17T14:15:03.787Z
+      required:
+        - _id
+        - staffId
+        - userId
+        - type
+        - title
+        - message
+        - isRead
 
     ErrorResponse:
       type: object
@@ -3477,6 +3969,8 @@ tags:
     description: Rowbest ledger customers, transactions, and staff attribution
   - name: Follow-ups
     description: Customer follow-up tracking and management
+  - name: Notifications
+    description: Staff notifications (e.g. new ledger transactions), with read/unread tracking
   - name: Attendance
     description: Biometric fingerprint attendance tracking and management
   - name: Leaves

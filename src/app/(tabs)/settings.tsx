@@ -1,5 +1,5 @@
 import React from "react"
-import { View, StyleSheet, Pressable, ScrollView } from "react-native"
+import { View, StyleSheet, TouchableOpacity, ScrollView } from "react-native"
 import AppToggle from "../../components/ui/AppToggle"
 import { useRouter } from "expo-router"
 import AppText from "../../components/ui/AppText"
@@ -41,9 +41,10 @@ function SettingRow({
   right?: React.ReactNode
 }) {
   return (
-    <Pressable
+    <TouchableOpacity
       onPress={onPress}
-      style={({ pressed }) => [styles.row, { opacity: pressed ? 0.6 : 1 }]}
+      activeOpacity={onPress ? 0.6 : 1}
+      style={styles.row}
     >
       <AppText variant="body">{label}</AppText>
       <View style={styles.rowRight}>
@@ -54,7 +55,7 @@ function SettingRow({
         )}
         {right}
       </View>
-    </Pressable>
+    </TouchableOpacity>
   )
 }
 
@@ -85,7 +86,7 @@ export default function SettingsScreen() {
         <AppText variant="label" color="tertiary" style={styles.sectionLabel}>
           ACCOUNT
         </AppText>
-        <AppCard elevation="sm" padding={4} style={styles.card}>
+        <AppCard elevation="sm" padding={0} style={styles.card}>
           <RowList>
             <SettingRow label="Name" value={user?.name ?? "—"} />
             <SettingRow label="Email" value={user?.email ?? "—"} />
@@ -100,7 +101,7 @@ export default function SettingsScreen() {
         <AppText variant="label" color="tertiary" style={styles.sectionLabel}>
           APPEARANCE
         </AppText>
-        <AppCard elevation="sm" padding={4} style={styles.card}>
+        <AppCard elevation="sm" padding={0} style={styles.card}>
           <RowList>
             <SettingRow
               label="Dark Mode"
@@ -127,7 +128,7 @@ export default function SettingsScreen() {
         <AppText variant="label" color="tertiary" style={styles.sectionLabel}>
           ABOUT
         </AppText>
-        <AppCard elevation="sm" padding={4} style={styles.card}>
+        <AppCard elevation="sm" padding={0} style={styles.card}>
           <RowList>
             <SettingRow label="App" value={APP_CONFIG.name} />
             <SettingRow label="Company" value={APP_CONFIG.company} />
@@ -168,12 +169,13 @@ const styles = StyleSheet.create({
     paddingTop: spacing[3],
     paddingBottom: spacing[1],
   },
-  card: { overflow: "hidden" },
+  card: { overflow: "hidden", padding: 0 },
   row: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingVertical: spacing[3],
+    paddingHorizontal: spacing[4],
   },
   separator: { height: StyleSheet.hairlineWidth },
   rowRight: { flexDirection: "row", alignItems: "center", gap: spacing[2] },
