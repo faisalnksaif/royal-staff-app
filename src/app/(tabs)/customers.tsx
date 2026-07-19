@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react"
 import { View, FlatList, ActivityIndicator, StyleSheet, TouchableOpacity, Pressable, Animated, Easing, LayoutAnimation, Platform, UIManager, ScrollView } from "react-native"
+import { useTablet } from "../../hooks/useTablet"
 import { useRouter } from "expo-router"
 import { MessageCircle, CheckCircle2, X } from "lucide-react-native"
 import BackButton from "../../components/shared/BackButton"
@@ -422,6 +423,7 @@ function CustomerRow({ item }: { item: LedgerCustomerOutstanding }) {
 
 export default function CustomersScreen() {
   const { colors } = useTheme()
+  const { isTablet } = useTablet()
   const user = useAuthStore((s) => s.user)
 
   const [searchInput, setSearchInput] = useState("")
@@ -448,6 +450,7 @@ export default function CustomersScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background.primary }]}>
+      <View style={isTablet ? styles.desktopContent : styles.mobileContent}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <BackButton />
         <AppText variant="heading2">Customers</AppText>
@@ -504,12 +507,15 @@ export default function CustomersScreen() {
           ) : null
         }
       />
+      </View>
     </View>
   )
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
+  mobileContent: { flex: 1 },
+  desktopContent: { flex: 1, maxWidth: 860, width: "100%", alignSelf: "center" },
   header: {
     flexDirection: "row",
     alignItems: "center",

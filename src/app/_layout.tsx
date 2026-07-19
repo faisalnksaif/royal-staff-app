@@ -30,7 +30,6 @@ function RootStack() {
         <Stack.Screen name="(super-admin)" />
         <Stack.Screen name="customer" />
         <Stack.Screen name="notifications" />
-        <Stack.Screen name="followups" />
       </Stack>
     </>
   )

@@ -1,5 +1,6 @@
 import React from "react"
 import { View, StyleSheet, TouchableOpacity, ScrollView } from "react-native"
+import { useTablet } from "../../hooks/useTablet"
 import AppToggle from "../../components/ui/AppToggle"
 import { useRouter } from "expo-router"
 import AppText from "../../components/ui/AppText"
@@ -62,6 +63,7 @@ function SettingRow({
 export default function SettingsScreen() {
   const router = useRouter()
   const { colors, isDark } = useTheme()
+  const { isTablet } = useTablet()
   const { theme, setTheme } = useThemeStore()
   const { user, logout, isLoading } = useAuthStore()
 
@@ -72,6 +74,7 @@ export default function SettingsScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background.primary }]}>
+      <View style={isTablet ? styles.desktopContent : styles.mobileContent}>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <AppText variant="heading2">Settings</AppText>
@@ -145,12 +148,15 @@ export default function SettingsScreen() {
           size="lg"
         />
       </ScrollView>
+      </View>
     </View>
   )
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
+  mobileContent: { flex: 1 },
+  desktopContent: { flex: 1, maxWidth: 640, width: "100%", alignSelf: "center" },
   header: {
     paddingHorizontal: spacing[6],
     paddingTop: spacing[12],

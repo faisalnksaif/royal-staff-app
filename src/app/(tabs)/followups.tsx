@@ -2,7 +2,6 @@ import { useMemo, useState } from "react"
 import { View, FlatList, ActivityIndicator, StyleSheet, TouchableOpacity, ScrollView } from "react-native"
 import { useRouter } from "expo-router"
 import {
-  ChevronLeft,
   Phone,
   MessageSquare,
   Mail,
@@ -11,19 +10,21 @@ import {
   CheckCircle2,
   SlidersHorizontal,
 } from "lucide-react-native"
-import AppText from "../components/ui/AppText"
-import AppCard from "../components/ui/AppCard"
-import DatePickerField from "../components/shared/DatePickerField"
+import AppText from "../../components/ui/AppText"
+import AppCard from "../../components/ui/AppCard"
+import DatePickerField from "../../components/shared/DatePickerField"
+import BackButton from "../../components/shared/BackButton"
 import { Linking } from "react-native"
-import { useTheme } from "../providers/ThemeProvider"
-import { spacing, colors as palette, radii } from "../constants/theme"
-import useAuthStore from "../stores/useAuthStore"
-import { useStaffFollowups } from "../hooks/useStaffFollowups"
-import { followupService } from "../services/followupService"
-import { formatDate } from "../utils/helpers"
+import { useTheme } from "../../providers/ThemeProvider"
+import { spacing, colors as palette, radii } from "../../constants/theme"
+import useAuthStore from "../../stores/useAuthStore"
+import { useStaffFollowups } from "../../hooks/useStaffFollowups"
+import { followupService } from "../../services/followupService"
+import { formatDate } from "../../utils/helpers"
 import moment from "moment"
-import type { FollowUp, ContactMethod, FollowUpOutcome, FollowupsSummary } from "../types"
-import type { FollowupPeriod, FollowupDateField } from "../services/followupService"
+import type { FollowUp, ContactMethod, FollowUpOutcome, FollowupsSummary } from "../../types"
+import type { FollowupPeriod, FollowupDateField } from "../../services/followupService"
+import { useTablet } from "../../hooks/useTablet"
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -98,8 +99,7 @@ const OUTCOME_CHIPS: { value: FollowUpOutcome | "all"; label: string }[] = [
   { value: "all",             label: "All outcomes" },
   { value: "promisedToPay",   label: "Promised Full" },
   { value: "promisedPartial", label: "Promised Partial" },
-  { value: "paid",            label: "Paid" },
-  { value: "noContact",       label: "No Contact" },
+  { value: "noResponse",      label: "No Response" },
   { value: "dispute",         label: "Dispute" },
 ]
 
@@ -108,11 +108,11 @@ const OUTCOME_CHIPS: { value: FollowUpOutcome | "all"; label: string }[] = [
 function SummaryStrip({ summary }: { summary: FollowupsSummary }) {
   const { byOutcome, byResolution } = summary
   const items = [
-    { label: "Total",    value: summary.totalFollowUps,                          color: palette.neutral[500] },
-    { label: "Open",     value: byResolution.open,                               color: palette.info.default },
-    { label: "Paid",     value: byResolution.resolved,                           color: palette.success.default },
+    { label: "Total",    value: summary.totalFollowUps,                              color: palette.neutral[500] },
+    { label: "Open",     value: byResolution.open,                                   color: palette.info.default },
+    { label: "Paid",     value: byResolution.resolved,                               color: palette.success.default },
     { label: "Promised", value: byOutcome.promisedToPay + byOutcome.promisedPartial, color: palette.warning.default },
-    { label: "Dispute",  value: byOutcome.dispute,                               color: palette.error.default },
+    { label: "Dispute",  value: byOutcome.dispute,                                   color: palette.error.default },
   ]
   return (
     <View style={styles.summaryStrip}>
@@ -275,8 +275,8 @@ function FollowUpCard({ item, userId }: { item: FollowUp; userId: number }) {
 // ─── screen ──────────────────────────────────────────────────────────────────
 
 export default function FollowUpsScreen() {
-  const router = useRouter()
   const { colors } = useTheme()
+  const { isTablet } = useTablet()
   const user = useAuthStore((s) => s.user)
   const [activeTab, setActiveTab] = useState<FilterTab>("all")
   const [activePeriod, setActivePeriod] = useState<PeriodChip>("all")
@@ -313,141 +313,139 @@ export default function FollowUpsScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background.primary }]}>
-      {/* Header */}
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity activeOpacity={0.7} onPress={() => router.back()} style={styles.backBtn}>
-          <ChevronLeft size={24} color={colors.text.primary} strokeWidth={1.75} />
-        </TouchableOpacity>
-        <View style={{ flex: 1 }}>
-          <AppText variant="heading2">Follow-ups</AppText>
-          {!isLoading && (
-            <AppText variant="caption" color="secondary">{data?.count ?? 0} total</AppText>
-          )}
+      <View style={isTablet ? styles.desktopContent : styles.mobileContent}>
+        {/* Header */}
+        <View style={[styles.header, { borderBottomColor: colors.border }]}>
+          <BackButton />
+          <View style={{ flex: 1 }}>
+            <AppText variant="heading2">Follow-ups</AppText>
+            {!isLoading && (
+              <AppText variant="caption" color="secondary">{data?.count ?? 0} total</AppText>
+            )}
+          </View>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => setShowFilters((v) => !v)}
+            style={[styles.filterBtn, { backgroundColor: showFilters ? colors.accent : colors.background.secondary, borderColor: activeFilterCount > 0 ? colors.accent : colors.border }]}
+          >
+            <SlidersHorizontal size={16} color={showFilters ? "#fff" : activeFilterCount > 0 ? colors.accent : colors.text.secondary} strokeWidth={1.75} />
+            <AppText variant="caption" style={{ color: showFilters ? "#fff" : activeFilterCount > 0 ? colors.accent : colors.text.secondary }}>
+              Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
+            </AppText>
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity
-          activeOpacity={0.7}
-          onPress={() => setShowFilters((v) => !v)}
-          style={[styles.filterBtn, { backgroundColor: showFilters ? colors.accent : colors.background.secondary, borderColor: activeFilterCount > 0 ? colors.accent : colors.border }]}
+
+        {/* Collapsible filter panel */}
+        {showFilters && (
+          <View style={[styles.filterPanel, { borderBottomColor: colors.border, backgroundColor: colors.background.secondary }]}>
+            {/* Period */}
+            <AppText variant="caption" color="tertiary" style={styles.filterLabel}>PERIOD</AppText>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+              {PERIOD_CHIPS.map(({ value, label }) => {
+                const isActive = activePeriod === value
+                return (
+                  <TouchableOpacity key={value} activeOpacity={0.7} onPress={() => setActivePeriod(value)}
+                    style={[styles.periodChip, { backgroundColor: isActive ? colors.accent : colors.background.primary, borderColor: isActive ? colors.accent : colors.border }]}>
+                    <AppText variant="caption" style={{ color: isActive ? "#fff" : colors.text.secondary }}>{label}</AppText>
+                  </TouchableOpacity>
+                )
+              })}
+            </ScrollView>
+
+            {/* Custom date range */}
+            {isCustom && (
+              <View style={styles.dateRangeRow}>
+                <View style={{ flex: 1 }}><DatePickerField label="From" value={startDate} onChange={setStartDate} placeholder="Start date" /></View>
+                <View style={{ flex: 1 }}><DatePickerField label="To" value={endDate} onChange={setEndDate} placeholder="End date" /></View>
+              </View>
+            )}
+
+            {/* Date field — only when period selected */}
+            {activePeriod !== "all" && (
+              <>
+                <AppText variant="caption" color="tertiary" style={styles.filterLabel}>FILTER BY</AppText>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+                  {DATE_FIELD_CHIPS.map(({ value, label }) => {
+                    const isActive = activeDateField === value
+                    return (
+                      <TouchableOpacity key={value} activeOpacity={0.7} onPress={() => setActiveDateField(value)}
+                        style={[styles.periodChip, { backgroundColor: isActive ? colors.accent + "22" : colors.background.primary, borderColor: isActive ? colors.accent : colors.border }]}>
+                        <AppText variant="caption" style={{ color: isActive ? colors.accent : colors.text.secondary }}>{label}</AppText>
+                      </TouchableOpacity>
+                    )
+                  })}
+                </ScrollView>
+              </>
+            )}
+
+            {/* Outcome */}
+            <AppText variant="caption" color="tertiary" style={styles.filterLabel}>OUTCOME</AppText>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+              {OUTCOME_CHIPS.map(({ value, label }) => {
+                const isActive = activeOutcome === value
+                return (
+                  <TouchableOpacity key={value} activeOpacity={0.7} onPress={() => setActiveOutcome(value)}
+                    style={[styles.periodChip, { backgroundColor: isActive ? colors.accent + "22" : colors.background.primary, borderColor: isActive ? colors.accent : colors.border }]}>
+                    <AppText variant="caption" style={{ color: isActive ? colors.accent : colors.text.secondary }}>{label}</AppText>
+                  </TouchableOpacity>
+                )
+              })}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* Status tabs */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.tabRow}
+          style={[styles.tabWrap, { borderBottomColor: colors.border }]}
         >
-          <SlidersHorizontal size={16} color={showFilters ? "#fff" : activeFilterCount > 0 ? colors.accent : colors.text.secondary} strokeWidth={1.75} />
-          <AppText variant="caption" style={{ color: showFilters ? "#fff" : activeFilterCount > 0 ? colors.accent : colors.text.secondary }}>
-            Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
-          </AppText>
-        </TouchableOpacity>
-      </View>
-
-      {/* Collapsible filter panel */}
-      {showFilters && (
-        <View style={[styles.filterPanel, { borderBottomColor: colors.border, backgroundColor: colors.background.secondary }]}>
-          {/* Period */}
-          <AppText variant="caption" color="tertiary" style={styles.filterLabel}>PERIOD</AppText>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-            {PERIOD_CHIPS.map(({ value, label }) => {
-              const isActive = activePeriod === value
-              return (
-                <TouchableOpacity key={value} activeOpacity={0.7} onPress={() => setActivePeriod(value)}
-                  style={[styles.periodChip, { backgroundColor: isActive ? colors.accent : colors.background.primary, borderColor: isActive ? colors.accent : colors.border }]}>
-                  <AppText variant="caption" style={{ color: isActive ? "#fff" : colors.text.secondary }}>{label}</AppText>
-                </TouchableOpacity>
-              )
-            })}
-          </ScrollView>
-
-          {/* Custom date range */}
-          {isCustom && (
-            <View style={styles.dateRangeRow}>
-              <View style={{ flex: 1 }}><DatePickerField label="From" value={startDate} onChange={setStartDate} placeholder="Start date" /></View>
-              <View style={{ flex: 1 }}><DatePickerField label="To" value={endDate} onChange={setEndDate} placeholder="End date" /></View>
-            </View>
-          )}
-
-          {/* Date field — only when period selected */}
-          {activePeriod !== "all" && (
-            <>
-              <AppText variant="caption" color="tertiary" style={styles.filterLabel}>FILTER BY</AppText>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-                {DATE_FIELD_CHIPS.map(({ value, label }) => {
-                  const isActive = activeDateField === value
-                  return (
-                    <TouchableOpacity key={value} activeOpacity={0.7} onPress={() => setActiveDateField(value)}
-                      style={[styles.periodChip, { backgroundColor: isActive ? colors.accent + "22" : colors.background.primary, borderColor: isActive ? colors.accent : colors.border }]}>
-                      <AppText variant="caption" style={{ color: isActive ? colors.accent : colors.text.secondary }}>{label}</AppText>
-                    </TouchableOpacity>
-                  )
-                })}
-              </ScrollView>
-            </>
-          )}
-
-          {/* Outcome */}
-          <AppText variant="caption" color="tertiary" style={styles.filterLabel}>OUTCOME</AppText>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-            {OUTCOME_CHIPS.map(({ value, label }) => {
-              const isActive = activeOutcome === value
-              return (
-                <TouchableOpacity key={value} activeOpacity={0.7} onPress={() => setActiveOutcome(value)}
-                  style={[styles.periodChip, { backgroundColor: isActive ? colors.accent + "22" : colors.background.primary, borderColor: isActive ? colors.accent : colors.border }]}>
-                  <AppText variant="caption" style={{ color: isActive ? colors.accent : colors.text.secondary }}>{label}</AppText>
-                </TouchableOpacity>
-              )
-            })}
-          </ScrollView>
-        </View>
-      )}
-
-      {/* Status tabs */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.tabRow}
-        style={[styles.tabWrap, { borderBottomColor: colors.border }]}
-      >
-        {TABS.map(({ value, label }) => {
-          const isActive = activeTab === value
-          return (
-            <TouchableOpacity
-              key={value}
-              activeOpacity={0.7}
-              onPress={() => setActiveTab(value)}
-              style={[
-                styles.tab,
-                {
-                  borderBottomWidth: 2,
-                  borderBottomColor: isActive ? colors.accent : "transparent",
-                },
-              ]}
-            >
-              <AppText
-                variant="bodyMedium"
-                style={{ color: isActive ? colors.accent : colors.text.secondary }}
+          {TABS.map(({ value, label }) => {
+            const isActive = activeTab === value
+            return (
+              <TouchableOpacity
+                key={value}
+                activeOpacity={0.7}
+                onPress={() => setActiveTab(value)}
+                style={[
+                  styles.tab,
+                  {
+                    borderBottomWidth: 2,
+                    borderBottomColor: isActive ? colors.accent : "transparent",
+                  },
+                ]}
               >
-                {label}
-              </AppText>
-            </TouchableOpacity>
-          )
-        })}
-      </ScrollView>
+                <AppText
+                  variant="bodyMedium"
+                  style={{ color: isActive ? colors.accent : colors.text.secondary }}
+                >
+                  {label}
+                </AppText>
+              </TouchableOpacity>
+            )
+          })}
+        </ScrollView>
 
-      {data?.summary && <SummaryStrip summary={data.summary} />}
+        {data?.summary && <SummaryStrip summary={data.summary} />}
 
-      {isLoading ? (
-        <ActivityIndicator size="large" color={colors.accent} style={styles.center} />
-      ) : (
-        <FlatList
-          data={followups}
-          keyExtractor={(item) => item._id}
-          renderItem={({ item }) =>
-            <FollowUpCard item={item} userId={user?.user_id ?? 0} />
-          }
-          contentContainerStyle={styles.list}
-          ItemSeparatorComponent={() => <View style={{ height: spacing[2] }} />}
-          ListEmptyComponent={
-            <View style={styles.center}>
-              <AppText color="tertiary">No follow-ups yet</AppText>
-            </View>
-          }
-        />
-      )}
+        {isLoading ? (
+          <ActivityIndicator size="large" color={colors.accent} style={styles.center} />
+        ) : (
+          <FlatList
+            data={followups}
+            keyExtractor={(item) => item._id}
+            renderItem={({ item }) => <FollowUpCard item={item} userId={user?.user_id ?? 0} />}
+            contentContainerStyle={styles.list}
+            ItemSeparatorComponent={() => <View style={{ height: spacing[2] }} />}
+            ListEmptyComponent={
+              <View style={styles.center}>
+                <AppText color="tertiary">No follow-ups yet</AppText>
+              </View>
+            }
+          />
+        )}
+      </View>
     </View>
   )
 }
@@ -456,6 +454,13 @@ export default function FollowUpsScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
+  mobileContent: { flex: 1 },
+  desktopContent: {
+    flex: 1,
+    maxWidth: 860,
+    width: "100%",
+    alignSelf: "center",
+  },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -465,8 +470,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     gap: spacing[2],
   },
-  backBtn: { padding: spacing[2] },
-  chipWrap: { flexGrow: 0, paddingVertical: spacing[3] },
   chipRow: { flexDirection: "row", paddingHorizontal: spacing[4], gap: spacing[2] },
   periodChip: {
     paddingHorizontal: spacing[3],

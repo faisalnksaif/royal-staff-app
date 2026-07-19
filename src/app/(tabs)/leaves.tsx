@@ -26,6 +26,7 @@ import { useTheme } from "../../providers/ThemeProvider"
 import { spacing, colors as palette, radii } from "../../constants/theme"
 import { leaveService } from "../../services/leaveService"
 import useAuthStore from "../../stores/useAuthStore"
+import { useTablet } from "../../hooks/useTablet"
 import type { LeaveRequest, LeaveStatus, LeaveType } from "../../types"
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -372,6 +373,7 @@ function SwipeableLeaveCard({
 
 export default function LeavesScreen() {
   const { colors } = useTheme()
+  const { isTablet } = useTablet()
   const queryClient = useQueryClient()
   const user = useAuthStore((s) => s.user)
   const [filter, setFilter] = useState<LeaveStatus | "all">("all")
@@ -405,6 +407,7 @@ export default function LeavesScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background.primary }]}>
+      <View style={isTablet ? styles.desktopContent : styles.mobileContent}>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <BackButton />
@@ -480,6 +483,7 @@ export default function LeavesScreen() {
         onClose={() => setRequestOpen(false)}
         onSuccess={onRequestSuccess}
       />
+      </View>
     </View>
   )
 }
@@ -488,6 +492,8 @@ export default function LeavesScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
+  mobileContent: { flex: 1 },
+  desktopContent: { flex: 1, maxWidth: 860, width: "100%", alignSelf: "center" },
   header: {
     paddingHorizontal: spacing[4],
     paddingTop: spacing[12],

@@ -8,6 +8,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native"
+import { useTablet } from "../../../hooks/useTablet"
 import { useRouter, useLocalSearchParams } from "expo-router"
 import { useQueryClient } from "@tanstack/react-query"
 import DatePickerField from "../../../components/shared/DatePickerField"
@@ -121,6 +122,7 @@ export default function AddFollowupScreen() {
   const router = useRouter()
   const queryClient = useQueryClient()
   const { colors } = useTheme()
+  const { isTablet } = useTablet()
   const user = useAuthStore((s) => s.user)
   const { name, totalBalance, customerId } = useLocalSearchParams<{ name: string; totalBalance: string; customerId: string }>()
 
@@ -202,6 +204,7 @@ export default function AddFollowupScreen() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <View style={[styles.screen, { backgroundColor: colors.background.primary }]}>
+        <View style={isTablet ? styles.desktopContent : styles.mobileContent}>
         {/* Header */}
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
           <Pressable onPress={() => router.back()} style={styles.backBtn} hitSlop={8}>
@@ -409,6 +412,7 @@ export default function AddFollowupScreen() {
           />
           <View style={{ height: spacing[10] }} />
         </ScrollView>
+        </View>
       </View>
     </KeyboardAvoidingView>
   )
@@ -418,6 +422,13 @@ export default function AddFollowupScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
+  mobileContent: { flex: 1 },
+  desktopContent: {
+    flex: 1,
+    maxWidth: 860,
+    width: "100%",
+    alignSelf: "center",
+  },
   header: {
     flexDirection: "row",
     alignItems: "center",

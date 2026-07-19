@@ -1,24 +1,107 @@
-import { Tabs } from "expo-router"
-import { StyleSheet } from "react-native"
+import { Tabs, useRouter, usePathname } from "expo-router"
+import { StyleSheet, View, Pressable } from "react-native"
 import type { ColorValue } from "react-native"
-import { LayoutDashboard, Settings } from "lucide-react-native"
+import {
+  LayoutDashboard,
+  Users,
+  ClipboardList,
+  CalendarClock,
+  Award,
+  Settings,
+  LogOut,
+} from "lucide-react-native"
 import { useTheme } from "../../providers/ThemeProvider"
-import { colors as palette } from "../../constants/theme"
+import { colors as palette, spacing, radii } from "../../constants/theme"
+import { useTablet } from "../../hooks/useTablet"
+import useAuthStore from "../../stores/useAuthStore"
+import AppText from "../../components/ui/AppText"
+
+const NAV_ITEMS = [
+  { label: "Home",        href: "/(tabs)/",               icon: LayoutDashboard, match: "__home__" },
+  { label: "Customers",   href: "/(tabs)/customers",       icon: Users,           match: "customers" },
+  { label: "Follow-ups",  href: "/(tabs)/followups",       icon: ClipboardList,   match: "followups" },
+  { label: "Leaves",      href: "/(tabs)/leaves",          icon: CalendarClock,   match: "leaves" },
+  { label: "Performance", href: "/(tabs)/extra-performance", icon: Award,         match: "extra-performance" },
+  { label: "Settings",    href: "/(tabs)/settings",        icon: Settings,        match: "settings" },
+]
+
+function StaffSidebar() {
+  const { colors } = useTheme()
+  const router = useRouter()
+  const pathname = usePathname()
+  const { user, logout } = useAuthStore()
+
+  function isActive(match: string) {
+    if (match === "__home__") return pathname === "/" || pathname === "/index"
+    return pathname.includes(match)
+  }
+
+  async function handleLogout() {
+    await logout()
+    router.replace("/(auth)/login")
+  }
+
+  return (
+    <View style={[styles.sidebar, { backgroundColor: colors.background.secondary, borderRightColor: colors.border }]}>
+      <View style={[styles.brand, { borderBottomColor: colors.border }]}>
+        <AppText variant="heading3" style={{ color: colors.accent }}>RoyalPulse</AppText>
+        <AppText variant="caption" color="tertiary">{user?.name ?? "Staff"}</AppText>
+      </View>
+
+      <View style={styles.nav}>
+        {NAV_ITEMS.map((item) => {
+          const active = isActive(item.match)
+          const Icon = item.icon
+          return (
+            <Pressable
+              key={item.href}
+              onPress={() => router.push(item.href as any)}
+              style={({ pressed }) => [
+                styles.navItem,
+                active && { backgroundColor: colors.accent + "18" },
+                pressed && { opacity: 0.7 },
+              ]}
+            >
+              <Icon size={20} strokeWidth={active ? 2 : 1.6} color={active ? colors.accent : colors.text.secondary} />
+              <AppText
+                variant={active ? "bodyMedium" : "body"}
+                style={{ color: active ? colors.accent : colors.text.secondary }}
+              >
+                {item.label}
+              </AppText>
+            </Pressable>
+          )
+        })}
+      </View>
+
+      <Pressable
+        onPress={handleLogout}
+        style={({ pressed }) => [styles.logoutBtn, { borderTopColor: colors.border, opacity: pressed ? 0.6 : 1 }]}
+      >
+        <LogOut size={18} color={colors.text.tertiary} strokeWidth={1.6} />
+        <AppText variant="body" color="tertiary">Logout</AppText>
+      </Pressable>
+    </View>
+  )
+}
 
 export default function TabsLayout() {
   const { colors, isDark } = useTheme()
+  const { isTablet } = useTablet()
   const activeColor = isDark ? palette.primary[400] : palette.primary[600]
   const inactiveColor = colors.text.tertiary as string
 
-  return (
+  const tabs = (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarStyle: {
-          backgroundColor: colors.background.secondary,
-          borderTopColor: colors.border,
-          borderTopWidth: StyleSheet.hairlineWidth,
-        },
+        tabBarStyle: isTablet
+          ? { display: "none" }
+          : {
+              backgroundColor: colors.background.secondary,
+              borderTopColor: colors.border,
+              borderTopWidth: StyleSheet.hairlineWidth,
+            },
         tabBarActiveTintColor: activeColor,
         tabBarInactiveTintColor: inactiveColor,
         tabBarLabelStyle: { fontSize: 11, fontWeight: "500" },
@@ -28,23 +111,68 @@ export default function TabsLayout() {
         name="index"
         options={{
           title: "Home",
-          tabBarIcon: ({ color }) => (
-            <LayoutDashboard size={22} color={color as string} strokeWidth={1.75} />
-          ),
+          tabBarIcon: ({ color }) => <LayoutDashboard size={22} color={color as string} strokeWidth={1.75} />,
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
           title: "Settings",
-          tabBarIcon: ({ color }) => (
-            <Settings size={22} color={color as string} strokeWidth={1.75} />
-          ),
+          tabBarIcon: ({ color }) => <Settings size={22} color={color as string} strokeWidth={1.75} />,
         }}
       />
-      <Tabs.Screen name="customers" options={{ href: null }} />
-      <Tabs.Screen name="leaves" options={{ href: null }} />
+      <Tabs.Screen name="customers"         options={{ href: null }} />
+      <Tabs.Screen name="leaves"            options={{ href: null }} />
       <Tabs.Screen name="extra-performance" options={{ href: null }} />
+      <Tabs.Screen name="followups"         options={{ href: null }} />
     </Tabs>
   )
+
+  if (!isTablet) return tabs
+
+  return (
+    <View style={[styles.row, { backgroundColor: colors.background.primary }]}>
+      <StaffSidebar />
+      <View style={styles.main}>{tabs}</View>
+    </View>
+  )
 }
+
+const styles = StyleSheet.create({
+  row: { flex: 1, flexDirection: "row" },
+  sidebar: {
+    width: 240,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    paddingTop: spacing[12],
+  },
+  main: { flex: 1 },
+  brand: {
+    paddingHorizontal: spacing[5],
+    paddingBottom: spacing[5],
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: spacing[1],
+    marginBottom: spacing[3],
+  },
+  nav: { gap: spacing[1], paddingHorizontal: spacing[3] },
+  navItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[3],
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[3],
+    borderRadius: radii.md,
+    cursor: "pointer",
+  },
+  logoutBtn: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[3],
+    paddingHorizontal: spacing[5],
+    paddingVertical: spacing[5],
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+})

@@ -1,5 +1,6 @@
 import { View, ScrollView, StyleSheet, Pressable, TouchableOpacity, ActivityIndicator } from "react-native"
 import { useRouter } from "expo-router"
+import { useTablet } from "../../hooks/useTablet"
 import { useQuery } from "@tanstack/react-query"
 import { Users, CalendarClock, ChevronRight, Award, Bell, ClipboardList } from "lucide-react-native"
 import moment from "moment"
@@ -93,6 +94,7 @@ function FeatureCard({
 
 export default function HomeScreen() {
   const { colors } = useTheme()
+  const { isTablet } = useTablet()
   const router = useRouter()
   const user = useAuthStore((s) => s.user)
 
@@ -127,6 +129,7 @@ export default function HomeScreen() {
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
+      <View style={isTablet ? styles.desktopContent : undefined}>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerRow}>
@@ -171,7 +174,7 @@ export default function HomeScreen() {
             label="Follow-ups"
             subtitle="View all logged contacts"
             accent={palette.info.default}
-            onPress={() => router.push("/followups")}
+            onPress={() => router.push("/(tabs)/followups")}
           />
         </View>
 
@@ -207,6 +210,7 @@ export default function HomeScreen() {
           />
         </View>
       </View>
+      </View>
     </ScrollView>
   )
 }
@@ -216,6 +220,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   content: { paddingBottom: spacing[16] },
+  desktopContent: { maxWidth: 860, width: "100%", alignSelf: "center" },
   header: {
     paddingHorizontal: spacing[5],
     paddingTop: spacing[12],

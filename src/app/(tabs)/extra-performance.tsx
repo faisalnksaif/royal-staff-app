@@ -21,6 +21,7 @@ import { useTheme } from "../../providers/ThemeProvider"
 import { spacing, colors as palette, radii } from "../../constants/theme"
 import { extraPerformanceService } from "../../services/extraPerformanceService"
 import useAuthStore from "../../stores/useAuthStore"
+import { useTablet } from "../../hooks/useTablet"
 import type { ExtraPerformance, ExtraPerformanceCategory, ExtraPerformanceStatus } from "../../types"
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -275,6 +276,7 @@ function PerformanceCard({ item }: { item: ExtraPerformance }) {
 
 export default function ExtraPerformanceScreen() {
   const { colors } = useTheme()
+  const { isTablet } = useTablet()
   const queryClient = useQueryClient()
   const user = useAuthStore((s) => s.user)
   const [filter, setFilter] = useState<ExtraPerformanceStatus | "all">("all")
@@ -307,6 +309,7 @@ export default function ExtraPerformanceScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background.primary }]}>
+      <View style={isTablet ? styles.desktopContent : styles.mobileContent}>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <BackButton />
@@ -378,6 +381,7 @@ export default function ExtraPerformanceScreen() {
         onClose={() => setSubmitOpen(false)}
         onSuccess={onSubmitSuccess}
       />
+      </View>
     </View>
   )
 }
@@ -386,6 +390,8 @@ export default function ExtraPerformanceScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
+  mobileContent: { flex: 1 },
+  desktopContent: { flex: 1, maxWidth: 860, width: "100%", alignSelf: "center" },
   header: {
     paddingHorizontal: spacing[4],
     paddingTop: spacing[12],

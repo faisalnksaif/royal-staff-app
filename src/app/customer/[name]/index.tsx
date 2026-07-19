@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
 } from "react-native"
 import { useRouter, useLocalSearchParams } from "expo-router"
+import { useTablet } from "../../../hooks/useTablet"
 import {
   ChevronLeft,
   Phone,
@@ -203,6 +204,7 @@ function FollowUpCard({ followup, mobile, customerName, totalBalance, drCr }: { 
 export default function CustomerDetailScreen() {
   const router = useRouter()
   const { colors } = useTheme()
+  const { isTablet } = useTablet()
   const user = useAuthStore((s) => s.user)
 
   const { name, totalBalance, drCr, customerId, mobile } = useLocalSearchParams<{
@@ -225,6 +227,7 @@ export default function CustomerDetailScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background.primary }]}>
+      <View style={isTablet ? styles.desktopContent : styles.mobileContent}>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Pressable onPress={() => router.back()} style={styles.backBtn} hitSlop={8}>
@@ -288,6 +291,7 @@ export default function CustomerDetailScreen() {
       >
         <Plus size={26} color="#FFFFFF" strokeWidth={2} />
       </TouchableOpacity>
+      </View>
     </View>
   )
 }
@@ -296,6 +300,13 @@ export default function CustomerDetailScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
+  mobileContent: { flex: 1 },
+  desktopContent: {
+    flex: 1,
+    maxWidth: 860,
+    width: "100%",
+    alignSelf: "center",
+  },
   header: {
     flexDirection: "row",
     alignItems: "center",
