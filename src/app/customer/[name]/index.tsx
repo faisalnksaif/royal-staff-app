@@ -127,94 +127,99 @@ function FollowUpCard({
     <View style={styles.tlItem}>
       {/* Left: dot + connector line */}
       <View style={styles.tlDotCol}>
-        <View style={[styles.tlDot, { backgroundColor: color }]} />
+        <View style={[styles.tlDot, { backgroundColor: color, marginTop: spacing[4] + 2 }]} />
         {!isLast && <View style={[styles.tlLine, { backgroundColor: colors.border }]} />}
       </View>
 
-      {/* Right: content */}
-      <View style={[styles.tlContent, !isLast && styles.tlContentSpaced]}>
-        {/* Top row: method + outcome badge + time */}
-        <View style={styles.tlHeader}>
-          <ContactIcon method={followup.contactMethod} color={palette.neutral[400]} />
-          <AppText variant="caption" color="secondary">{CONTACT_LABELS[followup.contactMethod]}</AppText>
-          <View style={[styles.outcomeBadge, { backgroundColor: color + "22" }]}>
-            <AppText variant="caption" style={{ color, fontSize: 10 }}>{OUTCOME_LABELS[followup.outcome]}</AppText>
+      {/* Right: card + spacing that the line extends through */}
+      <View style={[styles.tlRight, !isLast && styles.tlRightSpaced]}>
+        <AppCard elevation="sm" style={styles.card}>
+          {/* Top row: method + outcome badge + time */}
+          <View style={styles.tlHeader}>
+            <ContactIcon method={followup.contactMethod} color={palette.neutral[400]} />
+            <AppText variant="caption" color="secondary">{CONTACT_LABELS[followup.contactMethod]}</AppText>
+            <View style={[styles.outcomeBadge, { backgroundColor: color + "22" }]}>
+              <AppText variant="caption" style={{ color, fontSize: 10 }}>{OUTCOME_LABELS[followup.outcome]}</AppText>
+            </View>
+            <AppText variant="caption" color="tertiary" style={{ marginLeft: "auto" as any }}>
+              {moment(followup.loggedAt).fromNow()}
+            </AppText>
           </View>
-          <AppText variant="caption" color="tertiary" style={{ marginLeft: "auto" as any }}>
-            {moment(followup.loggedAt).fromNow()}
-          </AppText>
-        </View>
 
-        {/* Timeline rows */}
-        {followup.outstandingAmount != null && !followup.outstandingBackfilled && (
-          <TLRow
-            icon={<Wallet size={11} color={palette.neutral[400]} strokeWidth={1.75} />}
-            text={`Balance then: ₹${formatAmount(followup.outstandingAmount)} ${followup.outstandingDrCr}`}
-            color={palette.neutral[500]}
-          />
-        )}
-        {followup.promisedAmount != null && (
-          <TLRow
-            icon={<Calendar size={11} color={palette.warning.default} strokeWidth={1.75} />}
-            text={`Promised ₹${formatAmount(followup.promisedAmount)}${followup.promisedDate ? ` by ${formatDate(followup.promisedDate)}` : ""}`}
-            color={palette.warning.default}
-          />
-        )}
-        {followup.nextFollowUpDate && !resolved && (
-          <TLRow
-            icon={<Clock size={11} color={palette.info.default} strokeWidth={1.75} />}
-            text={`Next follow-up: ${formatDate(followup.nextFollowUpDate)}`}
-            color={palette.info.default}
-          />
-        )}
-        {resolved && followup.resolvedAt && (
-          <TLRow
-            icon={<CheckCircle2 size={11} color={palette.success.default} strokeWidth={1.75} />}
-            text={`Paid on ${formatDate(followup.resolvedAt)}${followup.amountRecovered ? ` · ₹${formatAmount(followup.amountRecovered)} recovered` : ""}`}
-            color={palette.success.default}
-          />
-        )}
-        {followup.whatsapp?.lastReminderSentAt && (
-          <TLRow
-            icon={<MessageCircle size={11} color={palette.warning.default} strokeWidth={1.75} />}
-            text={`WhatsApp reminder sent ${formatDate(followup.whatsapp.lastReminderSentAt)}`}
-            color={palette.warning.default}
-          />
-        )}
-        {followup.whatsapp?.lastReceiptSentAt && (
-          <TLRow
-            icon={<MessageCircle size={11} color={palette.success.default} strokeWidth={1.75} />}
-            text={`WhatsApp receipt sent ${formatDate(followup.whatsapp.lastReceiptSentAt)}`}
-            color={palette.success.default}
-          />
-        )}
-        {followup.freeTextRemark ? (
-          <AppText variant="caption" color="secondary" numberOfLines={3} style={styles.remark}>
-            "{followup.freeTextRemark}"
-          </AppText>
-        ) : null}
-
-        {/* WhatsApp action buttons */}
-        {(resolved || (!resolved && !!followup.promisedAmount)) && !!mobile && (
-          <View style={styles.waActions}>
-            {resolved && (
-              <TouchableOpacity activeOpacity={0.7} onPress={sendReceiptWhatsApp} style={styles.waBtn}>
-                <MessageCircle size={11} color="#fff" strokeWidth={1.75} />
-                <AppText variant="caption" style={{ color: "#fff", fontSize: 10 }}>Send Receipt</AppText>
-              </TouchableOpacity>
+          {/* Timeline rows */}
+          <View style={styles.tlRows}>
+            {followup.outstandingAmount != null && !followup.outstandingBackfilled && (
+              <TLRow
+                icon={<Wallet size={11} color={palette.neutral[400]} strokeWidth={1.75} />}
+                text={`Balance then: ₹${formatAmount(followup.outstandingAmount)} ${followup.outstandingDrCr}`}
+                color={palette.neutral[500]}
+              />
             )}
-            {!resolved && !!followup.promisedAmount && (
-              <TouchableOpacity activeOpacity={0.7} onPress={sendReminderWhatsApp} style={styles.waBtnReminder}>
-                <MessageCircle size={11} color="#fff" strokeWidth={1.75} />
-                <AppText variant="caption" style={{ color: "#fff", fontSize: 10 }}>Send Reminder</AppText>
-              </TouchableOpacity>
+            {followup.promisedAmount != null && (
+              <TLRow
+                icon={<Calendar size={11} color={palette.warning.default} strokeWidth={1.75} />}
+                text={`Promised ₹${formatAmount(followup.promisedAmount)}${followup.promisedDate ? ` by ${formatDate(followup.promisedDate)}` : ""}`}
+                color={palette.warning.default}
+              />
+            )}
+            {followup.nextFollowUpDate && !resolved && (
+              <TLRow
+                icon={<Clock size={11} color={palette.info.default} strokeWidth={1.75} />}
+                text={`Next follow-up: ${formatDate(followup.nextFollowUpDate)}`}
+                color={palette.info.default}
+              />
+            )}
+            {resolved && followup.resolvedAt && (
+              <TLRow
+                icon={<CheckCircle2 size={11} color={palette.success.default} strokeWidth={1.75} />}
+                text={`Paid on ${formatDate(followup.resolvedAt)}${followup.amountRecovered ? ` · ₹${formatAmount(followup.amountRecovered)} recovered` : ""}`}
+                color={palette.success.default}
+              />
+            )}
+            {followup.whatsapp?.lastReminderSentAt && (
+              <TLRow
+                icon={<MessageCircle size={11} color={palette.warning.default} strokeWidth={1.75} />}
+                text={`WhatsApp reminder sent ${formatDate(followup.whatsapp.lastReminderSentAt)}`}
+                color={palette.warning.default}
+              />
+            )}
+            {followup.whatsapp?.lastReceiptSentAt && (
+              <TLRow
+                icon={<MessageCircle size={11} color={palette.success.default} strokeWidth={1.75} />}
+                text={`WhatsApp receipt sent ${formatDate(followup.whatsapp.lastReceiptSentAt)}`}
+                color={palette.success.default}
+              />
             )}
           </View>
-        )}
 
-        <AppText variant="caption" color="tertiary" style={{ fontSize: 10 }}>
-          Logged {formatDate(followup.loggedAt)}
-        </AppText>
+          {followup.freeTextRemark ? (
+            <AppText variant="caption" color="secondary" numberOfLines={3} style={styles.remark}>
+              "{followup.freeTextRemark}"
+            </AppText>
+          ) : null}
+
+          {/* WhatsApp action buttons */}
+          {(resolved || (!resolved && !!followup.promisedAmount)) && !!mobile && (
+            <View style={styles.waActions}>
+              {resolved && (
+                <TouchableOpacity activeOpacity={0.7} onPress={sendReceiptWhatsApp} style={styles.waBtn}>
+                  <MessageCircle size={11} color="#fff" strokeWidth={1.75} />
+                  <AppText variant="caption" style={{ color: "#fff", fontSize: 10 }}>Send Receipt</AppText>
+                </TouchableOpacity>
+              )}
+              {!resolved && !!followup.promisedAmount && (
+                <TouchableOpacity activeOpacity={0.7} onPress={sendReminderWhatsApp} style={styles.waBtnReminder}>
+                  <MessageCircle size={11} color="#fff" strokeWidth={1.75} />
+                  <AppText variant="caption" style={{ color: "#fff", fontSize: 10 }}>Send Reminder</AppText>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+
+          <AppText variant="caption" color="tertiary" style={{ fontSize: 10, marginTop: spacing[1] }}>
+            Logged {formatDate(followup.loggedAt)}
+          </AppText>
+        </AppCard>
       </View>
     </View>
   )
@@ -366,40 +371,41 @@ const styles = StyleSheet.create({
     flexDirection: "row",
   },
   tlDotCol: {
-    width: 24,
+    width: 20,
     alignItems: "center",
   },
   tlDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    marginTop: 3,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
   },
   tlLine: {
     width: 2,
     flex: 1,
     marginTop: 4,
+    borderRadius: 1,
   },
-  tlContent: {
+  tlRight: {
     flex: 1,
     paddingLeft: spacing[3],
-    paddingBottom: spacing[2],
-    gap: spacing[1],
   },
-  tlContentSpaced: {
-    paddingBottom: spacing[5],
+  tlRightSpaced: {
+    paddingBottom: spacing[4],
   },
+  card: { gap: spacing[2] },
   tlHeader: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[2],
     flexWrap: "wrap",
-    marginBottom: spacing[1],
   },
   outcomeBadge: {
     paddingHorizontal: spacing[2],
     paddingVertical: 2,
     borderRadius: 4,
+  },
+  tlRows: {
+    gap: spacing[2],
   },
   tlRow: {
     flexDirection: "row",
@@ -413,12 +419,10 @@ const styles = StyleSheet.create({
   },
   remark: {
     fontStyle: "italic",
-    marginTop: spacing[1],
   },
   waActions: {
     flexDirection: "row",
     gap: spacing[2],
-    marginTop: spacing[1],
   },
   waBtn: {
     flexDirection: "row",
