@@ -633,7 +633,7 @@ paths:
                             last_outcome:
                               type: string
                               nullable: true
-                              enum: [promisedToPay, promisedPartial, dispute, noContact, paid]
+                              enum: [promisedToPay, promisedPartial, dispute, noResponse]
                             next_followup_date:
                               type: string
                               format: date-time
@@ -684,7 +684,7 @@ paths:
                         type: object
                         additionalProperties:
                           type: integer
-                        example: { promisedToPay: 12, dispute: 2, noContact: 5 }
+                        example: { promisedToPay: 12, dispute: 2, noResponse: 5 }
                       total_promised_amount:
                         type: number
                         description: Sum of promisedAmount across still-open follow-ups
@@ -755,6 +755,171 @@ paths:
         '403':
           description: Forbidden - managers only
 
+  /ledger/mappings/staff-options:
+    get:
+      tags:
+        - Ledger
+      summary: List staff for the mapping-assignment dropdown (superAdmin only)
+      description: Lightweight id+name list (sorted by name) of every staff member, for populating a "reassign to" dropdown alongside GET/PUT /ledger/mappings.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Staff options
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        staff_id:
+                          type: integer
+                          example: 2645
+                        name:
+                          type: string
+                          example: ANAS
+        '403':
+          description: Forbidden - superAdmin only
+
+  /ledger/mappings:
+    get:
+      tags:
+        - Ledger
+      summary: List customer->staff assignments (superAdmin only)
+      description: >
+        The manually-maintained staff-customer mapping
+        (LedgerCustomer.assigned_staff_id) that drives ownership before the
+        cutoff date - see GET /ledger/staff/{userId}/outstanding for how
+        it's used.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: search
+          in: query
+          description: Filter by customer name or assigned staff name
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Paginated customer-staff mappings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  pagination:
+                    type: object
+                    properties:
+                      page:
+                        type: integer
+                      limit:
+                        type: integer
+                      total:
+                        type: integer
+                      pages:
+                        type: integer
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        ledger_id:
+                          type: integer
+                          example: 688580
+                        name:
+                          type: string
+                          example: C- ANEES
+                        group:
+                          type: string
+                          example: Sundry Debtors
+                        mobile:
+                          type: string
+                          nullable: true
+                        balance:
+                          type: number
+                        assigned_staff_id:
+                          type: integer
+                          nullable: true
+                        assigned_staff_name:
+                          type: string
+                          nullable: true
+        '403':
+          description: Forbidden - superAdmin only
+
+  /ledger/mappings/{ledgerId}:
+    put:
+      tags:
+        - Ledger
+      summary: Reassign a customer to a different staff member (superAdmin only)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ledgerId
+          in: path
+          required: true
+          description: Rowbest ledger id
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - staffId
+              properties:
+                staffId:
+                  type: integer
+                  description: Staff.id (internal id) of the new assignee
+                  example: 2645
+      responses:
+        '200':
+          description: Mapping updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      ledger_id:
+                        type: integer
+                      name:
+                        type: string
+                      assigned_staff_id:
+                        type: integer
+                      assigned_staff_name:
+                        type: string
+        '400':
+          description: staffId is required
+        '403':
+          description: Forbidden - superAdmin only
+        '404':
+          description: Ledger customer or staff not found
+
   /followups:
     post:
       tags:
@@ -819,8 +984,7 @@ paths:
                     - promisedToPay
                     - promisedPartial
                     - dispute
-                    - noContact
-                    - paid
+                    - noResponse
                   example: promisedToPay
                 promisedAmount:
                   type: number
@@ -937,8 +1101,7 @@ paths:
                     - promisedToPay
                     - promisedPartial
                     - dispute
-                    - noContact
-                    - paid
+                    - noResponse
                 promisedAmount:
                   type: number
                 promisedDate:
@@ -1056,6 +1219,128 @@ paths:
         '404':
           description: Follow-up not found
 
+  /followups/all:
+    get:
+      tags:
+        - Follow-ups
+      summary: Get all follow-ups across all staff (superAdmin only)
+      description: |
+        Company-wide follow-up list, optionally narrowed to one staff via
+        `staffId`. Same filter convention and `summary` block as
+        GET /followups/staff/{staffId} - the only difference is `staffId`
+        is optional here (omit it to see every staff member's follow-ups).
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: staffId
+          in: query
+          description: Narrow to a single staff member (the same staffId convention as FollowUpResponse.staffId - a user_id, not an internal Staff.id)
+          schema:
+            type: integer
+        - name: dateField
+          in: query
+          description: Which date period/startDate/endDate applies to. Defaults to loggedAt (when the call was made).
+          schema:
+            type: string
+            enum: [loggedAt, promisedDate, resolvedAt]
+            default: loggedAt
+        - name: period
+          in: query
+          description: Shorthand date filter - `today`, `yesterday`, or `this_month`. Overrides startDate/endDate if given.
+          schema:
+            type: string
+            enum: [today, yesterday, this_month]
+        - name: startDate
+          in: query
+          description: Custom range start (YYYY-MM-DD), ignored if period is set
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          description: Custom range end (YYYY-MM-DD), ignored if period is set
+          schema:
+            type: string
+            format: date
+        - name: customerId
+          in: query
+          description: Filter to a single customer by the legacy string customerId
+          schema:
+            type: string
+        - name: ledgerId
+          in: query
+          description: Filter to a single customer by ledger_id (takes precedence over customerId if both given)
+          schema:
+            type: integer
+        - name: outcome
+          in: query
+          description: Filter to a single outcome
+          schema:
+            type: string
+            enum: [promisedToPay, promisedPartial, dispute, noResponse]
+      responses:
+        '200':
+          description: Paginated follow-ups across all (or one) staff, with a summary block
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  pagination:
+                    type: object
+                    properties:
+                      page:
+                        type: integer
+                      limit:
+                        type: integer
+                      total:
+                        type: integer
+                      pages:
+                        type: integer
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FollowUpResponse'
+                  summary:
+                    type: object
+                    description: Same shape as GET /followups/staff/{staffId}'s summary, computed over the filtered set (all staff, or just staffId if given)
+                    properties:
+                      totalFollowUps:
+                        type: integer
+                      byOutcome:
+                        type: object
+                        additionalProperties:
+                          type: integer
+                      byResolution:
+                        type: object
+                        properties:
+                          resolved:
+                            type: integer
+                          open:
+                            type: integer
+                      totalFollowedUpAmount:
+                        type: number
+                      totalPromisedAmount:
+                        type: number
+                      totalPaidAmount:
+                        type: number
+        '400':
+          description: Invalid dateField or outcome value
+        '403':
+          description: Forbidden - superAdmin only
+
   /followups/customer/{customerId}:
     get:
       tags:
@@ -1156,10 +1441,10 @@ paths:
             type: integer
         - name: outcome
           in: query
-          description: Filter to a single outcome (e.g. noContact)
+          description: Filter to a single outcome (e.g. noResponse)
           schema:
             type: string
-            enum: [promisedToPay, promisedPartial, dispute, noContact, paid]
+            enum: [promisedToPay, promisedPartial, dispute, noResponse]
       responses:
         '200':
           description: Paginated follow-ups with a summary block
@@ -1201,9 +1486,7 @@ paths:
                             type: integer
                           dispute:
                             type: integer
-                          noContact:
-                            type: integer
-                          paid:
+                          noResponse:
                             type: integer
                       byResolution:
                         type: object
@@ -1235,16 +1518,37 @@ paths:
       security:
         - BearerAuth: []
       parameters:
+        - name: dateField
+          in: query
+          description: Which date period/startDate/endDate applies to. Defaults to loggedAt (when the call was made).
+          schema:
+            type: string
+            enum: [loggedAt, promisedDate, resolvedAt]
+            default: loggedAt
+        - name: period
+          in: query
+          description: Shorthand date filter - `today`, `yesterday`, or `this_month`. Overrides startDate/endDate if given.
+          schema:
+            type: string
+            enum: [today, yesterday, this_month]
         - name: startDate
           in: query
+          description: Custom range start (YYYY-MM-DD), ignored if period is set
           schema:
             type: string
             format: date
         - name: endDate
           in: query
+          description: Custom range end (YYYY-MM-DD), ignored if period is set
           schema:
             type: string
             format: date
+        - name: outcome
+          in: query
+          description: Filter to a single outcome
+          schema:
+            type: string
+            enum: [promisedToPay, promisedPartial, dispute, noResponse]
       responses:
         '200':
           description: Total follow-up summary
@@ -1264,18 +1568,32 @@ paths:
                         type: integer
                       uniqueCustomerCount:
                         type: integer
-                      promisedToPay:
-                        type: integer
-                      promisedPartial:
-                        type: integer
-                      dispute:
-                        type: integer
-                      noContact:
-                        type: integer
-                      paid:
-                        type: integer
+                      byOutcome:
+                        type: object
+                        properties:
+                          promisedToPay:
+                            type: integer
+                          promisedPartial:
+                            type: integer
+                          dispute:
+                            type: integer
+                          noResponse:
+                            type: integer
+                      byResolution:
+                        type: object
+                        properties:
+                          resolved:
+                            type: integer
+                          open:
+                            type: integer
+                      totalFollowedUpAmount:
+                        type: number
                       totalPromisedAmount:
                         type: number
+                      totalPaidAmount:
+                        type: number
+        '400':
+          description: Invalid dateField, period, or outcome value
         '403':
           description: Forbidden - managers only
 
@@ -1328,9 +1646,7 @@ paths:
                             type: integer
                           dispute:
                             type: integer
-                          noContact:
-                            type: integer
-                          paid:
+                          noResponse:
                             type: integer
                       byResolution:
                         type: object
@@ -1505,6 +1821,175 @@ paths:
                     $ref: '#/components/schemas/NotificationResponse'
         '404':
           description: Notification not found
+
+  /dashboard/overview:
+    get:
+      tags:
+        - Dashboard
+      summary: Company-wide overview for superAdmin
+      description: |
+        Totals across the whole company plus a per-staff leaderboard,
+        sorted by outstanding balance descending. Outstanding balances are
+        always current/live; the follow-up numbers (byOutcome, byResolution,
+        totalPromisedAmount, etc.) are scoped to the date range.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: dateField
+          in: query
+          description: Which date period/startDate/endDate applies to. Defaults to loggedAt (when the call was made).
+          schema:
+            type: string
+            enum: [loggedAt, promisedDate, resolvedAt]
+            default: loggedAt
+        - name: period
+          in: query
+          description: Shorthand date filter for the follow-up numbers. Defaults to this_month if neither period nor startDate/endDate is given.
+          schema:
+            type: string
+            enum: [today, yesterday, this_month]
+        - name: startDate
+          in: query
+          description: Custom range start (YYYY-MM-DD), ignored if period is set
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          description: Custom range end (YYYY-MM-DD), ignored if period is set
+          schema:
+            type: string
+            format: date
+        - name: outcome
+          in: query
+          description: Filter the follow-up numbers to a single outcome
+          schema:
+            type: string
+            enum: [promisedToPay, promisedPartial, dispute, noResponse]
+        - name: resolutionStatus
+          in: query
+          description: >
+            Filter the follow-up numbers by system-detected payment status -
+            `resolved` means a real payment has landed for that customer
+            since the follow-up was logged (resolvedByPayment=true),
+            `open` means it hasn't yet. Independent of `outcome`.
+          schema:
+            type: string
+            enum: [resolved, open]
+      responses:
+        '200':
+          description: Dashboard overview
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      generated_at:
+                        type: string
+                        format: date-time
+                      period:
+                        type: object
+                        properties:
+                          startDate:
+                            type: string
+                            format: date-time
+                            nullable: true
+                          endDate:
+                            type: string
+                            format: date-time
+                            nullable: true
+                          dateField:
+                            type: string
+                            enum: [loggedAt, promisedDate, resolvedAt]
+                      totals:
+                        type: object
+                        properties:
+                          total_staff:
+                            type: integer
+                          total_customers:
+                            type: integer
+                          total_outstanding:
+                            type: number
+                            description: Sum of balance (dr - cr) across all Sundry Debtors customers, live/current
+                      followups:
+                        type: object
+                        description: Company-wide, same shape as /followups/stats/total
+                        properties:
+                          totalFollowUps:
+                            type: integer
+                          uniqueStaffCount:
+                            type: integer
+                          uniqueCustomerCount:
+                            type: integer
+                          byOutcome:
+                            type: object
+                            additionalProperties:
+                              type: integer
+                          byResolution:
+                            type: object
+                            properties:
+                              resolved:
+                                type: integer
+                              open:
+                                type: integer
+                          totalFollowedUpAmount:
+                            type: number
+                          totalPromisedAmount:
+                            type: number
+                          totalPaidAmount:
+                            type: number
+                      notifications:
+                        type: object
+                        properties:
+                          sent_in_period:
+                            type: integer
+                          unread_total:
+                            type: integer
+                            description: Across all staff, all-time (not scoped to the date range)
+                      staff_leaderboard:
+                        type: array
+                        description: One entry per staff member, sorted by total_outstanding descending
+                        items:
+                          type: object
+                          properties:
+                            staff_id:
+                              type: integer
+                            user_id:
+                              type: integer
+                            staff_name:
+                              type: string
+                            customers_owned:
+                              type: integer
+                            total_outstanding:
+                              type: number
+                            totalFollowUps:
+                              type: integer
+                            byOutcome:
+                              type: object
+                              additionalProperties:
+                                type: integer
+                            byResolution:
+                              type: object
+                              properties:
+                                resolved:
+                                  type: integer
+                                open:
+                                  type: integer
+                            totalFollowedUpAmount:
+                              type: number
+                            totalPromisedAmount:
+                              type: number
+                            totalPaidAmount:
+                              type: number
+        '400':
+          description: Invalid dateField, period, outcome, or resolutionStatus value
+        '403':
+          description: Forbidden - superAdmin only
 
   /attendance/scan:
     post:
@@ -3467,7 +3952,7 @@ components:
         mobile:
           type: string
           nullable: true
-          description: Customer's mobile number, snapshotted from LedgerCustomer.mobile at logging time
+          description: Customer's mobile number - live-joined from LedgerCustomer.mobile on every read (kept current, and filled in for older records that predate the snapshot), falling back to the value captured at logging time if no match is found
           example: "9846220088"
         staffId:
           type: integer
@@ -3547,8 +4032,7 @@ components:
             - promisedToPay
             - promisedPartial
             - dispute
-            - noContact
-            - paid
+            - noResponse
           example: promisedToPay
         promisedAmount:
           type: number
@@ -3971,6 +4455,8 @@ tags:
     description: Customer follow-up tracking and management
   - name: Notifications
     description: Staff notifications (e.g. new ledger transactions), with read/unread tracking
+  - name: Dashboard
+    description: Company-wide overview and reporting for superAdmin
   - name: Attendance
     description: Biometric fingerprint attendance tracking and management
   - name: Leaves

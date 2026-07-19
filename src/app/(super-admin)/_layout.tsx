@@ -1,6 +1,6 @@
 import { View, Pressable, StyleSheet } from "react-native"
 import { Stack, useRouter, usePathname } from "expo-router"
-import { LayoutDashboard, CalendarCheck, CalendarClock, ShieldCheck, Trophy, Award, LogOut } from "lucide-react-native"
+import { LayoutDashboard, CalendarCheck, CalendarClock, ShieldCheck, Trophy, Award, Users, LogOut } from "lucide-react-native"
 import AppText from "../../components/ui/AppText"
 import { useTheme } from "../../providers/ThemeProvider"
 import { useTablet } from "../../hooks/useTablet"
@@ -42,6 +42,12 @@ const NAV_ITEMS = [
     label: "Extra Performance",
     href: "/(super-admin)/extra-performance",
     icon: Award,
+    matchExact: false,
+  },
+  {
+    label: "Mappings",
+    href: "/(super-admin)/mappings",
+    icon: Users,
     matchExact: false,
   },
 ]

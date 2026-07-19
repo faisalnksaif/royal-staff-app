@@ -44,20 +44,18 @@ const CONTACT_LABELS: Record<ContactMethod, string> = {
 }
 
 const OUTCOME_LABELS: Record<FollowUpOutcome, string> = {
-  promisedToPay: "Promised Full Payment",
+  promisedToPay:   "Promised Full Payment",
   promisedPartial: "Promised Partial",
-  dispute: "Dispute",
-  noContact: "No Contact",
-  paid: "Paid",
+  dispute:         "Dispute",
+  noResponse:      "No Response",
 }
 
 function outcomeColor(o: FollowUpOutcome): string {
   switch (o) {
-    case "paid":
-    case "promisedToPay":  return palette.success.default
+    case "promisedToPay":   return palette.success.default
     case "promisedPartial": return palette.warning.default
     case "dispute":         return palette.error.default
-    case "noContact":       return palette.neutral[500]
+    case "noResponse":      return palette.neutral[500]
   }
 }
 
@@ -126,7 +124,7 @@ function SummaryStrip({ summary }: { summary: FollowupsSummary }) {
       ))}
       {summary.totalPromisedAmount > 0 && (
         <View style={[styles.summaryItem, { borderLeftWidth: 1, borderLeftColor: palette.neutral[200], paddingLeft: spacing[3] }]}>
-          <AppText variant="mono" style={{ color: palette.warning.default, fontSize: 13 }}>
+          <AppText variant="heading3" style={{ color: palette.warning.default }}>
             ₹{summary.totalPromisedAmount.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
           </AppText>
           <AppText variant="caption" color="tertiary">Promised</AppText>
@@ -134,7 +132,7 @@ function SummaryStrip({ summary }: { summary: FollowupsSummary }) {
       )}
       {summary.totalPaidAmount > 0 && (
         <View style={[styles.summaryItem, { borderLeftWidth: 1, borderLeftColor: palette.neutral[200], paddingLeft: spacing[3] }]}>
-          <AppText variant="mono" style={{ color: palette.success.default, fontSize: 13 }}>
+          <AppText variant="heading3" style={{ color: palette.success.default }}>
             ₹{summary.totalPaidAmount.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
           </AppText>
           <AppText variant="caption" color="tertiary">Collected</AppText>
@@ -147,9 +145,24 @@ function SummaryStrip({ summary }: { summary: FollowupsSummary }) {
 // ─── follow-up card ───────────────────────────────────────────────────────────
 
 function FollowUpCard({ item, userId }: { item: FollowUp; userId: number }) {
+  const router = useRouter()
   const color = outcomeColor(item.outcome)
   const resolved = item.resolvedByPayment
   const mobile = item.mobile ?? ""
+
+  function goToCustomer() {
+    if (!item.ledgerId) return
+    router.push({
+      pathname: "/customer/[name]",
+      params: {
+        name: item.customerName,
+        customerId: String(item.ledgerId),
+        totalBalance: "",
+        drCr: "",
+        mobile,
+      },
+    })
+  }
 
   function sendReceiptWhatsApp() {
     const amount = item.amountRecovered ?? item.promisedAmount ?? 0
@@ -167,7 +180,7 @@ function FollowUpCard({ item, userId }: { item: FollowUp; userId: number }) {
   }
 
   return (
-    <View>
+    <TouchableOpacity onPress={goToCustomer} activeOpacity={0.7}>
       <AppCard elevation="sm" style={[styles.card, resolved && styles.resolvedCard]}>
         {/* Customer name row */}
         <View style={styles.nameRow}>
@@ -255,7 +268,7 @@ function FollowUpCard({ item, userId }: { item: FollowUp; userId: number }) {
           </View>
         </View>
       </AppCard>
-    </View>
+    </TouchableOpacity>
   )
 }
 

@@ -193,7 +193,7 @@ export interface StaffBillsSummaryResponse {
 }
 
 export type ContactMethod = "phoneCall" | "sms" | "email" | "inPerson" | "whatsapp"
-export type FollowUpOutcome = "promisedToPay" | "promisedPartial" | "dispute" | "noContact" | "paid"
+export type FollowUpOutcome = "promisedToPay" | "promisedPartial" | "dispute" | "noResponse"
 
 export interface FollowUp {
   _id: string
@@ -306,8 +306,7 @@ export interface FollowupsSummary {
     promisedToPay: number
     promisedPartial: number
     dispute: number
-    noContact: number
-    paid: number
+    noResponse: number
   }
   byResolution: {
     resolved: number
@@ -323,6 +322,61 @@ export interface StaffFollowupsResponse {
   count: number
   data: FollowUp[]
   summary?: FollowupsSummary
+}
+
+export interface AllFollowUpsResponse {
+  success: boolean
+  pagination: BillsPagination
+  data: FollowUp[]
+  summary: FollowupsSummary
+}
+
+export interface DashboardStaffLeaderboardEntry {
+  staff_id: number
+  user_id: number
+  staff_name: string
+  customers_owned: number
+  total_outstanding: number
+  totalFollowUps: number
+  byOutcome: FollowupsSummary["byOutcome"]
+  byResolution: FollowupsSummary["byResolution"]
+  totalFollowedUpAmount: number
+  totalPromisedAmount: number
+  totalPaidAmount: number
+}
+
+export interface DashboardOverviewData {
+  generated_at: string
+  period: {
+    startDate: string | null
+    endDate: string | null
+    dateField: "loggedAt" | "promisedDate" | "resolvedAt"
+  }
+  totals: {
+    total_staff: number
+    total_customers: number
+    total_outstanding: number
+  }
+  followups: {
+    totalFollowUps: number
+    uniqueStaffCount: number
+    uniqueCustomerCount: number
+    byOutcome: FollowupsSummary["byOutcome"]
+    byResolution: FollowupsSummary["byResolution"]
+    totalFollowedUpAmount: number
+    totalPromisedAmount: number
+    totalPaidAmount: number
+  }
+  notifications: {
+    sent_in_period: number
+    unread_total: number
+  }
+  staff_leaderboard: DashboardStaffLeaderboardEntry[]
+}
+
+export interface DashboardOverviewResponse {
+  success: boolean
+  data: DashboardOverviewData
 }
 
 export type LeaveStatus = "pending" | "approved" | "rejected"

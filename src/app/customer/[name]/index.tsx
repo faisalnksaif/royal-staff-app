@@ -50,24 +50,18 @@ const CONTACT_LABELS: Record<ContactMethod, string> = {
 }
 
 const OUTCOME_LABELS: Record<FollowUpOutcome, string> = {
-  promisedToPay: "Promised Full Payment",
+  promisedToPay:   "Promised Full Payment",
   promisedPartial: "Promised Partial",
-  dispute: "Dispute",
-  noContact: "No Contact",
-  paid: "Paid",
+  dispute:         "Dispute",
+  noResponse:      "No Response",
 }
 
 function outcomeColor(o: FollowUpOutcome): string {
   switch (o) {
-    case "paid":
-    case "promisedToPay":
-      return palette.success.default
-    case "promisedPartial":
-      return palette.warning.default
-    case "dispute":
-      return palette.error.default
-    case "noContact":
-      return palette.neutral[500]
+    case "promisedToPay":   return palette.success.default
+    case "promisedPartial": return palette.warning.default
+    case "dispute":         return palette.error.default
+    case "noResponse":      return palette.neutral[500]
   }
 }
 

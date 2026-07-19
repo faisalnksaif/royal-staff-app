@@ -60,14 +60,8 @@ const OUTCOME_OPTIONS: {
     color: palette.warning.default,
   },
   {
-    value: "paid",
-    label: "Paid",
-    description: "Customer has settled the outstanding balance",
-    color: palette.success.default,
-  },
-  {
-    value: "noContact",
-    label: "No Contact",
+    value: "noResponse",
+    label: "No Response",
     description: "Could not reach the customer",
     color: palette.neutral[500],
   },

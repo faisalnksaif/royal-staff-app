@@ -1,5 +1,5 @@
 import api from "./apiClient"
-import type { StaffFollowupsResponse, CreateFollowupPayload } from "../types"
+import type { StaffFollowupsResponse, AllFollowUpsResponse, CreateFollowupPayload } from "../types"
 
 export type FollowupPeriod = "today" | "yesterday" | "this_month"
 export type FollowupDateField = "loggedAt" | "promisedDate" | "resolvedAt"
@@ -11,6 +11,19 @@ export interface StaffFollowupsParams {
   endDate?: string
   dateField?: FollowupDateField
   outcome?: string
+}
+
+export interface AllFollowUpsParams {
+  staffId?: number
+  page?: number
+  limit?: number
+  period?: FollowupPeriod
+  startDate?: string
+  endDate?: string
+  dateField?: FollowupDateField
+  outcome?: string
+  customerId?: string
+  ledgerId?: number
 }
 
 async function getStaffFollowups(
@@ -26,6 +39,26 @@ async function getStaffFollowups(
   if (outcome) qs.set("outcome", outcome)
   const { data } = await api.http.request<StaffFollowupsResponse>({
     path: `/followups/staff/${staffId}?${qs.toString()}`,
+    method: "GET",
+    secure: true,
+    format: "json",
+  })
+  return data
+}
+
+async function getAllFollowups(params: AllFollowUpsParams = {}): Promise<AllFollowUpsResponse> {
+  const { staffId, page = 1, limit = 50, period, startDate, endDate, dateField, outcome, customerId, ledgerId } = params
+  const qs = new URLSearchParams({ page: String(page), limit: String(limit) })
+  if (staffId != null) qs.set("staffId", String(staffId))
+  if (period) qs.set("period", period)
+  if (startDate) qs.set("startDate", startDate)
+  if (endDate) qs.set("endDate", endDate)
+  if (dateField && dateField !== "loggedAt") qs.set("dateField", dateField)
+  if (outcome) qs.set("outcome", outcome)
+  if (customerId) qs.set("customerId", customerId)
+  if (ledgerId != null) qs.set("ledgerId", String(ledgerId))
+  const { data } = await api.http.request<AllFollowUpsResponse>({
+    path: `/followups/all?${qs.toString()}`,
     method: "GET",
     secure: true,
     format: "json",
@@ -63,4 +96,4 @@ async function logWhatsApp(
   })
 }
 
-export const followupService = { getStaffFollowups, getCustomerFollowups, createFollowup, logWhatsApp }
+export const followupService = { getStaffFollowups, getAllFollowups, getCustomerFollowups, createFollowup, logWhatsApp }

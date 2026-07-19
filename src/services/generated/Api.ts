@@ -165,6 +165,11 @@ export interface FollowUpResponse {
    * @example 688580
    */
   ledgerId?: number | null;
+  /**
+   * Customer's mobile number - live-joined from LedgerCustomer.mobile on every read (kept current, and filled in for older records that predate the snapshot), falling back to the value captured at logging time if no match is found
+   * @example "9846220088"
+   */
+  mobile?: string | null;
   /** @example 2645 */
   staffId: number;
   /** @example 3027 */
@@ -199,6 +204,13 @@ export interface FollowUpResponse {
    * @example false
    */
   outstandingBackfilled?: boolean;
+  /** Denormalized WhatsApp send history, updated by POST /followups/{id}/whatsapp - lets the card show status without an extra query */
+  whatsapp?: {
+    /** @format date-time */
+    lastReceiptSentAt?: string | null;
+    /** @format date-time */
+    lastReminderSentAt?: string | null;
+  };
   /**
    * @format date-time
    * @example "2026-06-19T10:30:00.000Z"
@@ -211,8 +223,7 @@ export interface FollowUpResponse {
     | "promisedToPay"
     | "promisedPartial"
     | "dispute"
-    | "noContact"
-    | "paid";
+    | "noResponse"
   /** @example 5000 */
   promisedAmount?: number | null;
   /**
@@ -253,8 +264,15 @@ export interface NotificationResponse {
   staffId: number;
   /** @example 3027 */
   userId: number;
-  /** @example "new_transaction" */
-  type: "new_transaction" | "promise_due" | "promise_reminder";
+  /**
+   * new_transaction is legacy (no longer emitted - was too noisy, fired on every ledger entry). payment_received fires only when a payment resolves an open follow-up.
+   * @example "payment_received"
+   */
+  type:
+    | "new_transaction"
+    | "promise_due"
+    | "promise_reminder"
+    | "payment_received";
   /** @example "5 new transactions for ABC Company" */
   title: string;
   /** @example "ABC Company has 5 new ledger entries (debit ₹25,000, credit ₹10,000)" */
@@ -1188,7 +1206,6 @@ export class Api<SecurityDataType extends unknown> {
           | "all"
           | "followed_up"
           | "not_followed_up"
-          | "paid"
           | "overdue"
           | "open_followup";
       },
@@ -1238,8 +1255,7 @@ export class Api<SecurityDataType extends unknown> {
                 | "promisedToPay"
                 | "promisedPartial"
                 | "dispute"
-                | "noContact"
-                | "paid"
+                | "noResponse"
                 | null;
               /** @format date-time */
               next_followup_date?: string | null;
@@ -1254,7 +1270,6 @@ export class Api<SecurityDataType extends unknown> {
             | "all"
             | "followed_up"
             | "not_followed_up"
-            | "paid"
             | "overdue"
             | "open_followup";
           totals?: {
@@ -1392,8 +1407,7 @@ export class Api<SecurityDataType extends unknown> {
           | "promisedToPay"
           | "promisedPartial"
           | "dispute"
-          | "noContact"
-          | "paid";
+          | "noResponse"
         /** @example 5000 */
         promisedAmount?: number | null;
         /**
@@ -1474,8 +1488,7 @@ export class Api<SecurityDataType extends unknown> {
           | "promisedToPay"
           | "promisedPartial"
           | "dispute"
-          | "noContact"
-          | "paid";
+          | "noResponse"
         promisedAmount?: number;
         /** @format date */
         promisedDate?: string;
@@ -1516,6 +1529,128 @@ export class Api<SecurityDataType extends unknown> {
         path: `/followups/${id}`,
         method: "DELETE",
         secure: true,
+        ...params,
+      }),
+
+    /**
+     * @description Records that a WhatsApp message was sent for this follow-up - the actual send happens client-side (e.g. via a WhatsApp deep link), this just logs it. Fire-and-forget from the frontend's perspective. Updates whatsapp.lastReceiptSentAt/lastReminderSentAt on the follow-up (see FollowUpResponse) so the card can show send status without an extra query, and appends a full audit entry.
+     *
+     * @tags Follow-ups
+     * @name WhatsappCreate
+     * @summary Log a WhatsApp message send
+     * @request POST:/followups/{id}/whatsapp
+     * @secure
+     */
+    whatsappCreate: (
+      id: string,
+      data: {
+        /** @example 12 */
+        staffId: number;
+        type: "receipt" | "reminder";
+        /** @example "919876543210" */
+        mobile: string;
+        /** @example 5000 */
+        amountMentioned?: number | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            _id?: string;
+            /** @format date-time */
+            sentAt?: string;
+          };
+        },
+        void
+      >({
+        path: `/followups/${id}/whatsapp`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Company-wide follow-up list, optionally narrowed to one staff via `staffId`. Same filter convention and `summary` block as GET /followups/staff/{staffId} - the only difference is `staffId` is optional here (omit it to see every staff member's follow-ups).
+     *
+     * @tags Follow-ups
+     * @name GetFollowUps
+     * @summary Get all follow-ups across all staff (superAdmin only)
+     * @request GET:/followups/all
+     * @secure
+     */
+    getFollowUps: (
+      query?: {
+        /** @default 1 */
+        page?: number;
+        /** @default 50 */
+        limit?: number;
+        /** Narrow to a single staff member (the same staffId convention as FollowUpResponse.staffId - a user_id, not an internal Staff.id) */
+        staffId?: number;
+        /**
+         * Which date period/startDate/endDate applies to. Defaults to loggedAt (when the call was made).
+         * @default "loggedAt"
+         */
+        dateField?: "loggedAt" | "promisedDate" | "resolvedAt";
+        /** Shorthand date filter - `today`, `yesterday`, or `this_month`. Overrides startDate/endDate if given. */
+        period?: "today" | "yesterday" | "this_month";
+        /**
+         * Custom range start (YYYY-MM-DD), ignored if period is set
+         * @format date
+         */
+        startDate?: string;
+        /**
+         * Custom range end (YYYY-MM-DD), ignored if period is set
+         * @format date
+         */
+        endDate?: string;
+        /** Filter to a single customer by the legacy string customerId */
+        customerId?: string;
+        /** Filter to a single customer by ledger_id (takes precedence over customerId if both given) */
+        ledgerId?: number;
+        /** Filter to a single outcome */
+        outcome?:
+          | "promisedToPay"
+          | "promisedPartial"
+          | "dispute"
+          | "noResponse"
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          pagination?: {
+            page?: number;
+            limit?: number;
+            total?: number;
+            pages?: number;
+          };
+          data?: FollowUpResponse[];
+          /** Same shape as GET /followups/staff/{staffId}'s summary, computed over the filtered set (all staff, or just staffId if given) */
+          summary?: {
+            totalFollowUps?: number;
+            byOutcome?: Record<string, number>;
+            byResolution?: {
+              resolved?: number;
+              open?: number;
+            };
+            totalFollowedUpAmount?: number;
+            totalPromisedAmount?: number;
+            totalPaidAmount?: number;
+          };
+        },
+        void
+      >({
+        path: `/followups/all`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
         ...params,
       }),
 
@@ -1568,15 +1703,20 @@ export class Api<SecurityDataType extends unknown> {
         page?: number;
         /** @default 50 */
         limit?: number;
-        /** Shorthand date filter - `today` or `this_month`. Overrides startDate/endDate if both given. */
-        period?: "today" | "this_month";
         /**
-         * Custom range start (YYYY-MM-DD), ignored if period=this_month
+         * Which date period/startDate/endDate applies to. Defaults to loggedAt (when the call was made).
+         * @default "loggedAt"
+         */
+        dateField?: "loggedAt" | "promisedDate" | "resolvedAt";
+        /** Shorthand date filter - `today`, `yesterday`, or `this_month`. Overrides startDate/endDate if both given. */
+        period?: "today" | "yesterday" | "this_month";
+        /**
+         * Custom range start (YYYY-MM-DD), ignored if period is set
          * @format date
          */
         startDate?: string;
         /**
-         * Custom range end (YYYY-MM-DD), ignored if period=this_month
+         * Custom range end (YYYY-MM-DD), ignored if period is set
          * @format date
          */
         endDate?: string;
@@ -1584,6 +1724,12 @@ export class Api<SecurityDataType extends unknown> {
         customerId?: string;
         /** Filter to a single customer by ledger_id (takes precedence over customerId if both given) */
         ledgerId?: number;
+        /** Filter to a single outcome (e.g. noContact) */
+        outcome?:
+          | "promisedToPay"
+          | "promisedPartial"
+          | "dispute"
+          | "noResponse"
       },
       params: RequestParams = {},
     ) =>
@@ -1605,7 +1751,7 @@ export class Api<SecurityDataType extends unknown> {
               promisedToPay?: number;
               promisedPartial?: number;
               dispute?: number;
-              noContact?: number;
+              noResponse?: number;
               paid?: number;
             };
             /** Whether the ledger sync has detected a real payment for this customer since the follow-up was logged */
@@ -1641,10 +1787,29 @@ export class Api<SecurityDataType extends unknown> {
      */
     statsTotalList: (
       query?: {
-        /** @format date */
+        /**
+         * Which date period/startDate/endDate applies to. Defaults to loggedAt (when the call was made).
+         * @default "loggedAt"
+         */
+        dateField?: "loggedAt" | "promisedDate" | "resolvedAt";
+        /** Shorthand date filter - `today`, `yesterday`, or `this_month`. Overrides startDate/endDate if given. */
+        period?: "today" | "yesterday" | "this_month";
+        /**
+         * Custom range start (YYYY-MM-DD), ignored if period is set
+         * @format date
+         */
         startDate?: string;
-        /** @format date */
+        /**
+         * Custom range end (YYYY-MM-DD), ignored if period is set
+         * @format date
+         */
         endDate?: string;
+        /** Filter to a single outcome */
+        outcome?:
+          | "promisedToPay"
+          | "promisedPartial"
+          | "dispute"
+          | "noResponse"
       },
       params: RequestParams = {},
     ) =>
@@ -1655,12 +1820,20 @@ export class Api<SecurityDataType extends unknown> {
             totalFollowUps?: number;
             uniqueStaffCount?: number;
             uniqueCustomerCount?: number;
-            promisedToPay?: number;
-            promisedPartial?: number;
-            dispute?: number;
-            noContact?: number;
-            paid?: number;
+            byOutcome?: {
+              promisedToPay?: number;
+              promisedPartial?: number;
+              dispute?: number;
+              noResponse?: number;
+              paid?: number;
+            };
+            byResolution?: {
+              resolved?: number;
+              open?: number;
+            };
+            totalFollowedUpAmount?: number;
             totalPromisedAmount?: number;
+            totalPaidAmount?: number;
           };
         },
         void
@@ -1702,7 +1875,7 @@ export class Api<SecurityDataType extends unknown> {
               promisedToPay?: number;
               promisedPartial?: number;
               dispute?: number;
-              noContact?: number;
+              noResponse?: number;
               paid?: number;
             };
             byResolution?: {
@@ -1839,6 +2012,111 @@ export class Api<SecurityDataType extends unknown> {
       >({
         path: `/notifications/${id}/read`,
         method: "PUT",
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+  };
+  dashboard = {
+    /**
+     * @description Totals across the whole company plus a per-staff leaderboard, sorted by outstanding balance descending. Outstanding balances are always current/live; the follow-up numbers (byOutcome, byResolution, totalPromisedAmount, etc.) are scoped to the date range.
+     *
+     * @tags Dashboard
+     * @name OverviewList
+     * @summary Company-wide overview for superAdmin
+     * @request GET:/dashboard/overview
+     * @secure
+     */
+    overviewList: (
+      query?: {
+        /**
+         * Which date period/startDate/endDate applies to. Defaults to loggedAt (when the call was made).
+         * @default "loggedAt"
+         */
+        dateField?: "loggedAt" | "promisedDate" | "resolvedAt";
+        /** Shorthand date filter for the follow-up numbers. Defaults to this_month if neither period nor startDate/endDate is given. */
+        period?: "today" | "yesterday" | "this_month";
+        /**
+         * Custom range start (YYYY-MM-DD), ignored if period is set
+         * @format date
+         */
+        startDate?: string;
+        /**
+         * Custom range end (YYYY-MM-DD), ignored if period is set
+         * @format date
+         */
+        endDate?: string;
+        /** Filter the follow-up numbers to a single outcome */
+        outcome?:
+          | "promisedToPay"
+          | "promisedPartial"
+          | "dispute"
+          | "noResponse"
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            /** @format date-time */
+            generated_at?: string;
+            period?: {
+              /** @format date-time */
+              startDate?: string | null;
+              /** @format date-time */
+              endDate?: string | null;
+              dateField?: "loggedAt" | "promisedDate" | "resolvedAt";
+            };
+            totals?: {
+              total_staff?: number;
+              total_customers?: number;
+              /** Sum of balance (dr - cr) across all Sundry Debtors customers, live/current */
+              total_outstanding?: number;
+            };
+            /** Company-wide, same shape as /followups/stats/total */
+            followups?: {
+              totalFollowUps?: number;
+              uniqueStaffCount?: number;
+              uniqueCustomerCount?: number;
+              byOutcome?: Record<string, number>;
+              byResolution?: {
+                resolved?: number;
+                open?: number;
+              };
+              totalFollowedUpAmount?: number;
+              totalPromisedAmount?: number;
+              totalPaidAmount?: number;
+            };
+            notifications?: {
+              sent_in_period?: number;
+              /** Across all staff, all-time (not scoped to the date range) */
+              unread_total?: number;
+            };
+            /** One entry per staff member, sorted by total_outstanding descending */
+            staff_leaderboard?: {
+              staff_id?: number;
+              user_id?: number;
+              staff_name?: string;
+              customers_owned?: number;
+              total_outstanding?: number;
+              totalFollowUps?: number;
+              byOutcome?: Record<string, number>;
+              byResolution?: {
+                resolved?: number;
+                open?: number;
+              };
+              totalFollowedUpAmount?: number;
+              totalPromisedAmount?: number;
+              totalPaidAmount?: number;
+            }[];
+          };
+        },
+        void
+      >({
+        path: `/dashboard/overview`,
+        method: "GET",
+        query: query,
         secure: true,
         format: "json",
         ...params,

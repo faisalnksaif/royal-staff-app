@@ -16,7 +16,7 @@ export default function BackButton({ color }: BackButtonProps) {
   if (!navigation.canGoBack()) return null
 
   return (
-    <Pressable onPress={() => router.back()} hitSlop={8} style={{ padding: spacing[2] }}>
+    <Pressable onPress={() => router.back()} hitSlop={8} style={{ padding: spacing[2], cursor: "pointer" }}>
       <ChevronLeft size={24} color={color ?? colors.text.primary} strokeWidth={1.75} />
     </Pressable>
   )

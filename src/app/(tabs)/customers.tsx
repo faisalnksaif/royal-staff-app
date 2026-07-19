@@ -28,11 +28,10 @@ function toTitleCase(str: string): string {
 }
 
 const OUTCOME_LABELS: Record<FollowUpOutcome, string> = {
-  promisedToPay: "Promised Full Payment",
+  promisedToPay:   "Promised Full Payment",
   promisedPartial: "Promised Partial",
-  paid: "Paid",
-  noContact: "No Contact",
-  dispute: "Dispute",
+  dispute:         "Dispute",
+  noResponse:      "No Response",
 }
 
 
@@ -95,9 +94,8 @@ function FilterChips({
 const OUTCOME_COLORS: Record<string, string> = {
   promisedToPay:   palette.success.default,
   promisedPartial: palette.warning.default,
-  paid:            palette.success.dark,
   dispute:         palette.error.default,
-  noContact:       palette.neutral[400],
+  noResponse:      palette.neutral[400],
 }
 
 function InsightsPanel({ insights }: { insights: LedgerFollowUpInsights }) {
