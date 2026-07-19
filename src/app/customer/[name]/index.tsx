@@ -17,6 +17,10 @@ import {
   UserCheck,
   MessageCircle,
   Plus,
+  Calendar,
+  CheckCircle2,
+  Clock,
+  Wallet,
 } from "lucide-react-native"
 import { Linking } from "react-native"
 import AppText from "../../../components/ui/AppText"
@@ -77,9 +81,25 @@ function ContactIcon({ method, color }: { method: ContactMethod; color: string }
   }
 }
 
+// ─── timeline row ────────────────────────────────────────────────────────────
+
+function TLRow({ icon, text, color }: { icon: React.ReactNode; text: string; color: string }) {
+  return (
+    <View style={styles.tlRow}>
+      <View style={styles.tlIcon}>{icon}</View>
+      <AppText variant="caption" style={{ color, flex: 1, fontSize: 11 }}>{text}</AppText>
+    </View>
+  )
+}
+
 // ─── follow-up card ──────────────────────────────────────────────────────────
 
-function FollowUpCard({ followup, mobile, customerName, totalBalance, drCr }: { followup: FollowUp; mobile: string; customerName: string; totalBalance: string; drCr: string }) {
+function FollowUpCard({
+  followup, mobile, customerName, totalBalance, drCr, isLast,
+}: {
+  followup: FollowUp; mobile: string; customerName: string; totalBalance: string; drCr: string; isLast: boolean
+}) {
+  const { colors } = useTheme()
   const color = outcomeColor(followup.outcome)
   const resolved = followup.resolvedByPayment
   const user = useAuthStore((s) => s.user)
@@ -104,98 +124,99 @@ function FollowUpCard({ followup, mobile, customerName, totalBalance, drCr }: { 
   }
 
   return (
-    <AppCard elevation="sm" style={[styles.card, resolved && styles.resolvedCard]}>
-      <View style={styles.row}>
-        <View style={styles.rowLeft}>
-          <View style={styles.methodRow}>
-            <ContactIcon method={followup.contactMethod} color={palette.neutral[400]} />
-            <AppText variant="caption" color="secondary">
-              {CONTACT_LABELS[followup.contactMethod]}
-            </AppText>
+    <View style={styles.tlItem}>
+      {/* Left: dot + connector line */}
+      <View style={styles.tlDotCol}>
+        <View style={[styles.tlDot, { backgroundColor: color }]} />
+        {!isLast && <View style={[styles.tlLine, { backgroundColor: colors.border }]} />}
+      </View>
+
+      {/* Right: content */}
+      <View style={[styles.tlContent, !isLast && styles.tlContentSpaced]}>
+        {/* Top row: method + outcome badge + time */}
+        <View style={styles.tlHeader}>
+          <ContactIcon method={followup.contactMethod} color={palette.neutral[400]} />
+          <AppText variant="caption" color="secondary">{CONTACT_LABELS[followup.contactMethod]}</AppText>
+          <View style={[styles.outcomeBadge, { backgroundColor: color + "22" }]}>
+            <AppText variant="caption" style={{ color, fontSize: 10 }}>{OUTCOME_LABELS[followup.outcome]}</AppText>
           </View>
-          {followup.outstandingAmount != null && !followup.outstandingBackfilled && (
-            <AppText variant="caption" style={{ color: followup.outstandingDrCr === "Cr" ? palette.success.default : palette.neutral[400] }}>
-              Balance then: ₹{formatAmount(followup.outstandingAmount)} {followup.outstandingDrCr}
-            </AppText>
-          )}
-          {followup.promisedDate && (
-            <AppText variant="caption" style={{ color: palette.warning.default }}>
-              Promised: {formatDate(followup.promisedDate)}
-            </AppText>
-          )}
-          {followup.nextFollowUpDate && !resolved && (
-            <AppText variant="caption" style={{ color: palette.info.default }}>
-              Next: {formatDate(followup.nextFollowUpDate)}
-            </AppText>
-          )}
-          {resolved && followup.resolvedAt && (
-            <AppText variant="caption" style={{ color: palette.success.default }}>
-              Paid on {formatDate(followup.resolvedAt)}
-            </AppText>
-          )}
-          {resolved && followup.amountRecovered != null && followup.amountRecovered > 0 && (
-            <AppText variant="caption" style={{ color: palette.success.default }}>
-              Recovered: ₹{formatAmount(followup.amountRecovered)}
-            </AppText>
-          )}
-          {followup.freeTextRemark ? (
-            <AppText variant="caption" color="secondary" numberOfLines={2}>
-              {followup.freeTextRemark}
-            </AppText>
-          ) : null}
-          <AppText variant="caption" color="tertiary">
-            Logged {formatDate(followup.loggedAt)}
+          <AppText variant="caption" color="tertiary" style={{ marginLeft: "auto" as any }}>
+            {moment(followup.loggedAt).fromNow()}
           </AppText>
         </View>
-        <View style={styles.rowRight}>
-          <View style={[styles.badge, { backgroundColor: color + "33" }]}>
-            <AppText variant="caption" style={{ color }}>
-              {OUTCOME_LABELS[followup.outcome]}
-            </AppText>
-          </View>
-          {followup.promisedAmount ? (
-            <AppText
-              variant="mono"
-              style={{ fontSize: 12, textDecorationLine: resolved ? "line-through" : "none" }}
-              color={resolved ? "tertiary" : "secondary"}
-            >
-              ₹{formatAmount(followup.promisedAmount)}
-            </AppText>
-          ) : null}
-          {resolved && (
-            <View style={styles.resolvedPill}>
-              <AppText variant="caption" style={{ color: palette.success.default }}>Paid</AppText>
-            </View>
-          )}
-          {resolved && !!mobile && (
-            <>
+
+        {/* Timeline rows */}
+        {followup.outstandingAmount != null && !followup.outstandingBackfilled && (
+          <TLRow
+            icon={<Wallet size={11} color={palette.neutral[400]} strokeWidth={1.75} />}
+            text={`Balance then: ₹${formatAmount(followup.outstandingAmount)} ${followup.outstandingDrCr}`}
+            color={palette.neutral[500]}
+          />
+        )}
+        {followup.promisedAmount != null && (
+          <TLRow
+            icon={<Calendar size={11} color={palette.warning.default} strokeWidth={1.75} />}
+            text={`Promised ₹${formatAmount(followup.promisedAmount)}${followup.promisedDate ? ` by ${formatDate(followup.promisedDate)}` : ""}`}
+            color={palette.warning.default}
+          />
+        )}
+        {followup.nextFollowUpDate && !resolved && (
+          <TLRow
+            icon={<Clock size={11} color={palette.info.default} strokeWidth={1.75} />}
+            text={`Next follow-up: ${formatDate(followup.nextFollowUpDate)}`}
+            color={palette.info.default}
+          />
+        )}
+        {resolved && followup.resolvedAt && (
+          <TLRow
+            icon={<CheckCircle2 size={11} color={palette.success.default} strokeWidth={1.75} />}
+            text={`Paid on ${formatDate(followup.resolvedAt)}${followup.amountRecovered ? ` · ₹${formatAmount(followup.amountRecovered)} recovered` : ""}`}
+            color={palette.success.default}
+          />
+        )}
+        {followup.whatsapp?.lastReminderSentAt && (
+          <TLRow
+            icon={<MessageCircle size={11} color={palette.warning.default} strokeWidth={1.75} />}
+            text={`WhatsApp reminder sent ${formatDate(followup.whatsapp.lastReminderSentAt)}`}
+            color={palette.warning.default}
+          />
+        )}
+        {followup.whatsapp?.lastReceiptSentAt && (
+          <TLRow
+            icon={<MessageCircle size={11} color={palette.success.default} strokeWidth={1.75} />}
+            text={`WhatsApp receipt sent ${formatDate(followup.whatsapp.lastReceiptSentAt)}`}
+            color={palette.success.default}
+          />
+        )}
+        {followup.freeTextRemark ? (
+          <AppText variant="caption" color="secondary" numberOfLines={3} style={styles.remark}>
+            "{followup.freeTextRemark}"
+          </AppText>
+        ) : null}
+
+        {/* WhatsApp action buttons */}
+        {(resolved || (!resolved && !!followup.promisedAmount)) && !!mobile && (
+          <View style={styles.waActions}>
+            {resolved && (
               <TouchableOpacity activeOpacity={0.7} onPress={sendReceiptWhatsApp} style={styles.waBtn}>
-                <MessageCircle size={12} color="#fff" strokeWidth={1.75} />
-                <AppText variant="caption" style={{ color: "#fff", fontSize: 10 }}>Receipt</AppText>
+                <MessageCircle size={11} color="#fff" strokeWidth={1.75} />
+                <AppText variant="caption" style={{ color: "#fff", fontSize: 10 }}>Send Receipt</AppText>
               </TouchableOpacity>
-              {followup.whatsapp?.lastReceiptSentAt && (
-                <AppText variant="caption" color="tertiary" style={{ fontSize: 9 }}>
-                  Sent {formatDate(followup.whatsapp.lastReceiptSentAt)}
-                </AppText>
-              )}
-            </>
-          )}
-          {!resolved && !!mobile && !!followup.promisedAmount && (
-            <>
+            )}
+            {!resolved && !!followup.promisedAmount && (
               <TouchableOpacity activeOpacity={0.7} onPress={sendReminderWhatsApp} style={styles.waBtnReminder}>
-                <MessageCircle size={12} color="#fff" strokeWidth={1.75} />
-                <AppText variant="caption" style={{ color: "#fff", fontSize: 10 }}>Reminder</AppText>
+                <MessageCircle size={11} color="#fff" strokeWidth={1.75} />
+                <AppText variant="caption" style={{ color: "#fff", fontSize: 10 }}>Send Reminder</AppText>
               </TouchableOpacity>
-              {followup.whatsapp?.lastReminderSentAt && (
-                <AppText variant="caption" color="tertiary" style={{ fontSize: 9 }}>
-                  Sent {formatDate(followup.whatsapp.lastReminderSentAt)}
-                </AppText>
-              )}
-            </>
-          )}
-        </View>
+            )}
+          </View>
+        )}
+
+        <AppText variant="caption" color="tertiary" style={{ fontSize: 10 }}>
+          Logged {formatDate(followup.loggedAt)}
+        </AppText>
       </View>
-    </AppCard>
+    </View>
   )
 }
 
@@ -270,9 +291,17 @@ export default function CustomerDetailScreen() {
         <FlatList
           data={customerFollowups}
           keyExtractor={(item) => item._id}
-          renderItem={({ item }) => <FollowUpCard followup={item} mobile={mobile ?? ""} customerName={toTitleCase(name)} totalBalance={totalBalance ?? "0"} drCr={drCr ?? "Dr"} />}
+          renderItem={({ item, index }) => (
+            <FollowUpCard
+              followup={item}
+              mobile={mobile ?? ""}
+              customerName={toTitleCase(name)}
+              totalBalance={totalBalance ?? "0"}
+              drCr={drCr ?? "Dr"}
+              isLast={index === customerFollowups.length - 1}
+            />
+          )}
           contentContainerStyle={styles.list}
-          ItemSeparatorComponent={() => <View style={{ height: spacing[2] }} />}
           ListEmptyComponent={
             <View style={styles.center}>
               <AppText color="tertiary">No follow-ups yet</AppText>
@@ -328,16 +357,68 @@ const styles = StyleSheet.create({
     backgroundColor: palette.success.default + "22",
   },
   list: {
-    padding: spacing[4],
+    paddingHorizontal: spacing[4],
+    paddingTop: spacing[4],
     paddingBottom: spacing[20],
   },
-  card: { padding: 0 },
-  resolvedCard: { borderLeftWidth: 3, borderLeftColor: palette.success.default },
-  resolvedPill: {
+  // ─── timeline ──────────────────────────────────────────────────────────────
+  tlItem: {
+    flexDirection: "row",
+  },
+  tlDotCol: {
+    width: 24,
+    alignItems: "center",
+  },
+  tlDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginTop: 3,
+  },
+  tlLine: {
+    width: 2,
+    flex: 1,
+    marginTop: 4,
+  },
+  tlContent: {
+    flex: 1,
+    paddingLeft: spacing[3],
+    paddingBottom: spacing[2],
+    gap: spacing[1],
+  },
+  tlContentSpaced: {
+    paddingBottom: spacing[5],
+  },
+  tlHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[2],
+    flexWrap: "wrap",
+    marginBottom: spacing[1],
+  },
+  outcomeBadge: {
     paddingHorizontal: spacing[2],
     paddingVertical: 2,
     borderRadius: 4,
-    backgroundColor: palette.success.default + "22",
+  },
+  tlRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing[2],
+  },
+  tlIcon: {
+    width: 14,
+    alignItems: "center",
+    paddingTop: 1,
+  },
+  remark: {
+    fontStyle: "italic",
+    marginTop: spacing[1],
+  },
+  waActions: {
+    flexDirection: "row",
+    gap: spacing[2],
+    marginTop: spacing[1],
   },
   waBtn: {
     flexDirection: "row",
@@ -356,24 +437,6 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[1] + 1,
     borderRadius: 6,
     backgroundColor: palette.warning.default,
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: spacing[4],
-  },
-  rowLeft: { flex: 1, gap: spacing[1] },
-  rowRight: { alignItems: "flex-end", gap: spacing[1] },
-  methodRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[1],
-  },
-  badge: {
-    paddingHorizontal: spacing[2],
-    paddingVertical: 2,
-    borderRadius: 4,
   },
   center: {
     alignItems: "center",
