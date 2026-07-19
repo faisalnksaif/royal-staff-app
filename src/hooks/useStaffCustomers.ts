@@ -4,18 +4,19 @@ import type { LedgerOutstandingResponse, LedgerOutstandingFilter } from "../type
 
 export function useStaffCustomers(
   userId: number | string | null | undefined,
-  params: { limit?: number; search?: string; filter?: LedgerOutstandingFilter } = {}
+  params: { limit?: number; search?: string; filter?: LedgerOutstandingFilter; sortBy?: "priority" | "balance" } = {}
 ) {
-  const { limit = 20, search, filter = "all" } = params
+  const { limit = 20, search, filter = "all", sortBy } = params
 
   return useInfiniteQuery<LedgerOutstandingResponse>({
-    queryKey: ["staff-outstanding", userId, limit, search, filter],
+    queryKey: ["staff-outstanding", userId, limit, search, filter, sortBy],
     queryFn: ({ pageParam }) =>
       billService.getStaffOutstanding(userId!, {
         page: pageParam as number,
         limit,
         search,
         filter,
+        sortBy,
       }),
     initialPageParam: 1,
     getNextPageParam: (lastPage) => {

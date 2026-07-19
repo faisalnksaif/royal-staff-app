@@ -9,6 +9,10 @@ import {
   MessageCircle,
   CheckCircle2,
   SlidersHorizontal,
+  Calendar,
+  Clock,
+  Wallet,
+  ClipboardList,
 } from "lucide-react-native"
 import AppText from "../../components/ui/AppText"
 import AppCard from "../../components/ui/AppCard"
@@ -16,7 +20,7 @@ import DatePickerField from "../../components/shared/DatePickerField"
 import BackButton from "../../components/shared/BackButton"
 import { Linking } from "react-native"
 import { useTheme } from "../../providers/ThemeProvider"
-import { spacing, colors as palette, radii } from "../../constants/theme"
+import { spacing, colors as palette } from "../../constants/theme"
 import useAuthStore from "../../stores/useAuthStore"
 import { useStaffFollowups } from "../../hooks/useStaffFollowups"
 import { followupService } from "../../services/followupService"
@@ -142,9 +146,33 @@ function SummaryStrip({ summary }: { summary: FollowupsSummary }) {
   )
 }
 
+// ─── event row (inner timeline) ───────────────────────────────────────────────
+
+function EventRow({
+  icon, text, color, isLast,
+}: {
+  icon: React.ReactNode; text: string; color: string; isLast: boolean
+}) {
+  return (
+    <View style={styles.eventRow}>
+      <View style={styles.eventDotCol}>
+        <View style={[styles.eventDot, { backgroundColor: color }]} />
+        {!isLast && <View style={[styles.eventLine, { backgroundColor: color + "40" }]} />}
+      </View>
+      <View style={[styles.eventText, !isLast && styles.eventTextSpaced]}>
+        <View style={styles.eventTextInner}>
+          {icon}
+          <AppText variant="caption" style={{ color, flex: 1, fontSize: 12 }}>{text}</AppText>
+        </View>
+      </View>
+    </View>
+  )
+}
+
 // ─── follow-up card ───────────────────────────────────────────────────────────
 
 function FollowUpCard({ item, userId }: { item: FollowUp; userId: number }) {
+  const { colors } = useTheme()
   const router = useRouter()
   const color = outcomeColor(item.outcome)
   const resolved = item.resolvedByPayment
@@ -154,13 +182,7 @@ function FollowUpCard({ item, userId }: { item: FollowUp; userId: number }) {
     if (!item.ledgerId) return
     router.push({
       pathname: "/customer/[name]",
-      params: {
-        name: item.customerName,
-        customerId: String(item.ledgerId),
-        totalBalance: "",
-        drCr: "",
-        mobile,
-      },
+      params: { name: item.customerName, customerId: String(item.ledgerId), totalBalance: "", drCr: "", mobile },
     })
   }
 
@@ -179,94 +201,107 @@ function FollowUpCard({ item, userId }: { item: FollowUp; userId: number }) {
     followupService.logWhatsApp(item._id, { staffId: userId, type: "reminder", mobile, amountMentioned: amount }).catch(() => {})
   }
 
+  type Event = { icon: React.ReactNode; text: string; color: string }
+  const events: Event[] = [
+    {
+      icon: <ClipboardList size={11} color={palette.neutral[400]} strokeWidth={1.75} />,
+      text: `Logged ${formatDate(item.loggedAt)}`,
+      color: palette.neutral[500],
+    },
+  ]
+  if (item.outstandingAmount != null && !item.outstandingBackfilled) {
+    events.push({
+      icon: <Wallet size={11} color={palette.neutral[400]} strokeWidth={1.75} />,
+      text: `Balance then: ₹${formatAmount(item.outstandingAmount)} ${item.outstandingDrCr}`,
+      color: palette.neutral[500],
+    })
+  }
+  if (item.promisedAmount != null) {
+    events.push({
+      icon: <Calendar size={11} color={palette.warning.default} strokeWidth={1.75} />,
+      text: `Promised ₹${formatAmount(item.promisedAmount)}${item.promisedDate ? ` by ${formatDate(item.promisedDate)}` : ""}`,
+      color: palette.warning.default,
+    })
+  }
+  if (item.nextFollowUpDate && !resolved) {
+    events.push({
+      icon: <Clock size={11} color={palette.info.default} strokeWidth={1.75} />,
+      text: `Next follow-up: ${formatDate(item.nextFollowUpDate)}`,
+      color: palette.info.default,
+    })
+  }
+  if (resolved && item.resolvedAt) {
+    events.push({
+      icon: <CheckCircle2 size={11} color={palette.success.default} strokeWidth={1.75} />,
+      text: `Paid on ${formatDate(item.resolvedAt)}${item.amountRecovered ? ` · ₹${formatAmount(item.amountRecovered)} recovered` : ""}`,
+      color: palette.success.default,
+    })
+  }
+  if (resolved && item.outstandingAmountAtResolution != null) {
+    const bal = item.outstandingAmountAtResolution
+    const balDrCr = item.outstandingDrCrAtResolution ?? "Dr"
+    events.push({
+      icon: <Wallet size={11} color={bal === 0 ? palette.success.default : palette.neutral[400]} strokeWidth={1.75} />,
+      text: bal === 0 ? `Balance cleared` : `Balance after: ₹${formatAmount(bal)} ${balDrCr}`,
+      color: bal === 0 ? palette.success.default : palette.neutral[500],
+    })
+  }
+  for (const send of (item.whatsappSends ?? [])) {
+    const isReceipt = send.type === "receipt"
+    const color = isReceipt ? palette.success.dark : palette.warning.dark
+    events.push({
+      icon: <MessageCircle size={11} color={color} strokeWidth={1.75} />,
+      text: `WhatsApp ${isReceipt ? "receipt" : "reminder"} sent ${formatDate(send.sentAt)}`,
+      color,
+    })
+  }
+
   return (
-    <TouchableOpacity onPress={goToCustomer} activeOpacity={0.7}>
-      <AppCard elevation="sm" style={[styles.card, resolved && styles.resolvedCard]}>
-        {/* Customer name row */}
-        <View style={styles.nameRow}>
-          <AppText variant="bodyMedium" style={{ flex: 1 }}>
-            {toTitleCase(item.customerName)}
+    <TouchableOpacity onPress={goToCustomer} activeOpacity={0.75}>
+      <AppCard elevation="sm" style={styles.card}>
+        {/* Header: contact icon + customer name + outcome badge + time ago */}
+        <View style={[styles.cardHeader, { borderBottomColor: colors.border }]}>
+          <ContactIcon method={item.contactMethod} color={colors.text.tertiary as string} />
+          <AppText variant="bodyMedium" style={{ flex: 1 }}>{toTitleCase(item.customerName)}</AppText>
+          <View style={[styles.outcomeBadge, { backgroundColor: color + "22" }]}>
+            <AppText variant="caption" style={{ color, fontSize: 11 }}>{OUTCOME_LABELS[item.outcome]}</AppText>
+          </View>
+          <AppText variant="caption" color="tertiary">{moment(item.loggedAt).fromNow()}</AppText>
+        </View>
+
+        {/* Inner event timeline */}
+        {events.length > 0 && (
+          <View style={styles.eventList}>
+            {events.map((ev, i) => (
+              <EventRow key={i} icon={ev.icon} text={ev.text} color={ev.color} isLast={i === events.length - 1} />
+            ))}
+          </View>
+        )}
+
+        {item.freeTextRemark ? (
+          <AppText variant="caption" color="secondary" numberOfLines={2} style={styles.remark}>
+            "{item.freeTextRemark}"
           </AppText>
-          {resolved && (
-            <View style={styles.resolvedPill}>
-              <CheckCircle2 size={10} color={palette.success.default} strokeWidth={1.75} />
-              <AppText variant="caption" style={{ color: palette.success.default, fontSize: 10 }}>Paid</AppText>
-            </View>
-          )}
-        </View>
+        ) : null}
 
-        <View style={styles.detailRow}>
-          <View style={styles.detailLeft}>
-            {/* Contact method */}
-            <View style={styles.methodRow}>
-              <ContactIcon method={item.contactMethod} color={palette.neutral[400]} />
-              <AppText variant="caption" color="secondary">{CONTACT_LABELS[item.contactMethod]}</AppText>
-            </View>
-            {/* Outcome */}
-            <View style={[styles.outcomePill, { backgroundColor: color + "22" }]}>
-              <AppText variant="caption" style={{ color, fontSize: 10 }}>{OUTCOME_LABELS[item.outcome]}</AppText>
-            </View>
-            {item.promisedDate && (
-              <AppText variant="caption" style={{ color: palette.warning.default, fontSize: 10 }}>
-                Promised: {formatDate(item.promisedDate)}
-              </AppText>
+        {/* WhatsApp action buttons */}
+        {(resolved || (!resolved && !!item.promisedAmount)) && !!mobile && (
+          <View style={styles.waActions}>
+            {resolved && (
+              <TouchableOpacity activeOpacity={0.7} onPress={(e) => { e.stopPropagation?.(); sendReceiptWhatsApp() }} style={styles.waBtn}>
+                <MessageCircle size={11} color="#fff" strokeWidth={1.75} />
+                <AppText variant="caption" style={{ color: "#fff", fontSize: 10 }}>Send Receipt</AppText>
+              </TouchableOpacity>
             )}
-            {resolved && item.resolvedAt && (
-              <AppText variant="caption" style={{ color: palette.success.default, fontSize: 10 }}>
-                Paid on {formatDate(item.resolvedAt)}
-              </AppText>
-            )}
-            {resolved && item.amountRecovered != null && item.amountRecovered > 0 && (
-              <AppText variant="caption" style={{ color: palette.success.default, fontSize: 10 }}>
-                Recovered: ₹{formatAmount(item.amountRecovered)}
-              </AppText>
+            {!resolved && !!item.promisedAmount && (
+              <TouchableOpacity activeOpacity={0.7} onPress={(e) => { e.stopPropagation?.(); sendReminderWhatsApp() }} style={styles.waBtnReminder}>
+                <MessageCircle size={11} color="#fff" strokeWidth={1.75} />
+                <AppText variant="caption" style={{ color: "#fff", fontSize: 10 }}>Send Reminder</AppText>
+              </TouchableOpacity>
             )}
           </View>
+        )}
 
-          <View style={styles.detailRight}>
-            {item.promisedAmount != null && (
-              <AppText
-                variant="mono"
-                style={{
-                  fontSize: 13,
-                  color: resolved ? palette.neutral[400] : palette.warning.default,
-                  textDecorationLine: resolved ? "line-through" : "none",
-                }}
-              >
-                ₹{formatAmount(item.promisedAmount)}
-              </AppText>
-            )}
-            <AppText variant="caption" color="tertiary" style={{ fontSize: 10 }}>
-              {moment(item.loggedAt).fromNow()}
-            </AppText>
-            {resolved && !!mobile && (
-              <>
-                <TouchableOpacity activeOpacity={0.7} onPress={(e) => { e.stopPropagation?.(); sendReceiptWhatsApp() }} style={styles.waBtn}>
-                  <MessageCircle size={11} color="#fff" strokeWidth={1.75} />
-                  <AppText variant="caption" style={{ color: "#fff", fontSize: 10 }}>Receipt</AppText>
-                </TouchableOpacity>
-                {item.whatsapp?.lastReceiptSentAt && (
-                  <AppText variant="caption" color="tertiary" style={{ fontSize: 9 }}>
-                    Sent {formatDate(item.whatsapp.lastReceiptSentAt)}
-                  </AppText>
-                )}
-              </>
-            )}
-            {!resolved && !!mobile && !!item.promisedAmount && (
-              <>
-                <TouchableOpacity activeOpacity={0.7} onPress={(e) => { e.stopPropagation?.(); sendReminderWhatsApp() }} style={styles.waBtnReminder}>
-                  <MessageCircle size={11} color="#fff" strokeWidth={1.75} />
-                  <AppText variant="caption" style={{ color: "#fff", fontSize: 10 }}>Reminder</AppText>
-                </TouchableOpacity>
-                {item.whatsapp?.lastReminderSentAt && (
-                  <AppText variant="caption" color="tertiary" style={{ fontSize: 9 }}>
-                    Sent {formatDate(item.whatsapp.lastReminderSentAt)}
-                  </AppText>
-                )}
-              </>
-            )}
-          </View>
-        </View>
       </AppCard>
     </TouchableOpacity>
   )
@@ -319,8 +354,8 @@ export default function FollowUpsScreen() {
           <BackButton />
           <View style={{ flex: 1 }}>
             <AppText variant="heading2">Follow-ups</AppText>
-            {!isLoading && (
-              <AppText variant="caption" color="secondary">{data?.count ?? 0} total</AppText>
+            {!isLoading && data?.summary != null && (
+              <AppText variant="caption" color="secondary">{data.summary.totalFollowUps} total</AppText>
             )}
           </View>
           <TouchableOpacity
@@ -395,37 +430,34 @@ export default function FollowUpsScreen() {
         )}
 
         {/* Status tabs */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.tabRow}
-          style={[styles.tabWrap, { borderBottomColor: colors.border }]}
-        >
-          {TABS.map(({ value, label }) => {
-            const isActive = activeTab === value
-            return (
-              <TouchableOpacity
-                key={value}
-                activeOpacity={0.7}
-                onPress={() => setActiveTab(value)}
-                style={[
-                  styles.tab,
-                  {
-                    borderBottomWidth: 2,
-                    borderBottomColor: isActive ? colors.accent : "transparent",
-                  },
-                ]}
-              >
-                <AppText
-                  variant="bodyMedium"
-                  style={{ color: isActive ? colors.accent : colors.text.secondary }}
+        <View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.tabRow}
+            style={styles.tabWrap}
+          >
+            {TABS.map(({ value, label }) => {
+              const isActive = activeTab === value
+              return (
+                <TouchableOpacity
+                  key={value}
+                  activeOpacity={0.7}
+                  onPress={() => setActiveTab(value)}
+                  style={[styles.tab, { borderBottomColor: isActive ? colors.accent : "transparent" }]}
                 >
-                  {label}
-                </AppText>
-              </TouchableOpacity>
-            )
-          })}
-        </ScrollView>
+                  <AppText
+                    variant="bodyMedium"
+                    style={{ color: isActive ? colors.accent : colors.text.secondary }}
+                  >
+                    {label}
+                  </AppText>
+                </TouchableOpacity>
+              )
+            })}
+          </ScrollView>
+          <View style={[styles.tabDivider, { backgroundColor: colors.border }]} />
+        </View>
 
         {data?.summary && <SummaryStrip summary={data.summary} />}
 
@@ -477,9 +509,16 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
   },
-  tabWrap: { borderBottomWidth: StyleSheet.hairlineWidth, flexGrow: 0 },
+  tabWrap: { flexGrow: 0 },
   tabRow: { flexDirection: "row", paddingHorizontal: spacing[4] },
-  tab: { paddingHorizontal: spacing[3], paddingVertical: spacing[3], marginRight: spacing[2] },
+  tab: {
+    paddingHorizontal: spacing[5],
+    paddingTop: spacing[4],
+    paddingBottom: spacing[4],
+    marginRight: spacing[1],
+    borderBottomWidth: 2,
+  },
+  tabDivider: { height: StyleSheet.hairlineWidth },
   summaryStrip: {
     flexDirection: "row",
     alignItems: "center",
@@ -490,18 +529,29 @@ const styles = StyleSheet.create({
   },
   summaryItem: { alignItems: "center", gap: 2 },
   list: { padding: spacing[4], paddingBottom: spacing[10] },
-  card: { padding: spacing[4] },
-  resolvedCard: { borderLeftWidth: 3, borderLeftColor: palette.success.default },
-  nameRow: { flexDirection: "row", alignItems: "center", marginBottom: spacing[2] },
-  detailRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between" },
-  detailLeft: { flex: 1, gap: spacing[1] },
-  detailRight: { alignItems: "flex-end", gap: spacing[1] },
-  methodRow: { flexDirection: "row", alignItems: "center", gap: spacing[1] },
-  outcomePill: { alignSelf: "flex-start", paddingHorizontal: spacing[2], paddingVertical: 2, borderRadius: 4 },
-  resolvedPill: { flexDirection: "row", alignItems: "center", gap: 3, paddingHorizontal: spacing[2], paddingVertical: 2, borderRadius: 4, backgroundColor: palette.success.default + "22" },
+  card: { gap: spacing[3] },
+  cardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[2],
+    flexWrap: "wrap",
+    paddingBottom: spacing[2],
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  outcomeBadge: { paddingHorizontal: spacing[2], paddingVertical: 2, borderRadius: 4 },
+  eventList: { gap: 0 },
+  eventRow: { flexDirection: "row" },
+  eventDotCol: { width: 18, alignItems: "center", paddingTop: 3 },
+  eventDot: { width: 8, height: 8, borderRadius: 4 },
+  eventLine: { width: 1.5, flex: 1, marginTop: 3, borderRadius: 1 },
+  eventText: { flex: 1, paddingLeft: spacing[2] },
+  eventTextSpaced: { paddingBottom: spacing[3] },
+  eventTextInner: { flexDirection: "row", alignItems: "flex-start", gap: spacing[2] },
+  remark: { fontStyle: "italic" },
+  waActions: { flexDirection: "row", gap: spacing[2] },
   dateRangeRow: { flexDirection: "row", gap: spacing[3], paddingHorizontal: spacing[4], paddingVertical: spacing[3] },
-  waBtn: { flexDirection: "row", alignItems: "center", gap: 3, paddingHorizontal: spacing[2], paddingVertical: 3, borderRadius: 6, backgroundColor: palette.success.default },
-  waBtnReminder: { flexDirection: "row", alignItems: "center", gap: 3, paddingHorizontal: spacing[2], paddingVertical: 3, borderRadius: 6, backgroundColor: palette.warning.default },
+  waBtn: { flexDirection: "row", alignItems: "center", gap: spacing[1], paddingHorizontal: spacing[2], paddingVertical: spacing[1] + 1, borderRadius: 6, backgroundColor: palette.success.default },
+  waBtnReminder: { flexDirection: "row", alignItems: "center", gap: spacing[1], paddingHorizontal: spacing[2], paddingVertical: spacing[1] + 1, borderRadius: 6, backgroundColor: palette.warning.default },
   filterBtn: { flexDirection: "row", alignItems: "center", gap: spacing[1], paddingHorizontal: spacing[3], paddingVertical: spacing[2], borderRadius: 20, borderWidth: 1 },
   filterPanel: { borderBottomWidth: StyleSheet.hairlineWidth, paddingVertical: spacing[3] },
   filterLabel: { paddingHorizontal: spacing[4], marginBottom: spacing[1], marginTop: spacing[2], letterSpacing: 0.8 },

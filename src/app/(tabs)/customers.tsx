@@ -9,6 +9,7 @@ import AppCard from "../../components/ui/AppCard"
 import AppInput from "../../components/ui/AppInput"
 import { useTheme } from "../../providers/ThemeProvider"
 import { spacing, colors as palette } from "../../constants/theme"
+import { RETENTION_COLOR, RETENTION_STATUS_LABEL } from "../../constants/retention"
 import useAuthStore from "../../stores/useAuthStore"
 import { useStaffCustomers } from "../../hooks/useStaffCustomers"
 import { formatDate } from "../../utils/helpers"
@@ -50,9 +51,13 @@ const FILTERS: { value: LedgerOutstandingFilter; label: string }[] = [
 function FilterChips({
   active,
   onChange,
+  sortBy,
+  onSortChange,
 }: {
   active: LedgerOutstandingFilter
   onChange: (f: LedgerOutstandingFilter) => void
+  sortBy: "priority" | "balance"
+  onSortChange: (s: "priority" | "balance") => void
 }) {
   const { colors } = useTheme()
   return (
@@ -77,10 +82,27 @@ function FilterChips({
               },
             ]}
           >
-            <AppText
-              variant="caption"
-              style={{ color: isActive ? "#fff" : colors.text.secondary }}
-            >
+            <AppText variant="caption" style={{ color: isActive ? "#fff" : colors.text.secondary }}>
+              {label}
+            </AppText>
+          </TouchableOpacity>
+        )
+      })}
+      <View style={[styles.sortDivider, { backgroundColor: colors.border }]} />
+      {(["priority", "balance"] as const).map((value) => {
+        const isActive = sortBy === value
+        const label = value === "priority" ? "Priority ↑" : "Balance ↑"
+        return (
+          <TouchableOpacity
+            key={value}
+            activeOpacity={0.7}
+            onPress={() => onSortChange(value)}
+            style={[styles.filterChip, {
+              backgroundColor: isActive ? colors.text.primary + "18" : colors.background.secondary,
+              borderColor: isActive ? colors.text.primary : colors.border,
+            }]}
+          >
+            <AppText variant="caption" style={{ color: isActive ? colors.text.primary : colors.text.tertiary }}>
               {label}
             </AppText>
           </TouchableOpacity>
@@ -354,6 +376,38 @@ function CustomerRow({ item }: { item: LedgerCustomerOutstanding }) {
                   </View>
                 )}
               </View>
+              {/* retention + velocity hints */}
+              <View style={styles.followupRow}>
+                {item.retention_status && item.retention_status !== "never_purchased" && (() => {
+                  const color = RETENTION_COLOR[item.retention_status]
+                  return (
+                    <View style={[styles.outcomePill, { backgroundColor: color + "18" }]}>
+                      <AppText variant="caption" style={{ color, fontSize: 10 }}>
+                        {RETENTION_STATUS_LABEL[item.retention_status]}
+                      </AppText>
+                    </View>
+                  )
+                })()}
+                {item.days_since_last_purchase != null && (
+                  <AppText variant="caption" style={{ fontSize: 10, color: palette.neutral[400] }}>
+                    {item.days_since_last_purchase}d since purchase
+                  </AppText>
+                )}
+                {item.avg_days_to_clear != null && (
+                  <AppText variant="caption" style={{ fontSize: 10, color: palette.neutral[400] }}>
+                    · clears in {item.avg_days_to_clear.toFixed(0)}d
+                  </AppText>
+                )}
+              </View>
+              {item.days_since_last_payment != null && (
+                <AppText variant="caption" style={{ fontSize: 10, color: palette.neutral[400] }}>
+                  Last paid{" "}
+                  <AppText variant="caption" style={{ fontSize: 10, color: item.days_since_last_payment <= 30 ? palette.success.default : item.days_since_last_payment <= 90 ? palette.warning.default : palette.error.default }}>
+                    {item.days_since_last_payment}d ago
+                  </AppText>
+                  {item.last_payment_amount != null ? ` · ₹${formatAmount(item.last_payment_amount)}` : ""}
+                </AppText>
+              )}
               {hasFollowUp && (
                 <>
                   <View style={styles.followupRow}>
@@ -429,6 +483,7 @@ export default function CustomersScreen() {
   const [searchInput, setSearchInput] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [activeFilter, setActiveFilter] = useState<LedgerOutstandingFilter>("all")
+  const [sortBy, setSortBy] = useState<"priority" | "balance">("priority")
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchInput), 400)
@@ -436,7 +491,7 @@ export default function CustomersScreen() {
   }, [searchInput])
 
   const { data, isLoading, isFetchingNextPage, hasNextPage, fetchNextPage } =
-    useStaffCustomers(user?.user_id, { limit: PAGE_SIZE, search: debouncedSearch || undefined, filter: activeFilter })
+    useStaffCustomers(user?.user_id, { limit: PAGE_SIZE, search: debouncedSearch || undefined, filter: activeFilter, sortBy })
 
   const customerList = data?.pages.flatMap((p) => p.data) ?? []
 
@@ -487,7 +542,7 @@ export default function CustomersScreen() {
         data={customerList}
         keyExtractor={(item) => String(item.ledger_id)}
         renderItem={({ item }) => <CustomerRow item={item} />}
-        ListHeaderComponent={<FilterChips active={activeFilter} onChange={setActiveFilter} />}
+        ListHeaderComponent={<FilterChips active={activeFilter} onChange={setActiveFilter} sortBy={sortBy} onSortChange={setSortBy} />}
         contentContainerStyle={styles.list}
         ItemSeparatorComponent={() => <View style={{ height: spacing[2] }} />}
         onEndReachedThreshold={0.3}
@@ -586,4 +641,5 @@ const styles = StyleSheet.create({
   filterWrap: {},
   filterRow: { flexDirection: "row", gap: spacing[2], paddingBottom: spacing[3] },
   filterChip: { paddingHorizontal: spacing[3], paddingVertical: spacing[1] + 2, borderRadius: 20, borderWidth: 1 },
+  sortDivider: { width: StyleSheet.hairlineWidth, marginVertical: spacing[2] },
 })

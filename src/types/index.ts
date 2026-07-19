@@ -137,6 +137,13 @@ export interface LedgerCustomerOutstanding {
   staff_sales_total: number
   other_contributors: { staff_id: number; staff_name: string; sales_total: number }[]
   follow_up: LedgerCustomerFollowUp
+  last_purchase_date: string | null
+  days_since_last_purchase: number | null
+  retention_status: RetentionStatus
+  avg_days_to_clear: number | null
+  last_payment_date: string | null
+  last_payment_amount: number | null
+  days_since_last_payment: number | null
 }
 
 export interface LedgerFollowUpInsights {
@@ -159,15 +166,94 @@ export interface LedgerOutstandingResponse {
   data: LedgerCustomerOutstanding[]
   totals: { total_outstanding: number; total_staff_sales: number }
   follow_up_insights: LedgerFollowUpInsights
+  sortBy?: "priority" | "balance"
+  retention_thresholds?: { activeDays: number; churnedDays: number }
 }
 
 export type LedgerOutstandingFilter = "all" | "followed_up" | "not_followed_up" | "paid" | "overdue" | "open_followup"
+
 
 export interface LedgerOutstandingParams {
   page?: number
   limit?: number
   search?: string
   filter?: LedgerOutstandingFilter
+  sortBy?: "priority" | "balance"
+  activeDays?: number
+  churnedDays?: number
+}
+
+export interface LedgerEntry {
+  voucher_id: number
+  accounting_voucher_id: number | null
+  ledger_id: number
+  ledger_name: string
+  voucher_number: string | null
+  voucher_date: string
+  voucher_date_raw: string
+  sequence: number
+  voucher_type: string
+  dr_or_cr: "Dr" | "Cr" | null
+  amount: number | null
+  debit: number
+  credit: number
+  running_balance: number | null
+  running_balance_dr_cr: "Dr" | "Cr" | null
+  particulars: string | null
+  cost_center: string | null
+  remarks: string | null
+  payment_type: string | null
+  sales_executive_raw: string | null
+  sales_executive_normalized: string | null
+  staff_id: number | null
+  staff_match_status: "matched" | "unmatched" | "ambiguous" | "not_applicable"
+}
+
+export interface CustomerLedgerResponse {
+  success: boolean
+  pagination: BillsPagination
+  data: {
+    customer: {
+      ledger_id: number
+      name: string
+      balance: number
+    }
+    entries: LedgerEntry[]
+  }
+  summary: {
+    total_entries: number
+    total_debit: number
+    total_credit: number
+    net_movement: number
+    opening_balance: number | null
+    opening_dr_cr: "Dr" | "Cr" | null
+    closing_balance: number | null
+    closing_dr_cr: "Dr" | "Cr" | null
+  }
+  retention: {
+    first_purchase_date: string | null
+    last_purchase_date: string | null
+    total_purchases: number
+    days_since_last_purchase: number | null
+    status: RetentionStatus
+    activeDays: number
+    churnedDays: number
+  } | null
+  payment_velocity: {
+    avg_days_to_clear: number | null
+    total_debt_amount: number
+    total_cleared_amount: number
+    cleared_pct: number
+    last_payment_date: string | null
+    last_payment_amount: number | null
+    days_since_last_payment: number | null
+  } | null
+  follow_up: LedgerCustomerFollowUp | null
+  ownership: {
+    staffId: number | null
+    staffName: string | null
+    source: "assigned" | "dynamic" | "unassigned"
+  } | null
 }
 
 export interface AgingBucket {
@@ -226,6 +312,14 @@ export interface FollowUp {
     lastReceiptSentAt: string | null
     lastReminderSentAt: string | null
   } | null
+  whatsappSends: {
+    _id: string
+    staffId: number
+    type: "receipt" | "reminder"
+    mobile: string
+    amountMentioned: number | null
+    sentAt: string
+  }[]
   createdAt: string
   updatedAt: string
 }
@@ -322,6 +416,17 @@ export interface StaffFollowupsResponse {
   count: number
   data: FollowUp[]
   summary?: FollowupsSummary
+}
+
+export interface CustomerFollowupsResponse {
+  success: boolean
+  count: number
+  data: FollowUp[]
+  outstanding: {
+    ledger_id: number
+    outstanding_balance: number
+    outstanding_dr_cr: "Dr" | "Cr"
+  } | null
 }
 
 export interface AllFollowUpsResponse {
@@ -528,6 +633,94 @@ export interface ExtraPerformanceStats {
   approved: number
   pending: number
   rejected: number
+}
+
+// ─── Payment velocity ─────────────────────────────────────────────────────────
+
+export interface PaymentVelocityCustomer {
+  ledger_id: number
+  name: string
+  mobile: string | null
+  avg_days_to_clear: number
+  total_debt_amount: number
+  total_cleared_amount: number
+  cleared_pct: number
+  outstanding_balance: number
+  outstanding_dr_cr: "Dr" | "Cr"
+  last_payment_date: string | null
+  last_payment_amount: number | null
+  days_since_last_payment: number | null
+}
+
+export interface PaymentVelocityResponse {
+  success: boolean
+  pagination: BillsPagination
+  data: PaymentVelocityCustomer[]
+  summary: {
+    customers_ranked: number
+    company_avg_days_to_clear: number | null
+  }
+}
+
+export type PaymentVelocitySortBy = "avg_days_to_clear" | "total_debt_amount" | "total_cleared_amount" | "cleared_pct" | "outstanding_balance" | "days_since_last_payment"
+export type SortOrder = "asc" | "desc"
+
+export interface PaymentVelocityParams {
+  page?: number
+  limit?: number
+  search?: string
+  sortBy?: PaymentVelocitySortBy
+  order?: SortOrder
+}
+
+// ─── Retention ───────────────────────────────────────────────────────────────
+
+export type RetentionStatus = "active" | "at_risk" | "churned" | "never_purchased"
+
+export interface RetentionCustomer {
+  ledger_id: number
+  name: string
+  mobile: string | null
+  status: RetentionStatus
+  days_since_last_purchase: number | null
+  total_purchases: number
+  first_purchase_date: string | null
+  last_purchase_date: string | null
+  outstanding_balance: number
+  outstanding_dr_cr: "Dr" | "Cr"
+}
+
+export interface RetentionResponse {
+  success: boolean
+  pagination: BillsPagination
+  data: RetentionCustomer[]
+  filters: {
+    activeDays: number
+    churnedDays: number
+    status: RetentionStatus | "all"
+  }
+  summary: {
+    total_customers: number
+    active: number
+    at_risk: number
+    churned: number
+    never_purchased: number
+    active_pct: number
+    churn_pct: number
+  }
+}
+
+export type RetentionSortBy = "last_purchase_date" | "days_since_last_purchase" | "total_purchases" | "outstanding_balance"
+
+export interface RetentionParams {
+  page?: number
+  limit?: number
+  search?: string
+  status?: RetentionStatus | "all"
+  activeDays?: number
+  churnedDays?: number
+  sortBy?: RetentionSortBy
+  order?: SortOrder
 }
 
 export interface CreateFollowupPayload {

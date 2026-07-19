@@ -1,4 +1,5 @@
 import { View, StyleSheet } from "react-native"
+import { ChevronRight } from "lucide-react-native"
 import AppText from "../ui/AppText"
 import { useTheme } from "../../providers/ThemeProvider"
 import { spacing, radii, colors as palette } from "../../constants/theme"
@@ -56,6 +57,7 @@ export default function StaffLeaderboardRow({
           </AppText>
         )}
       </View>
+      <ChevronRight size={16} color={colors.text.tertiary} strokeWidth={1.75} />
     </View>
   )
 }

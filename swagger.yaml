@@ -391,8 +391,15 @@ paths:
     get:
       tags:
         - Ledger
-      summary: Get a customer's ledger detail
-      description: Returns the customer record and its synced transactions, optionally filtered by date range
+      summary: Get a customer's ledger detail (paginated entries + summary + retention + payment velocity + follow-up + ownership)
+      description: >
+        Returns the customer record, its synced transactions (paginated),
+        a debit/credit summary, retention status, payment velocity,
+        follow-up summary, and current ownership - a full profile for one
+        customer. retention and payment_velocity are always computed over
+        this customer's FULL synced history, independent of from_date/to_date
+        (those only scope the transaction list and summary debit/credit
+        totals). Managers only.
       security:
         - BearerAuth: []
       parameters:
@@ -402,6 +409,16 @@ paths:
           description: Rowbest ledger id
           schema:
             type: integer
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
         - name: from_date
           in: query
           schema:
@@ -412,9 +429,21 @@ paths:
           schema:
             type: string
             format: date
+        - name: activeDays
+          in: query
+          description: Days since last purchase to be considered "active" (for `retention`)
+          schema:
+            type: integer
+            default: 30
+        - name: churnedDays
+          in: query
+          description: Days since last purchase beyond which "churned" (for `retention`, must be greater than activeDays)
+          schema:
+            type: integer
+            default: 90
       responses:
         '200':
-          description: Ledger customer and its transactions
+          description: Ledger customer, its paginated transactions, a summary, and retention/payment-velocity/follow-up/ownership profile data
           content:
             application/json:
               schema:
@@ -423,6 +452,17 @@ paths:
                   success:
                     type: boolean
                     example: true
+                  pagination:
+                    type: object
+                    properties:
+                      page:
+                        type: integer
+                      limit:
+                        type: integer
+                      total:
+                        type: integer
+                      pages:
+                        type: integer
                   data:
                     type: object
                     properties:
@@ -430,9 +470,125 @@ paths:
                         $ref: '#/components/schemas/LedgerCustomerResponse'
                       entries:
                         type: array
-                        description: Synced transactions for this customer
+                        description: This page's synced transactions for this customer
                         items:
-                          type: object
+                          $ref: '#/components/schemas/LedgerEntryResponse'
+                  summary:
+                    type: object
+                    description: Debit/credit totals computed over the full (optionally date-filtered) entry set, not just the current page. opening_balance/closing_balance are both LedgerCustomer.balance (the customer's live balance, sourced from rowbest's customer list, not derived per-entry) - since local entry sync isn't guaranteed complete (some history still lives in a legacy pre-rowbest system), these are always equal to each other and don't vary with from_date/to_date. For a live point-in-time value over an arbitrary range, use GET /ledger/customers/{ledgerId}/opening-balance instead.
+                    properties:
+                      total_entries:
+                        type: integer
+                      total_debit:
+                        type: number
+                      total_credit:
+                        type: number
+                      net_movement:
+                        type: number
+                        description: total_debit - total_credit for this window only - NOT the account balance, since it ignores whatever the balance already was before the window started. Use closing_balance for the actual balance.
+                      opening_balance:
+                        type: number
+                      opening_dr_cr:
+                        type: string
+                        enum: [Dr, Cr]
+                      closing_balance:
+                        type: number
+                      closing_dr_cr:
+                        type: string
+                        enum: [Dr, Cr]
+                  retention:
+                    type: object
+                    description: This customer's buying-recency classification - same logic as GET /ledger/retention, computed over full history regardless of from_date/to_date
+                    properties:
+                      first_purchase_date:
+                        type: string
+                        format: date-time
+                        nullable: true
+                      last_purchase_date:
+                        type: string
+                        format: date-time
+                        nullable: true
+                      total_purchases:
+                        type: integer
+                        description: Count of synced Sales vouchers, all-time
+                      days_since_last_purchase:
+                        type: integer
+                        nullable: true
+                      status:
+                        type: string
+                        enum: [active, at_risk, churned, never_purchased]
+                      activeDays:
+                        type: integer
+                      churnedDays:
+                        type: integer
+                  payment_velocity:
+                    type: object
+                    description: This customer's FIFO debt-clearance speed - same logic as GET /ledger/payment-velocity, computed over full history
+                    properties:
+                      avg_days_to_clear:
+                        type: number
+                        nullable: true
+                        description: Null if this customer has never had any debt cleared
+                      total_debt_amount:
+                        type: number
+                      total_cleared_amount:
+                        type: number
+                      cleared_pct:
+                        type: number
+                      last_payment_date:
+                        type: string
+                        format: date-time
+                        nullable: true
+                        description: Most recent actual Receipt voucher date - independent of the FIFO clearance calculation
+                      last_payment_amount:
+                        type: number
+                        nullable: true
+                      days_since_last_payment:
+                        type: integer
+                        nullable: true
+                  follow_up:
+                    type: object
+                    description: Follow-up activity for this customer (see GET /ledger/staff/{userId}/outstanding's follow_up field for the same shape)
+                    properties:
+                      total:
+                        type: integer
+                      open:
+                        type: integer
+                      resolved:
+                        type: integer
+                      last_logged_at:
+                        type: string
+                        format: date-time
+                        nullable: true
+                      last_outcome:
+                        type: string
+                        nullable: true
+                        enum: [promisedToPay, promisedPartial, dispute, noResponse]
+                      next_followup_date:
+                        type: string
+                        format: date-time
+                        nullable: true
+                      is_overdue:
+                        type: boolean
+                      total_promised_amount:
+                        type: number
+                  ownership:
+                    type: object
+                    description: Who currently "owns" this customer, per the ownership cutoff rule (see GET /ledger/staff/{userId}/outstanding)
+                    properties:
+                      staffId:
+                        type: integer
+                        nullable: true
+                      staffName:
+                        type: string
+                        nullable: true
+                      source:
+                        type: string
+                        enum: [assigned, dynamic, unassigned]
+        '400':
+          description: activeDays/churnedDays out of order
+        '403':
+          description: Forbidden - managers only
         '404':
           description: Ledger customer not found
 
@@ -553,6 +709,36 @@ paths:
             type: string
             enum: [all, followed_up, not_followed_up, paid, overdue, open_followup]
             default: all
+        - name: sortBy
+          in: query
+          description: >
+            `priority` (default) ranks by worst-case risk, highest first:
+            (1) overdue follow-up - a promise was already missed,
+            (2) churned + still owes money (Dr balance) - stopped buying
+            and hasn't paid, the highest bad-debt risk,
+            (3) never followed up at all + still owes money - a coverage
+            gap,
+            (4) at_risk (buying is slowing down) + still owes money,
+            (5) everyone else. Within each tier, longest since last payment
+            first (customers who have never paid sort before any finite
+            gap), then highest outstanding_balance. "balance" is the simple
+            outstanding_balance-descending sort with no risk weighting.
+          schema:
+            type: string
+            enum: [priority, balance]
+            default: priority
+        - name: activeDays
+          in: query
+          description: Days since last purchase to be considered "active" (for `retention_status`)
+          schema:
+            type: integer
+            default: 30
+        - name: churnedDays
+          in: query
+          description: Days since last purchase beyond which "churned" (for `retention_status`, must be greater than activeDays)
+          schema:
+            type: integer
+            default: 90
       responses:
         '200':
           description: Paginated customers owned by this staff, with outstanding and sales-contribution totals
@@ -644,10 +830,47 @@ paths:
                             total_promised_amount:
                               type: number
                               description: Sum of promisedAmount across still-open follow-ups
+                        last_purchase_date:
+                          type: string
+                          format: date-time
+                          nullable: true
+                          description: Most recent synced Sales voucher date, all-time
+                        days_since_last_purchase:
+                          type: integer
+                          nullable: true
+                        retention_status:
+                          type: string
+                          enum: [active, at_risk, churned, never_purchased]
+                          description: Same classification as GET /ledger/retention
+                        avg_days_to_clear:
+                          type: number
+                          nullable: true
+                          description: FIFO-derived average days this customer takes to clear debt once incurred - same logic as GET /ledger/payment-velocity. Null if they've never cleared anything yet.
+                        last_payment_date:
+                          type: string
+                          format: date-time
+                          nullable: true
+                          description: Most recent actual Receipt voucher date - independent of avg_days_to_clear, answers "have they paid recently?"
+                        last_payment_amount:
+                          type: number
+                          nullable: true
+                        days_since_last_payment:
+                          type: integer
+                          nullable: true
                   filter:
                     type: string
                     enum: [all, followed_up, not_followed_up, paid, overdue, open_followup]
                     description: The filter that was applied to `data`
+                  sortBy:
+                    type: string
+                    enum: [priority, balance]
+                  retention_thresholds:
+                    type: object
+                    properties:
+                      activeDays:
+                        type: integer
+                      churnedDays:
+                        type: integer
                   totals:
                     type: object
                     properties:
@@ -696,11 +919,502 @@ paths:
                         nullable: true
                         description: Average days between a follow-up being logged and being resolved by payment
         '400':
-          description: Invalid filter value
+          description: Invalid filter/sortBy value, or activeDays/churnedDays out of order
         '403':
           description: Forbidden - staff can only access their own customers
         '404':
           description: Staff record not found
+
+  /ledger/outstanding:
+    get:
+      tags:
+        - Ledger
+      summary: Get all customers across all staff, with outstanding
+      description: >
+        Company-wide counterpart to GET /ledger/staff/{userId}/outstanding -
+        same follow-up filtering, retention/payment-velocity fields, and
+        worst-case-first priority sort, but across every customer instead
+        of one staff member's owned set (no per-staff
+        ownership/sales-contribution breakdown). Managers only.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: search
+          in: query
+          description: Filter by customer name
+          schema:
+            type: string
+        - name: filter
+          in: query
+          description: Filter by follow-up status. `paid` means the customer has at least one follow-up resolved by a payment.
+          schema:
+            type: string
+            enum: [all, followed_up, not_followed_up, paid, overdue, open_followup]
+            default: all
+        - name: sortBy
+          in: query
+          description: >
+            `priority` (default) ranks by worst-case risk, highest first:
+            (1) overdue follow-up - a promise was already missed,
+            (2) churned + still owes money (Dr balance) - stopped buying
+            and hasn't paid, the highest bad-debt risk,
+            (3) never followed up at all + still owes money - a coverage
+            gap,
+            (4) at_risk (buying is slowing down) + still owes money,
+            (5) everyone else. Within each tier, longest since last payment
+            first (customers who have never paid sort before any finite
+            gap), then highest outstanding_balance. `balance` is the simple
+            outstanding_balance-descending sort with no risk weighting.
+          schema:
+            type: string
+            enum: [priority, balance]
+            default: priority
+        - name: activeDays
+          in: query
+          description: Days since last purchase to be considered "active" (for `retention_status`)
+          schema:
+            type: integer
+            default: 30
+        - name: churnedDays
+          in: query
+          description: Days since last purchase beyond which "churned" (for `retention_status`, must be greater than activeDays)
+          schema:
+            type: integer
+            default: 90
+      responses:
+        '200':
+          description: Paginated customers with outstanding and follow-up summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  pagination:
+                    type: object
+                    properties:
+                      page:
+                        type: integer
+                      limit:
+                        type: integer
+                      total:
+                        type: integer
+                      pages:
+                        type: integer
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        ledger_id:
+                          type: integer
+                          example: 868301
+                        name:
+                          type: string
+                          example: FAVAS VENGARA
+                        mobile:
+                          type: string
+                          nullable: true
+                          example: "9747006008"
+                        outstanding_balance:
+                          type: number
+                          example: 50000
+                        outstanding_dr_cr:
+                          type: string
+                          enum: [Dr, Cr]
+                        follow_up:
+                          type: object
+                          properties:
+                            total:
+                              type: integer
+                            open:
+                              type: integer
+                            resolved:
+                              type: integer
+                            last_logged_at:
+                              type: string
+                              format: date-time
+                              nullable: true
+                            last_outcome:
+                              type: string
+                              nullable: true
+                              enum: [promisedToPay, promisedPartial, dispute, noResponse]
+                            next_followup_date:
+                              type: string
+                              format: date-time
+                              nullable: true
+                            is_overdue:
+                              type: boolean
+                            total_promised_amount:
+                              type: number
+                        last_purchase_date:
+                          type: string
+                          format: date-time
+                          nullable: true
+                          description: Most recent synced Sales voucher date, all-time
+                        days_since_last_purchase:
+                          type: integer
+                          nullable: true
+                        retention_status:
+                          type: string
+                          enum: [active, at_risk, churned, never_purchased]
+                          description: Same classification as GET /ledger/retention
+                        avg_days_to_clear:
+                          type: number
+                          nullable: true
+                          description: FIFO-derived average days this customer takes to clear debt once incurred - same logic as GET /ledger/payment-velocity. Null if they've never cleared anything yet.
+                        last_payment_date:
+                          type: string
+                          format: date-time
+                          nullable: true
+                          description: Most recent actual Receipt voucher date - independent of avg_days_to_clear, answers "have they paid recently?"
+                        last_payment_amount:
+                          type: number
+                          nullable: true
+                        days_since_last_payment:
+                          type: integer
+                          nullable: true
+                  filter:
+                    type: string
+                    enum: [all, followed_up, not_followed_up, paid, overdue, open_followup]
+                  sortBy:
+                    type: string
+                    enum: [priority, balance]
+                  retention_thresholds:
+                    type: object
+                    properties:
+                      activeDays:
+                        type: integer
+                      churnedDays:
+                        type: integer
+                  totals:
+                    type: object
+                    properties:
+                      total_outstanding:
+                        type: number
+        '400':
+          description: Invalid filter/sortBy value, or activeDays/churnedDays out of order
+        '403':
+          description: Forbidden - managers only
+
+  /ledger/retention:
+    get:
+      tags:
+        - Ledger
+      summary: Customer retention summary (active/at-risk/churned/never-purchased)
+      description: >
+        Buckets every Sundry Debtors customer by days since their last Sales
+        voucher: `active` (<= activeDays), `at_risk` (between activeDays and
+        churnedDays), `churned` (> churnedDays), or `never_purchased` (no
+        Sales voucher ever synced). Based on buying behavior (Sales
+        vouchers), independent of follow-up/collections activity. `summary`
+        counts are always computed over the full customer set regardless of
+        the `status` filter applied to `data`. Managers only.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: search
+          in: query
+          description: Filter by customer name
+          schema:
+            type: string
+        - name: status
+          in: query
+          description: Filter `data` to a single retention status
+          schema:
+            type: string
+            enum: [all, active, at_risk, churned, never_purchased]
+            default: all
+        - name: activeDays
+          in: query
+          description: Days since last purchase to be considered "active"
+          schema:
+            type: integer
+            default: 30
+        - name: churnedDays
+          in: query
+          description: Days since last purchase beyond which a customer is "churned" (must be greater than activeDays)
+          schema:
+            type: integer
+            default: 90
+        - name: sortBy
+          in: query
+          description: >
+            Field to sort by. `last_purchase_date` and
+            `days_since_last_purchase` both push never_purchased customers
+            (null) to the end regardless of `order`.
+          schema:
+            type: string
+            enum: [last_purchase_date, days_since_last_purchase, total_purchases, outstanding_balance]
+            default: last_purchase_date
+        - name: order
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+      responses:
+        '200':
+          description: Paginated customer retention data with a company-wide summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  pagination:
+                    type: object
+                    properties:
+                      page:
+                        type: integer
+                      limit:
+                        type: integer
+                      total:
+                        type: integer
+                      pages:
+                        type: integer
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        ledger_id:
+                          type: integer
+                          example: 698368
+                        name:
+                          type: string
+                          example: AK GAS
+                        mobile:
+                          type: string
+                          nullable: true
+                        first_purchase_date:
+                          type: string
+                          format: date-time
+                          nullable: true
+                        last_purchase_date:
+                          type: string
+                          format: date-time
+                          nullable: true
+                        total_purchases:
+                          type: integer
+                          description: Count of synced Sales vouchers
+                        days_since_last_purchase:
+                          type: integer
+                          nullable: true
+                        status:
+                          type: string
+                          enum: [active, at_risk, churned, never_purchased]
+                        outstanding_balance:
+                          type: number
+                          description: Current live balance, from LedgerCustomer - independent of the buying-recency status above
+                          example: 15000
+                        outstanding_dr_cr:
+                          type: string
+                          enum: [Dr, Cr]
+                  filters:
+                    type: object
+                    properties:
+                      activeDays:
+                        type: integer
+                      churnedDays:
+                        type: integer
+                      status:
+                        type: string
+                        enum: [all, active, at_risk, churned, never_purchased]
+                  sort:
+                    type: object
+                    properties:
+                      sortBy:
+                        type: string
+                        enum: [last_purchase_date, days_since_last_purchase, total_purchases, outstanding_balance]
+                      order:
+                        type: string
+                        enum: [asc, desc]
+                  summary:
+                    type: object
+                    description: Computed over all Sundry Debtors customers, not just the current page or status filter
+                    properties:
+                      total_customers:
+                        type: integer
+                      active:
+                        type: integer
+                      at_risk:
+                        type: integer
+                      churned:
+                        type: integer
+                      never_purchased:
+                        type: integer
+                      active_pct:
+                        type: number
+                      churn_pct:
+                        type: number
+        '400':
+          description: Invalid status, sortBy, or order value, or activeDays/churnedDays out of order
+        '403':
+          description: Forbidden - managers only
+
+  /ledger/payment-velocity:
+    get:
+      tags:
+        - Ledger
+      summary: Customers ranked by how fast they historically clear debt
+      description: >
+        FIFO-matches each customer's debit entries (debt incurred) against
+        their later credit entries (debt cleared) in chronological order -
+        the standard accounting assumption when individual invoices aren't
+        explicitly linked to specific payments, consistent with how
+        rowbest's own running_balance is built. Ranked fastest
+        (lowest avg_days_to_clear) first. Customers who have never had any
+        debt cleared are excluded (avg_days_to_clear would be null).
+        Managers only.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: search
+          in: query
+          description: Filter by customer name
+          schema:
+            type: string
+        - name: sortBy
+          in: query
+          description: >
+            Field to sort by. `days_since_last_payment` sorts by recency of
+            the last actual Receipt - customers with no payment on record
+            (null) always sort last regardless of `order`.
+          schema:
+            type: string
+            enum: [avg_days_to_clear, total_debt_amount, total_cleared_amount, cleared_pct, outstanding_balance, days_since_last_payment]
+            default: avg_days_to_clear
+        - name: order
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: asc
+      responses:
+        '200':
+          description: Paginated customers ranked by payment speed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  pagination:
+                    type: object
+                    properties:
+                      page:
+                        type: integer
+                      limit:
+                        type: integer
+                      total:
+                        type: integer
+                      pages:
+                        type: integer
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        ledger_id:
+                          type: integer
+                          example: 846539
+                        name:
+                          type: string
+                          example: KAMARUDHEEN CHINAKKAL
+                        mobile:
+                          type: string
+                          nullable: true
+                        avg_days_to_clear:
+                          type: number
+                          description: Credit-weighted average days between a debit and whatever credit(s) paid it off
+                          example: 0
+                        total_debt_amount:
+                          type: number
+                          description: Sum of every debit entry ever synced for this customer
+                        total_cleared_amount:
+                          type: number
+                          description: Sum of debt actually matched against a later credit (FIFO)
+                        cleared_pct:
+                          type: number
+                          description: total_cleared_amount / total_debt_amount * 100 - how much of their history this average is based on
+                        outstanding_balance:
+                          type: number
+                          description: Current live balance, from LedgerCustomer
+                        outstanding_dr_cr:
+                          type: string
+                          enum: [Dr, Cr]
+                        last_payment_date:
+                          type: string
+                          format: date-time
+                          nullable: true
+                          description: Most recent actual Receipt voucher date - independent of the FIFO clearance calculation, contextualizes avg_days_to_clear with "have they paid recently?"
+                          example: "2026-06-26T04:00:00.000Z"
+                        last_payment_amount:
+                          type: number
+                          nullable: true
+                          example: 5000
+                        days_since_last_payment:
+                          type: integer
+                          nullable: true
+                  sort:
+                    type: object
+                    properties:
+                      sortBy:
+                        type: string
+                        enum: [avg_days_to_clear, total_debt_amount, total_cleared_amount, cleared_pct, outstanding_balance, days_since_last_payment]
+                      order:
+                        type: string
+                        enum: [asc, desc]
+                  summary:
+                    type: object
+                    properties:
+                      customers_ranked:
+                        type: integer
+                      company_avg_days_to_clear:
+                        type: number
+                        nullable: true
+                        description: Cleared-amount-weighted average across all ranked customers
+        '400':
+          description: Invalid sortBy or order value
+        '403':
+          description: Forbidden - managers only
 
   /ledger/summary/by-group:
     get:
@@ -1371,6 +2085,27 @@ paths:
                     type: boolean
                   count:
                     type: integer
+                  outstanding:
+                    type: object
+                    nullable: true
+                    description: >
+                      This customer's current live outstanding balance
+                      (not the per-follow-up snapshot in
+                      FollowUpResponse.outstandingAmount, which can go
+                      stale). Resolved via ledgerId off any of the returned
+                      follow-ups, falling back to treating customerId
+                      itself as a ledger_id. Null if no matching
+                      LedgerCustomer is found.
+                    properties:
+                      ledger_id:
+                        type: integer
+                        example: 688315
+                      outstanding_balance:
+                        type: number
+                        example: 24595
+                      outstanding_dr_cr:
+                        type: string
+                        enum: [Dr, Cr]
                   data:
                     type: array
                     items:
@@ -3801,6 +4536,122 @@ components:
           type: string
           format: date-time
 
+    LedgerEntryResponse:
+      type: object
+      description: A single synced rowbest ledger transaction, as stored in LedgerEntry
+      properties:
+        voucher_id:
+          type: integer
+          description: Rowbest transaction-line id - unique idempotency key
+          example: 30694733
+        accounting_voucher_id:
+          type: integer
+          nullable: true
+          description: Underlying voucher id used to build edit_path
+          example: 7684810
+        ledger_id:
+          type: integer
+          example: 688315
+        ledger_name:
+          type: string
+          description: Denormalized customer name at fetch time
+          example: IRSHAD ACM
+        voucher_number:
+          type: string
+          nullable: true
+          example: "RV2627/R/07801"
+        voucher_date:
+          type: string
+          format: date-time
+        voucher_date_raw:
+          type: string
+          description: Original dd-mm-yyyy string from rowbest, kept for debugging
+          example: "11-07-2026"
+        sequence:
+          type: integer
+          description: Same-day tiebreaker preserving rowbest's true chronological order (not always voucher_number order)
+          example: 2
+        voucher_type:
+          type: string
+          example: Sales
+          description: "Receipt | Payment | Sales | Sales Return | ..."
+        dr_or_cr:
+          type: string
+          nullable: true
+          enum: [Dr, Cr]
+        amount:
+          type: number
+          nullable: true
+        debit:
+          type: number
+          example: 171
+        credit:
+          type: number
+          example: 0
+        running_balance:
+          type: number
+          nullable: true
+          example: 24595
+        running_balance_dr_cr:
+          type: string
+          nullable: true
+          enum: [Dr, Cr]
+        particulars:
+          type: string
+          nullable: true
+          example: Sales
+        cost_center:
+          type: string
+          nullable: true
+        remarks:
+          type: string
+          nullable: true
+        payment_type:
+          type: string
+          nullable: true
+          example: UPI
+        supplier_invoice_no:
+          type: string
+          nullable: true
+        vehicle_no:
+          type: string
+          nullable: true
+        edit_path:
+          type: string
+          nullable: true
+          example: "/admin/sales/7684810/edit?id=688315"
+        sales_executive_raw:
+          type: string
+          nullable: true
+          description: Sales-executive name as scraped from rowbest, before normalization/matching
+        sales_executive_normalized:
+          type: string
+          nullable: true
+        staff_id:
+          type: integer
+          nullable: true
+          description: Resolved internal Staff.id, if sales_executive_raw matched exactly one staff member
+        staff_match_status:
+          type: string
+          enum: [matched, unmatched, ambiguous, not_applicable]
+          description: not_applicable means this voucher type has no sales-executive field at all (e.g. Payment vouchers)
+        sales_executive_fetched:
+          type: boolean
+          description: Whether the sales-executive scrape has run for this entry
+        sales_executive_fetched_at:
+          type: string
+          format: date-time
+          nullable: true
+        fetchedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
     UserResponse:
       type: object
       properties:
@@ -4013,6 +4864,30 @@ components:
               type: string
               format: date-time
               nullable: true
+        whatsappSends:
+          type: array
+          description: Full audit trail of every WhatsApp send logged via POST /followups/{id}/whatsapp - whatsapp above only holds the latest per type, this holds all of them.
+          items:
+            type: object
+            properties:
+              _id:
+                type: string
+              staffId:
+                type: integer
+                example: 12
+              type:
+                type: string
+                enum: [receipt, reminder]
+              mobile:
+                type: string
+                example: "919876543210"
+              amountMentioned:
+                type: number
+                nullable: true
+                example: 5000
+              sentAt:
+                type: string
+                format: date-time
         loggedAt:
           type: string
           format: date-time

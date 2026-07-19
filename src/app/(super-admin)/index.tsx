@@ -1,7 +1,8 @@
 import { View, Pressable, StyleSheet, ScrollView, ActivityIndicator } from "react-native"
 import { useState, useEffect } from "react"
 import { useRouter } from "expo-router"
-import { LogOut, RefreshCw } from "lucide-react-native"
+import { LogOut, RefreshCw, ChevronRight } from "lucide-react-native"
+import type { GestureResponderEvent } from "react-native"
 import AppText from "../../components/ui/AppText"
 import AppCard from "../../components/ui/AppCard"
 import { useTheme } from "../../providers/ThemeProvider"
@@ -36,7 +37,21 @@ const OUTCOME_COLORS: Record<string, string> = {
 }
 
 
-function StatTile({ label, value, color }: { label: string; value: string; color: string }) {
+function StatTile({ label, value, color, onPress }: { label: string; value: string; color: string; onPress?: (e: GestureResponderEvent) => void }) {
+  const { colors } = useTheme()
+  if (onPress) {
+    return (
+      <Pressable onPress={onPress} style={({ pressed }) => [styles.statTilePressable, { opacity: pressed ? 0.75 : 1 }]}>
+        <AppCard elevation="sm" style={styles.statTile}>
+          <View style={styles.statTileHeader}>
+            <AppText variant="caption" color="tertiary">{label}</AppText>
+            <ChevronRight size={12} color={colors.text.tertiary} strokeWidth={1.75} />
+          </View>
+          <AppText variant="heading3" style={{ color }}>{value}</AppText>
+        </AppCard>
+      </Pressable>
+    )
+  }
   return (
     <AppCard elevation="sm" style={styles.statTile}>
       <AppText variant="caption" color="tertiary">{label}</AppText>
@@ -56,7 +71,7 @@ export default function SuperAdminHome() {
   const [dateField, setDateField] = useState<FollowupDateField>("loggedAt")
   const [outcome, setOutcome] = useState<FollowUpOutcome | "all">("all")
   const [resolutionStatus, setResolutionStatus] = useState<ResolutionStatus | "all">("all")
-  const [leaderSort, setLeaderSort] = useState<"outstanding" | "followups" | "paid" | "promised" | "customers" | "open">("outstanding")
+  const [leaderSort, setLeaderSort] = useState<"outstanding" | "followups" | "paid" | "promised" | "customers" | "open">("followups")
 
   const isCustom = period === "custom"
 
@@ -155,7 +170,7 @@ export default function SuperAdminHome() {
             {/* Company totals */}
             <View style={styles.statRow}>
               <StatTile label="Staff" value={String(overview.totals.total_staff)} color={colors.text.primary} />
-              <StatTile label="Customers" value={String(overview.totals.total_customers)} color={colors.text.primary} />
+              <StatTile label="Customers" value={String(overview.totals.total_customers)} color={colors.text.primary} onPress={() => router.push("/(super-admin)/all-customers")} />
               <StatTile
                 label="Outstanding"
                 value={`₹${formatAmount(overview.totals.total_outstanding)}`}
@@ -164,10 +179,12 @@ export default function SuperAdminHome() {
             </View>
 
             {/* Follow-up summary */}
+            <Pressable onPress={() => router.push("/(super-admin)/all-followups")} style={({ pressed }) => [{ opacity: pressed ? 0.75 : 1 }, styles.cursorPointer]}>
             <AppCard elevation="sm" style={styles.followupCard}>
-              <AppText variant="bodyMedium" style={{ marginBottom: spacing[3] }}>
-                Follow-ups
-              </AppText>
+              <View style={styles.followupCardHeader}>
+                <AppText variant="bodyMedium">Follow-ups</AppText>
+                <ChevronRight size={16} color={colors.text.tertiary} strokeWidth={1.75} />
+              </View>
               <View style={styles.followupMoneyRow}>
                 <View style={styles.followupMoneyItem}>
                   <AppText variant="caption" color="tertiary">Logged</AppText>
@@ -215,6 +232,7 @@ export default function SuperAdminHome() {
                 )}
               </View>
             </AppCard>
+            </Pressable>
 
             {/* Staff leaderboard */}
             {(() => {
@@ -327,11 +345,23 @@ const styles = StyleSheet.create({
     gap: spacing[3],
     marginBottom: spacing[3],
   },
+  statTilePressable: { flex: 1 },
   statTile: {
     flex: 1,
     gap: spacing[1],
   },
+  statTileHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
   followupCard: {
+    marginBottom: spacing[3],
+  },
+  followupCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     marginBottom: spacing[3],
   },
   followupMoneyRow: {
