@@ -34,8 +34,7 @@ export default function LoginScreen() {
     await login(email, password)
     const loggedInUser = useAuthStore.getState().user
     if (loggedInUser) {
-      if (loggedInUser.role === "superAdmin") router.replace("/(super-admin)")
-      else if (loggedInUser.role === "manager") router.replace("/(manager)")
+      if (loggedInUser.role === "superAdmin" || loggedInUser.role === "manager") router.replace("/(admin)")
       else router.replace("/(tabs)")
     }
   }

@@ -87,7 +87,7 @@ export default function SuperAdminHome() {
 
   function goToStaffFollowups(userId: number, staffName: string) {
     router.push({
-      pathname: "/(super-admin)/staff-followups",
+      pathname: "/(admin)/staff-followups",
       params: {
         staffId: userId,
         staffName,
@@ -118,9 +118,6 @@ export default function SuperAdminHome() {
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <View>
           <AppText variant="heading2">Dashboard</AppText>
-          <AppText variant="caption" color="secondary">
-            {user?.fullName ?? "Super Admin"}
-          </AppText>
         </View>
         <View style={styles.headerActions}>
           <Pressable onPress={() => refetch()} style={[styles.headerBtn, styles.cursorPointer]} hitSlop={8}>
@@ -170,7 +167,7 @@ export default function SuperAdminHome() {
             {/* Company totals */}
             <View style={styles.statRow}>
               <StatTile label="Staff" value={String(overview.totals.total_staff)} color={colors.text.primary} />
-              <StatTile label="Customers" value={String(overview.totals.total_customers)} color={colors.text.primary} onPress={() => router.push("/(super-admin)/all-customers")} />
+              <StatTile label="Customers" value={String(overview.totals.total_customers)} color={colors.text.primary} onPress={() => router.push("/(admin)/all-customers")} />
               <StatTile
                 label="Outstanding"
                 value={`₹${formatAmount(overview.totals.total_outstanding)}`}
@@ -179,7 +176,7 @@ export default function SuperAdminHome() {
             </View>
 
             {/* Follow-up summary */}
-            <Pressable onPress={() => router.push("/(super-admin)/all-followups")} style={({ pressed }) => [{ opacity: pressed ? 0.75 : 1 }, styles.cursorPointer]}>
+            <Pressable onPress={() => router.push("/(admin)/all-followups")} style={({ pressed }) => [{ opacity: pressed ? 0.75 : 1 }, styles.cursorPointer]}>
             <AppCard elevation="sm" style={styles.followupCard}>
               <View style={styles.followupCardHeader}>
                 <AppText variant="bodyMedium">Follow-ups</AppText>

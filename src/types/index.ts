@@ -328,7 +328,7 @@ export interface AppNotification {
   _id: string
   staffId: number
   userId: number
-  type: "new_transaction"
+  type: "new_transaction" | "leave_requested" | "leave_approved"
   title: string
   message: string
   ledgerId: number | null

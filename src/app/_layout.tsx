@@ -26,8 +26,7 @@ function RootStack() {
         <Stack.Screen name="index" />
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="(manager)" />
-        <Stack.Screen name="(super-admin)" />
+        <Stack.Screen name="(admin)" />
         <Stack.Screen name="customer" />
         <Stack.Screen name="notifications" />
       </Stack>

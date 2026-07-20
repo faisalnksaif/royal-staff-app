@@ -175,7 +175,7 @@ function SubmitModal({
             {/* Title */}
             <AppText variant="caption" color="tertiary" style={styles.fieldLabel}>Title</AppText>
             <TextInput
-              style={[styles.input, { borderColor: colors.border, color: colors.text.primary, backgroundColor: colors.background.secondary }]}
+              style={[styles.input, { borderColor: colors.border, color: colors.text.primary, backgroundColor: colors.background.secondary, outline: "none" } as any]}
               placeholder="e.g. Led customer training session"
               placeholderTextColor={colors.text.tertiary}
               value={title}
@@ -195,7 +195,7 @@ function SubmitModal({
             {/* Description */}
             <AppText variant="caption" color="tertiary" style={styles.fieldLabel}>Description</AppText>
             <TextInput
-              style={[styles.input, styles.textArea, { borderColor: colors.border, color: colors.text.primary, backgroundColor: colors.background.secondary }]}
+              style={[styles.input, styles.textArea, { borderColor: colors.border, color: colors.text.primary, backgroundColor: colors.background.secondary, outline: "none" } as any]}
               placeholder="Describe what you accomplished..."
               placeholderTextColor={colors.text.tertiary}
               value={description}
@@ -215,6 +215,7 @@ function SubmitModal({
               label={mutation.isPending ? "Submitting…" : "Submit for Approval"}
               onPress={handleSubmit}
               disabled={mutation.isPending}
+              style={{ marginTop: spacing[4] }}
             />
             <View style={{ height: spacing[6] }} />
           </ScrollView>

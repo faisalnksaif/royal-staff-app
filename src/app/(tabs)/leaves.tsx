@@ -207,10 +207,22 @@ function RequestModal({
               />
             </View>
 
+            {/* Day count */}
+            {startDate && endDate && !moment(endDate).isBefore(moment(startDate), "day") && (
+              <View style={[styles.dayCount, { backgroundColor: colors.accentSubtle }]}>
+                <AppText variant="bodyMedium" style={{ color: colors.accent }}>
+                  {moment(endDate).diff(moment(startDate), "days") + 1} day{moment(endDate).diff(moment(startDate), "days") + 1 !== 1 ? "s" : ""}
+                </AppText>
+                <AppText variant="caption" color="secondary">
+                  {moment(startDate).format("D MMM")} – {moment(endDate).format("D MMM YYYY")}
+                </AppText>
+              </View>
+            )}
+
             {/* Reason */}
             <AppText variant="caption" color="tertiary" style={styles.fieldLabel}>Reason</AppText>
             <TextInput
-              style={[styles.input, styles.textArea, { borderColor: colors.border, color: colors.text.primary, backgroundColor: colors.background.secondary }]}
+              style={[styles.input, styles.textArea, { borderColor: colors.border, color: colors.text.primary, backgroundColor: colors.background.secondary, outline: "none" } as any]}
               placeholder="Briefly describe your reason..."
               placeholderTextColor={colors.text.tertiary}
               value={reason}
@@ -230,6 +242,7 @@ function RequestModal({
               label={mutation.isPending ? "Submitting…" : "Submit Request"}
               onPress={handleSubmit}
               disabled={mutation.isPending}
+              style={{ marginTop: spacing[4] }}
             />
             <View style={{ height: spacing[6] }} />
           </ScrollView>
@@ -593,4 +606,12 @@ const styles = StyleSheet.create({
     marginBottom: spacing[1],
   },
   textArea: { minHeight: 80, textAlignVertical: "top" },
+  dayCount: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: spacing[3],
+    borderRadius: radii.md,
+    marginTop: spacing[3],
+  },
 })

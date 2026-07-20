@@ -350,7 +350,7 @@ export default function AttendanceScreen() {
           <AppText variant="caption" color="tertiary">{moment().format("D MMM YYYY")}</AppText>
         </View>
         <Pressable
-          onPress={() => router.push("/(super-admin)/enroll")}
+          onPress={() => router.push("/(admin)/enroll")}
           style={styles.enrollBtn}
           hitSlop={8}
         >

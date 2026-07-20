@@ -946,9 +946,6 @@ const styles = StyleSheet.create({
   mobileContent: { flex: 1 },
   desktopContent: {
     flex: 1,
-    maxWidth: 860,
-    width: "100%",
-    alignSelf: "center",
   },
   header: {
     flexDirection: "row",

@@ -70,7 +70,7 @@ export default function StaffLeaderboardScreen() {
 
   function goToStaffFollowups(userId: number, staffName: string) {
     router.push({
-      pathname: "/(super-admin)/staff-followups",
+      pathname: "/(admin)/staff-followups",
       params: {
         staffId: userId,
         staffName,

@@ -94,7 +94,10 @@ export default function NotificationsScreen() {
   const handlePress = useCallback(
     (item: AppNotification) => {
       if (!item.isRead) markReadMutation.mutate(item._id)
-      if (item.ledgerName) {
+      if (item.type === "leave_requested" || item.type === "leave_approved") {
+        const role = useAuthStore.getState().user?.role
+        router.push(role === "staff" ? "/(tabs)/leaves" : "/(admin)/leaves")
+      } else if (item.ledgerName) {
         router.push({
           pathname: "/customer/[name]",
           params: { name: item.ledgerName, totalBalance: "0", drCr: "Dr", customerId: String(item.ledgerId ?? ""), mobile: "" },
