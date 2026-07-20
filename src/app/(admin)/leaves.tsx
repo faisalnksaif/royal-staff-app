@@ -9,7 +9,7 @@ import {
   TextInput,
 } from "react-native"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { Check, X, Calendar, Clock } from "lucide-react-native"
+import { Check, X, Calendar, Clock, RefreshCw } from "lucide-react-native"
 import BackButton from "../../components/shared/BackButton"
 import moment from "moment"
 import AppText from "../../components/ui/AppText"
@@ -348,6 +348,12 @@ export default function LeavesScreen() {
             {leavesData?.data?.count ?? 0} total
           </AppText>
         </View>
+        <Pressable onPress={() => refetch()} hitSlop={8} style={{ padding: spacing[2] }}>
+          {isRefetching
+            ? <ActivityIndicator size="small" color={colors.accent} />
+            : <RefreshCw size={18} color={colors.text.tertiary} strokeWidth={1.75} />
+          }
+        </Pressable>
       </View>
 
       {/* Stats */}

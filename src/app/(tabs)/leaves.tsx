@@ -5,6 +5,7 @@ import {
   ActivityIndicator,
   StyleSheet,
   Pressable,
+  TouchableOpacity,
   Modal,
   TextInput,
   ScrollView,
@@ -59,44 +60,47 @@ function BalanceCard({ staffId }: { staffId?: number }) {
   const total = balance?.totalLeavePerYear ?? 12
   const remaining = balance?.leaveBalance ?? 0
   const usedThisMonth = balance?.leaveUsedThisMonth ?? 0
-  const fillRatio = total > 0 ? used / total : 0
+  const fillRatio = total > 0 ? Math.min(used / total, 1) : 0
+  const pct = Math.round(fillRatio * 100)
+  const barColor = fillRatio > 0.8 ? palette.error.default : fillRatio > 0.5 ? palette.warning.default : palette.success.default
 
   return (
-    <AppCard elevation="md" style={styles.balanceCard}>
-      <View style={styles.balanceTop}>
-        <View>
-          <AppText variant="caption" color="tertiary">Leave Balance</AppText>
-          {isLoading ? (
-            <ActivityIndicator size="small" color={colors.accent} style={{ marginTop: spacing[1] }} />
-          ) : (
-            <AppText variant="heading2" style={{ color: colors.accent }}>
-              {remaining}
-              <AppText variant="body" color="secondary"> / {total} days</AppText>
-            </AppText>
-          )}
-        </View>
-        <View style={styles.balanceMeta}>
-          <AppText variant="caption" color="tertiary">Used this month</AppText>
-          <AppText variant="bodyMedium" style={{ textAlign: "right" }}>{usedThisMonth}</AppText>
-        </View>
-      </View>
+    <View style={[styles.balanceCard, { borderBottomColor: colors.border }]}>
+      {isLoading ? (
+        <ActivityIndicator size="small" color={colors.accent} />
+      ) : (
+        <>
+          {/* Hero + stats row */}
+          <View style={styles.balanceStatsRow}>
+            <View style={styles.balanceStat}>
+              <AppText variant="heading2" style={{ color: colors.accent }}>{remaining}</AppText>
+              <AppText variant="caption" color="tertiary">Remaining</AppText>
+            </View>
+            <View style={[styles.balanceStatDivider, { backgroundColor: colors.border }]} />
+            <View style={styles.balanceStat}>
+              <AppText variant="heading2" color="primary">{used}</AppText>
+              <AppText variant="caption" color="tertiary">Used (year)</AppText>
+            </View>
+            <View style={[styles.balanceStatDivider, { backgroundColor: colors.border }]} />
+            <View style={styles.balanceStat}>
+              <AppText variant="heading2" color="primary">{usedThisMonth}</AppText>
+              <AppText variant="caption" color="tertiary">This month</AppText>
+            </View>
+          </View>
 
-      {/* Usage bar */}
-      <View style={[styles.balanceTrack, { backgroundColor: colors.border }]}>
-        <View
-          style={[
-            styles.balanceFill,
-            {
-              backgroundColor: fillRatio > 0.8 ? palette.error.default : fillRatio > 0.5 ? palette.warning.default : palette.success.default,
-              width: `${Math.min(fillRatio * 100, 100)}%`,
-            },
-          ]}
-        />
-      </View>
-      <AppText variant="caption" color="tertiary" style={{ marginTop: spacing[2] }}>
-        {used} days used of {total} this year
-      </AppText>
-    </AppCard>
+          {/* Progress bar */}
+          <View style={styles.balanceBarWrap}>
+            <View style={[styles.balanceTrack, { backgroundColor: colors.border }]}>
+              <View style={[styles.balanceFill, { backgroundColor: barColor, width: `${pct}%` }]} />
+            </View>
+            <AppText variant="caption" style={{ color: barColor, fontSize: 11 }}>{pct}%</AppText>
+          </View>
+          <AppText variant="caption" color="tertiary" style={{ marginTop: spacing[1] }}>
+            {used} of {total} days used this year
+          </AppText>
+        </>
+      )}
+    </View>
   )
 }
 
@@ -425,19 +429,16 @@ export default function LeavesScreen() {
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <BackButton />
         <AppText variant="heading2" style={{ flex: 1 }}>My Leaves</AppText>
-        <Pressable
-          onPress={() => setRequestOpen(true)}
-          style={({ pressed }) => [styles.requestBtn, { backgroundColor: colors.accent, opacity: pressed ? 0.8 : 1 }]}
-        >
-          <Plus size={18} color="#fff" strokeWidth={2.5} />
-          <AppText variant="caption" style={{ color: "#fff" }}>Request</AppText>
-        </Pressable>
+        <TouchableOpacity activeOpacity={0.8} onPress={() => setRequestOpen(true)}>
+          <View style={[styles.requestBtn, { backgroundColor: colors.accent }]}>
+            <Plus size={18} color="#fff" strokeWidth={2.5} />
+            <AppText variant="caption" style={{ color: "#fff" }}>Request</AppText>
+          </View>
+        </TouchableOpacity>
       </View>
 
       {/* Balance */}
-      <View style={styles.balanceWrap}>
-        <BalanceCard staffId={user?.user_id} />
-      </View>
+      <BalanceCard staffId={user?.user_id} />
 
       {/* Filter tabs */}
       <View style={[styles.filterRow, { borderBottomColor: colors.border }]}>
@@ -506,7 +507,7 @@ export default function LeavesScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   mobileContent: { flex: 1 },
-  desktopContent: { flex: 1, maxWidth: 860, width: "100%", alignSelf: "center" },
+  desktopContent: { flex: 1 },
   header: {
     paddingHorizontal: spacing[4],
     paddingTop: spacing[12],
@@ -525,11 +526,19 @@ const styles = StyleSheet.create({
     borderRadius: radii.full,
   },
 
-  balanceWrap: { padding: spacing[4] },
-  balanceCard: { gap: spacing[3] },
-  balanceTop: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between" },
-  balanceMeta: { alignItems: "flex-end", gap: spacing[1] },
-  balanceTrack: { height: 6, borderRadius: 3, overflow: "hidden", marginTop: spacing[1] },
+  balanceWrap: {},
+  balanceCard: {
+    paddingHorizontal: spacing[5],
+    paddingTop: spacing[5],
+    paddingBottom: spacing[4],
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: spacing[3],
+  },
+  balanceStatsRow: { flexDirection: "row", alignItems: "center" },
+  balanceStat: { flex: 1, alignItems: "center", gap: spacing[1] },
+  balanceStatDivider: { width: StyleSheet.hairlineWidth, height: 40 },
+  balanceBarWrap: { flexDirection: "row", alignItems: "center", gap: spacing[2] },
+  balanceTrack: { flex: 1, height: 6, borderRadius: 3, overflow: "hidden" },
   balanceFill: { height: 6, borderRadius: 3 },
 
   filterRow: {

@@ -220,7 +220,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   content: { paddingBottom: spacing[16] },
-  desktopContent: { maxWidth: 860, width: "100%", alignSelf: "center" },
+  desktopContent: { width: "100%" },
   header: {
     paddingHorizontal: spacing[5],
     paddingTop: spacing[12],

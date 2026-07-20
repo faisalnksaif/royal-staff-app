@@ -5,12 +5,13 @@ import {
   ActivityIndicator,
   StyleSheet,
   Pressable,
+  TouchableOpacity,
   Modal,
   TextInput,
   ScrollView,
 } from "react-native"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { Plus, Calendar, X, Award, Clock } from "lucide-react-native"
+import { Plus, Calendar, X, Award, Clock, RefreshCw } from "lucide-react-native"
 import BackButton from "../../components/shared/BackButton"
 import DatePickerField from "../../components/shared/DatePickerField"
 import moment from "moment"
@@ -63,28 +64,28 @@ function StatsCard({
   const { colors } = useTheme()
 
   return (
-    <AppCard elevation="md" style={styles.statsCard}>
-      <View style={styles.statsTop}>
-        <View>
-          <AppText variant="caption" color="tertiary">Points This Month</AppText>
-          {isLoading ? (
-            <ActivityIndicator size="small" color={colors.accent} style={{ marginTop: spacing[1] }} />
-          ) : (
+    <View style={[styles.statsCard, { borderBottomColor: colors.border }]}>
+      {isLoading ? (
+        <ActivityIndicator size="small" color={colors.accent} />
+      ) : (
+        <View style={styles.statsRow}>
+          <View style={styles.statItem}>
             <AppText variant="heading2" style={{ color: colors.accent }}>{points}</AppText>
-          )}
-        </View>
-        <View style={styles.statsMeta}>
-          <View style={styles.statsMetaItem}>
-            <AppText variant="bodyMedium" style={{ color: palette.success.default, textAlign: "right" }}>{approved}</AppText>
+            <AppText variant="caption" color="tertiary">Points (month)</AppText>
+          </View>
+          <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
+          <View style={styles.statItem}>
+            <AppText variant="heading2" style={{ color: palette.success.default }}>{approved}</AppText>
             <AppText variant="caption" color="tertiary">Approved</AppText>
           </View>
-          <View style={styles.statsMetaItem}>
-            <AppText variant="bodyMedium" style={{ color: palette.warning.default, textAlign: "right" }}>{pending}</AppText>
+          <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
+          <View style={styles.statItem}>
+            <AppText variant="heading2" style={{ color: palette.warning.default }}>{pending}</AppText>
             <AppText variant="caption" color="tertiary">Pending</AppText>
           </View>
         </View>
-      </View>
-    </AppCard>
+      )}
+    </View>
   )
 }
 
@@ -315,24 +316,27 @@ export default function ExtraPerformanceScreen() {
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <BackButton />
         <AppText variant="heading2" style={{ flex: 1 }}>Extra Performance</AppText>
-        <Pressable
-          onPress={() => setSubmitOpen(true)}
-          style={({ pressed }) => [styles.addBtn, { backgroundColor: colors.accent, opacity: pressed ? 0.8 : 1 }]}
-        >
-          <Plus size={18} color="#fff" strokeWidth={2.5} />
-          <AppText variant="caption" style={{ color: "#fff" }}>Add</AppText>
+        <Pressable onPress={() => refetch()} hitSlop={8} style={{ padding: spacing[2] }}>
+          {isRefetching
+            ? <ActivityIndicator size="small" color={colors.accent} />
+            : <RefreshCw size={18} color={colors.text.tertiary} strokeWidth={1.75} />
+          }
         </Pressable>
+        <TouchableOpacity activeOpacity={0.8} onPress={() => setSubmitOpen(true)}>
+          <View style={[styles.addBtn, { backgroundColor: colors.accent }]}>
+            <Plus size={18} color="#fff" strokeWidth={2.5} />
+            <AppText variant="caption" style={{ color: "#fff" }}>Add</AppText>
+          </View>
+        </TouchableOpacity>
       </View>
 
       {/* Stats */}
-      <View style={styles.statsWrap}>
-        <StatsCard
+      <StatsCard
           isLoading={pointsLoading}
           approved={stats?.approved ?? 0}
           pending={stats?.pending ?? 0}
           points={monthlyPoints}
         />
-      </View>
 
       {/* Filter tabs */}
       <View style={[styles.filterRow, { borderBottomColor: colors.border }]}>
@@ -392,7 +396,7 @@ export default function ExtraPerformanceScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   mobileContent: { flex: 1 },
-  desktopContent: { flex: 1, maxWidth: 860, width: "100%", alignSelf: "center" },
+  desktopContent: { flex: 1 },
   header: {
     paddingHorizontal: spacing[4],
     paddingTop: spacing[12],
@@ -411,11 +415,14 @@ const styles = StyleSheet.create({
     borderRadius: radii.full,
   },
 
-  statsWrap: { padding: spacing[4] },
-  statsCard: { gap: spacing[3] },
-  statsTop: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between" },
-  statsMeta: { flexDirection: "row", gap: spacing[5] },
-  statsMetaItem: { alignItems: "flex-end", gap: spacing[1] },
+  statsCard: {
+    paddingHorizontal: spacing[5],
+    paddingVertical: spacing[5],
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  statsRow: { flexDirection: "row", alignItems: "center" },
+  statItem: { flex: 1, alignItems: "center", gap: spacing[1] },
+  statDivider: { width: StyleSheet.hairlineWidth, height: 40 },
 
   filterRow: {
     flexDirection: "row",

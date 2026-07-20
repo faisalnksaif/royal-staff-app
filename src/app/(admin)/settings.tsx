@@ -147,7 +147,6 @@ const styles = StyleSheet.create({
     paddingTop: spacing[4],
     paddingBottom: spacing[12],
     gap: spacing[2],
-    maxWidth: 640,
     width: "100%",
     alignSelf: "center",
   },

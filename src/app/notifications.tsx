@@ -1,57 +1,120 @@
-import { useCallback } from "react"
+import { useCallback, useMemo } from "react"
 import { View, FlatList, ActivityIndicator, StyleSheet, TouchableOpacity } from "react-native"
 import { useRouter } from "expo-router"
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { ChevronLeft, Bell, CheckCheck } from "lucide-react-native"
+import { ChevronLeft, Bell, CheckCheck, RefreshCw, CalendarClock, User } from "lucide-react-native"
 import AppText from "../components/ui/AppText"
-import AppCard from "../components/ui/AppCard"
 import { useTheme } from "../providers/ThemeProvider"
 import { spacing, colors as palette, radii } from "../constants/theme"
 import useAuthStore from "../stores/useAuthStore"
 import { notificationService } from "../services/notificationService"
-import { formatDate } from "../utils/helpers"
 import type { AppNotification, NotificationsResponse } from "../types"
+import moment from "moment"
 
-function NotificationCard({
-  item,
-  onPress,
-}: {
-  item: AppNotification
-  onPress: () => void
-}) {
-  const { colors } = useTheme()
+// ─── helpers ──────────────────────────────────────────────────────────────────
+
+function relativeTime(dateStr: string) {
+  const m = moment(dateStr)
+  const now = moment()
+  const diffDays = now.startOf("day").diff(m.clone().startOf("day"), "days")
+  if (diffDays === 0) return m.format("h:mm A")
+  if (diffDays === 1) return "Yesterday"
+  if (diffDays < 7) return m.format("dddd")
+  return m.format("D MMM")
+}
+
+function dateGroupLabel(dateStr: string) {
+  const m = moment(dateStr)
+  const diffDays = moment().startOf("day").diff(m.clone().startOf("day"), "days")
+  if (diffDays === 0) return "Today"
+  if (diffDays === 1) return "Yesterday"
+  if (diffDays < 7) return "This Week"
+  if (diffDays < 30) return "Earlier"
+  return m.format("MMMM YYYY")
+}
+
+type ListItem =
+  | { type: "header"; label: string }
+  | { type: "notification"; data: AppNotification }
+
+function buildListItems(notifications: AppNotification[]): ListItem[] {
+  const items: ListItem[] = []
+  let lastGroup = ""
+  for (const n of notifications) {
+    const group = dateGroupLabel(n.createdAt)
+    if (group !== lastGroup) {
+      items.push({ type: "header", label: group })
+      lastGroup = group
+    }
+    items.push({ type: "notification", data: n })
+  }
+  return items
+}
+
+function NotificationIcon({ type, colors }: { type: string; colors: any }) {
+  if (type === "leave_requested" || type === "leave_approved") {
+    return (
+      <View style={[styles.iconWrap, { backgroundColor: palette.warning.default + "22" }]}>
+        <CalendarClock size={16} color={palette.warning.default} strokeWidth={1.75} />
+      </View>
+    )
+  }
+  if (type === "followup" || type === "customer") {
+    return (
+      <View style={[styles.iconWrap, { backgroundColor: palette.info.default + "22" }]}>
+        <User size={16} color={palette.info.default} strokeWidth={1.75} />
+      </View>
+    )
+  }
   return (
-    <TouchableOpacity activeOpacity={0.75} onPress={onPress}>
-      <AppCard
-        elevation="sm"
+    <View style={[styles.iconWrap, { backgroundColor: colors.accentSubtle }]}>
+      <Bell size={16} color={colors.accent} strokeWidth={1.75} />
+    </View>
+  )
+}
+
+// ─── NotificationRow ──────────────────────────────────────────────────────────
+
+function NotificationRow({ item, onPress }: { item: AppNotification; onPress: () => void }) {
+  const { colors } = useTheme()
+  const unread = !item.isRead
+
+  return (
+    <TouchableOpacity activeOpacity={0.7} onPress={onPress}>
+      <View
         style={[
-          styles.card,
-          !item.isRead && { borderLeftWidth: 3, borderLeftColor: colors.accent },
+          styles.row,
+          { borderBottomColor: colors.border as string },
+          unread && { backgroundColor: colors.accent + "08" },
         ]}
       >
-        <View style={styles.cardRow}>
-          <View style={[styles.iconWrap, { backgroundColor: colors.accentSubtle }]}>
-            <Bell size={16} color={colors.accent} strokeWidth={1.75} />
-          </View>
-          <View style={styles.cardBody}>
-            <AppText variant="bodyMedium" style={!item.isRead ? { color: colors.text.primary } : undefined}>
+        {unread && <View style={[styles.unreadBar, { backgroundColor: colors.accent }]} />}
+        <NotificationIcon type={item.type} colors={colors} />
+        <View style={styles.rowBody}>
+          <View style={styles.rowTop}>
+            <AppText
+              variant={unread ? "bodyMedium" : "body"}
+              numberOfLines={1}
+              style={{ flex: 1, color: unread ? (colors.text.primary as string) : (colors.text.secondary as string) }}
+            >
               {item.title}
             </AppText>
-            <AppText variant="caption" color="secondary" style={{ marginTop: 2 }}>
-              {item.message}
-            </AppText>
-            <AppText variant="caption" color="tertiary" style={{ marginTop: spacing[1] }}>
-              {formatDate(item.createdAt)}
+            <AppText variant="caption" color="tertiary" style={styles.timeText}>
+              {relativeTime(item.createdAt)}
             </AppText>
           </View>
-          {!item.isRead && (
-            <View style={[styles.unreadDot, { backgroundColor: colors.accent }]} />
+          {!!item.message && (
+            <AppText variant="caption" color="secondary" numberOfLines={2} style={styles.rowMessage}>
+              {item.message}
+            </AppText>
           )}
         </View>
-      </AppCard>
+      </View>
     </TouchableOpacity>
   )
 }
+
+// ─── screen ───────────────────────────────────────────────────────────────────
 
 export default function NotificationsScreen() {
   const router = useRouter()
@@ -59,7 +122,7 @@ export default function NotificationsScreen() {
   const user = useAuthStore((s) => s.user)
   const queryClient = useQueryClient()
 
-  const { data, isLoading, isFetchingNextPage, hasNextPage, fetchNextPage } =
+  const { data, isLoading, isRefetching, refetch, isFetchingNextPage, hasNextPage, fetchNextPage } =
     useInfiniteQuery<NotificationsResponse>({
       queryKey: ["notifications", user?.user_id],
       queryFn: ({ pageParam }) =>
@@ -109,43 +172,69 @@ export default function NotificationsScreen() {
 
   const notifications = data?.pages.flatMap((p) => p.data) ?? []
   const unreadCount = data?.pages[0]?.unread_count ?? 0
+  const listItems = useMemo(() => buildListItems(notifications), [notifications])
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background.primary }]}>
+      {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity activeOpacity={0.7} onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity activeOpacity={0.7} onPress={() => router.back()} style={styles.iconBtn}>
           <ChevronLeft size={24} color={colors.text.primary} strokeWidth={1.75} />
         </TouchableOpacity>
-        <AppText variant="heading2" style={{ flex: 1 }}>Notifications</AppText>
+        <View style={{ flex: 1 }}>
+          <AppText variant="heading3">Notifications</AppText>
+          {unreadCount > 0 && (
+            <AppText variant="caption" color="tertiary">{unreadCount} unread</AppText>
+          )}
+        </View>
         {unreadCount > 0 && (
           <TouchableOpacity
             activeOpacity={0.7}
             onPress={() => markAllMutation.mutate()}
             style={styles.markAllBtn}
+            disabled={markAllMutation.isPending}
           >
             <CheckCheck size={16} color={colors.accent} strokeWidth={1.75} />
             <AppText variant="caption" style={{ color: colors.accent }}>Mark all read</AppText>
           </TouchableOpacity>
         )}
+        <TouchableOpacity activeOpacity={0.7} onPress={() => refetch()} style={styles.iconBtn}>
+          {isRefetching ? <ActivityIndicator size="small" color={colors.accent} /> : <RefreshCw size={18} color={colors.text.tertiary} strokeWidth={1.75} />}
+        </TouchableOpacity>
       </View>
 
       {isLoading ? (
         <ActivityIndicator size="large" color={colors.accent} style={styles.center} />
       ) : (
         <FlatList
-          data={notifications}
-          keyExtractor={(item) => item._id}
-          renderItem={({ item }) => (
-            <NotificationCard item={item} onPress={() => handlePress(item)} />
-          )}
-          contentContainerStyle={styles.list}
-          ItemSeparatorComponent={() => <View style={{ height: spacing[2] }} />}
+          data={listItems}
+          keyExtractor={(item, i) => item.type === "header" ? `h-${item.label}` : item.data._id}
+          renderItem={({ item }) => {
+            if (item.type === "header") {
+              return (
+                <View style={[styles.sectionHeader, { borderBottomColor: colors.border, backgroundColor: colors.background.secondary }]}>
+                  <AppText variant="caption" color="tertiary" style={{ fontSize: 11, letterSpacing: 0.5 }}>
+                    {item.label.toUpperCase()}
+                  </AppText>
+                </View>
+              )
+            }
+            return <NotificationRow item={item.data} onPress={() => handlePress(item.data)} />
+          }}
+          contentContainerStyle={{ paddingBottom: spacing[10] }}
           onEndReachedThreshold={0.3}
           onEndReached={() => { if (hasNextPage && !isFetchingNextPage) fetchNextPage() }}
           ListEmptyComponent={
-            <View style={styles.center}>
-              <Bell size={40} color={colors.text.tertiary} strokeWidth={1.25} />
-              <AppText color="tertiary" style={{ marginTop: spacing[3] }}>No notifications yet</AppText>
+            <View style={styles.emptyState}>
+              <View style={[styles.emptyIconWrap, { backgroundColor: colors.background.secondary }]}>
+                <Bell size={32} color={colors.text.tertiary} strokeWidth={1.25} />
+              </View>
+              <AppText variant="bodyMedium" color="secondary" style={{ marginTop: spacing[4] }}>
+                You're all caught up
+              </AppText>
+              <AppText variant="caption" color="tertiary" style={{ marginTop: spacing[1] }}>
+                No notifications yet
+              </AppText>
             </View>
           }
           ListFooterComponent={
@@ -159,6 +248,8 @@ export default function NotificationsScreen() {
   )
 }
 
+// ─── styles ──────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   header: {
@@ -170,13 +261,63 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     gap: spacing[2],
   },
-  backBtn: { padding: spacing[2] },
-  markAllBtn: { flexDirection: "row", alignItems: "center", gap: spacing[1], paddingHorizontal: spacing[2] },
-  list: { padding: spacing[4], paddingBottom: spacing[10] },
-  card: { padding: spacing[4] },
-  cardRow: { flexDirection: "row", alignItems: "flex-start", gap: spacing[3] },
-  iconWrap: { width: 36, height: 36, borderRadius: radii.lg, alignItems: "center", justifyContent: "center" },
-  cardBody: { flex: 1 },
-  unreadDot: { width: 8, height: 8, borderRadius: 4, marginTop: 6 },
+  iconBtn: { padding: spacing[2] },
+  markAllBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[1],
+    paddingHorizontal: spacing[2],
+    paddingVertical: spacing[1],
+  },
+
+  sectionHeader: {
+    paddingHorizontal: spacing[5],
+    paddingVertical: spacing[2],
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+
+  row: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingVertical: spacing[4],
+    paddingRight: spacing[5],
+    paddingLeft: spacing[5],
+    borderBottomWidth: 1,
+    gap: spacing[3],
+    position: "relative",
+  },
+  unreadBar: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 3,
+    borderRadius: 0,
+  },
+  iconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: radii.lg,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  rowBody: { flex: 1, gap: spacing[1] },
+  rowTop: { flexDirection: "row", alignItems: "flex-start", gap: spacing[2] },
+  timeText: { fontSize: 11, flexShrink: 0, marginTop: 2 },
+  rowMessage: { lineHeight: 18 },
+
   center: { alignItems: "center", justifyContent: "center", paddingVertical: spacing[16] },
+  emptyState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: spacing[20],
+  },
+  emptyIconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: radii.full,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 })

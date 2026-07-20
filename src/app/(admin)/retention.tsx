@@ -106,10 +106,8 @@ function CustomerRow({ customer }: { customer: RetentionCustomer }) {
   }
 
   return (
-    <Pressable
-      onPress={handlePress}
-      style={({ pressed }) => [styles.row, { borderBottomColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
-    >
+    <TouchableOpacity activeOpacity={0.7} onPress={handlePress}>
+      <View style={[styles.row, { borderBottomColor: colors.border as string }]}>
       <View style={styles.rowMain}>
         <View style={styles.rowTop}>
           <AppText variant="bodyMedium" numberOfLines={1} style={{ flex: 1 }}>
@@ -143,7 +141,8 @@ function CustomerRow({ customer }: { customer: RetentionCustomer }) {
           </AppText>
         )}
       </View>
-    </Pressable>
+      </View>
+    </TouchableOpacity>
   )
 }
 
@@ -223,6 +222,7 @@ export default function RetentionScreen() {
         </View>
       ) : (
         <FlatList
+          style={{ flex: 1 }}
           data={customers}
           keyExtractor={(item) => String(item.ledger_id)}
           renderItem={({ item }) => <CustomerRow customer={item} />}
@@ -296,7 +296,7 @@ const styles = StyleSheet.create({
   row: {
     paddingHorizontal: spacing[6],
     paddingVertical: spacing[4],
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: 1,
   },
   rowMain: { gap: spacing[1] },
   rowTop: {

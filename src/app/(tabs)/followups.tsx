@@ -13,6 +13,7 @@ import {
   Clock,
   Wallet,
   ClipboardList,
+  RefreshCw,
 } from "lucide-react-native"
 import AppText from "../../components/ui/AppText"
 import AppCard from "../../components/ui/AppCard"
@@ -329,7 +330,7 @@ export default function FollowUpsScreen() {
     activeDateField !== "loggedAt" ? 1 : 0,
   ].reduce((a, b) => a + b, 0)
 
-  const { data, isLoading } = useStaffFollowups(user?.user_id, {
+  const { data, isLoading, refetch, isRefetching } = useStaffFollowups(user?.user_id, {
     period: activePeriod === "all" || isCustom ? undefined : activePeriod,
     startDate: isCustom && startDate ? startDate.toISOString().split("T")[0] : undefined,
     endDate: isCustom && endDate ? endDate.toISOString().split("T")[0] : undefined,
@@ -358,6 +359,9 @@ export default function FollowUpsScreen() {
               <AppText variant="caption" color="secondary">{data.summary.totalFollowUps} total</AppText>
             )}
           </View>
+          <TouchableOpacity activeOpacity={0.7} onPress={() => refetch()} style={{ padding: spacing[2] }}>
+            {isRefetching ? <ActivityIndicator size="small" color={colors.accent} /> : <RefreshCw size={18} color={colors.text.tertiary} strokeWidth={1.75} />}
+          </TouchableOpacity>
           <TouchableOpacity
             activeOpacity={0.7}
             onPress={() => setShowFilters((v) => !v)}
@@ -489,7 +493,6 @@ const styles = StyleSheet.create({
   mobileContent: { flex: 1 },
   desktopContent: {
     flex: 1,
-    maxWidth: 860,
     width: "100%",
     alignSelf: "center",
   },

@@ -100,11 +100,6 @@ export default function SuperAdminHome() {
     })
   }
 
-  useEffect(() => {
-    const id = setInterval(() => refetch(), 30_000)
-    return () => clearInterval(id)
-  }, [refetch])
-
   async function handleLogout() {
     await logout()
     router.replace("/(auth)/login")
@@ -121,7 +116,7 @@ export default function SuperAdminHome() {
         </View>
         <View style={styles.headerActions}>
           <Pressable onPress={() => refetch()} style={[styles.headerBtn, styles.cursorPointer]} hitSlop={8}>
-            <RefreshCw size={18} color={isRefetching ? colors.accent : colors.text.tertiary} strokeWidth={1.75} />
+            {isRefetching ? <ActivityIndicator size="small" color={colors.accent} /> : <RefreshCw size={18} color={colors.text.tertiary} strokeWidth={1.75} />}
           </Pressable>
           {!isTablet && (
             <Pressable onPress={handleLogout} style={[styles.headerBtn, styles.cursorPointer]} hitSlop={8}>

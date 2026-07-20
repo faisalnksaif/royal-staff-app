@@ -1,12 +1,12 @@
 import { useState } from "react"
-import { View, FlatList, StyleSheet, Pressable, ActivityIndicator } from "react-native"
+import { View, FlatList, StyleSheet, Pressable, ActivityIndicator, TouchableOpacity } from "react-native"
+import { useRouter } from "expo-router"
 import {
   Phone, MessageSquare, Mail, UserCheck, MessageCircle,
-  CheckCircle2, Calendar, Clock, Wallet, ClipboardList,
+  CheckCircle2, Calendar, Clock, Wallet, ClipboardList, ChevronRight, RefreshCw,
 } from "lucide-react-native"
 import BackButton from "../../components/shared/BackButton"
 import AppText from "../../components/ui/AppText"
-import AppCard from "../../components/ui/AppCard"
 import DashboardFilterBar, { type DashboardPeriodValue } from "../../components/shared/DashboardFilterBar"
 import type { ResolutionStatus } from "../../services/dashboardService"
 import FollowUpListSkeleton from "../../components/shared/FollowUpListSkeleton"
@@ -80,8 +80,17 @@ function EventRow({ icon, text, color, isLast }: { icon: React.ReactNode; text: 
 
 function FollowUpCard({ item }: { item: FollowUp }) {
   const { colors } = useTheme()
+  const router = useRouter()
   const color = outcomeColor(item.outcome)
   const resolved = item.resolvedByPayment
+
+  function goToCustomer() {
+    if (!item.ledgerId) return
+    router.push({
+      pathname: "/customer/[name]",
+      params: { name: item.customerName, customerId: String(item.ledgerId), totalBalance: "", drCr: "", mobile: item.mobile ?? "" },
+    })
+  }
 
   type Event = { icon: React.ReactNode; text: string; color: string }
   const events: Event[] = [
@@ -139,35 +148,36 @@ function FollowUpCard({ item }: { item: FollowUp }) {
   }
 
   return (
-    <AppCard elevation="sm" style={styles.card}>
-      {/* Header: contact + customer + outcome + time ago */}
-      <View style={[styles.cardHeader, { borderBottomColor: colors.border }]}>
-        <ContactIcon method={item.contactMethod} color={colors.text.tertiary as string} />
-        <View style={{ flex: 1 }}>
-          <AppText variant="bodyMedium">{toTitleCase(item.customerName)}</AppText>
-          <AppText variant="caption" color="tertiary" style={{ fontSize: 11 }}>
-            by {toTitleCase(item.staffName)}
+    <TouchableOpacity onPress={goToCustomer} activeOpacity={0.75} disabled={!item.ledgerId}>
+      <View style={[styles.row, { borderBottomColor: colors.border as string }]}>
+        <View style={styles.rowHeader}>
+          <ContactIcon method={item.contactMethod} color={colors.text.tertiary as string} />
+          <View style={{ flex: 1 }}>
+            <AppText variant="bodyMedium" numberOfLines={1}>{toTitleCase(item.customerName)}</AppText>
+            <AppText variant="caption" color="tertiary" style={{ fontSize: 11 }}>
+              by {toTitleCase(item.staffName)}
+            </AppText>
+          </View>
+          <View style={[styles.outcomeBadge, { backgroundColor: color + "22", flexShrink: 1 }]}>
+            <AppText variant="caption" numberOfLines={1} style={{ color, fontSize: 11 }}>{OUTCOME_LABELS[item.outcome]}</AppText>
+          </View>
+          <AppText variant="caption" color="tertiary" numberOfLines={1}>{moment(item.loggedAt).fromNow()}</AppText>
+          {!!item.ledgerId && <ChevronRight size={14} color={colors.text.tertiary} strokeWidth={1.75} />}
+        </View>
+
+        <View style={styles.eventList}>
+          {events.map((ev, i) => (
+            <EventRow key={i} icon={ev.icon} text={ev.text} color={ev.color} isLast={i === events.length - 1} />
+          ))}
+        </View>
+
+        {item.freeTextRemark ? (
+          <AppText variant="caption" color="secondary" numberOfLines={2} style={styles.remark}>
+            "{item.freeTextRemark}"
           </AppText>
-        </View>
-        <View style={[styles.outcomeBadge, { backgroundColor: color + "22" }]}>
-          <AppText variant="caption" style={{ color, fontSize: 11 }}>{OUTCOME_LABELS[item.outcome]}</AppText>
-        </View>
-        <AppText variant="caption" color="tertiary">{moment(item.loggedAt).fromNow()}</AppText>
+        ) : null}
       </View>
-
-      {/* Inner event timeline */}
-      <View style={styles.eventList}>
-        {events.map((ev, i) => (
-          <EventRow key={i} icon={ev.icon} text={ev.text} color={ev.color} isLast={i === events.length - 1} />
-        ))}
-      </View>
-
-      {item.freeTextRemark ? (
-        <AppText variant="caption" color="secondary" numberOfLines={2} style={styles.remark}>
-          "{item.freeTextRemark}"
-        </AppText>
-      ) : null}
-    </AppCard>
+    </TouchableOpacity>
   )
 }
 
@@ -185,7 +195,7 @@ export default function AllFollowupsScreen() {
 
   const isCustom = period === "custom"
 
-  const { data, isLoading, isError, refetch, hasNextPage, isFetchingNextPage, fetchNextPage } = useAllFollowups({
+  const { data, isLoading, isError, refetch, isRefetching, hasNextPage, isFetchingNextPage, fetchNextPage } = useAllFollowups({
     limit: 50,
     period: isCustom ? undefined : period,
     startDate: isCustom && startDate ? toAPIDate(startDate) : undefined,
@@ -208,6 +218,9 @@ export default function AllFollowupsScreen() {
             <AppText variant="caption" color="secondary">{total} total</AppText>
           )}
         </View>
+        <Pressable onPress={() => refetch()} hitSlop={8} style={{ padding: spacing[2], cursor: "pointer" } as any}>
+          {isRefetching ? <ActivityIndicator size="small" color={colors.accent} /> : <RefreshCw size={18} color={colors.text.tertiary} strokeWidth={1.75} />}
+        </Pressable>
       </View>
 
       <View style={styles.section}>
@@ -274,8 +287,7 @@ export default function AllFollowupsScreen() {
           data={followups}
           keyExtractor={(item) => item._id}
           renderItem={({ item }) => <FollowUpCard item={item} />}
-          contentContainerStyle={styles.list}
-          ItemSeparatorComponent={() => <View style={{ height: spacing[3] }} />}
+          contentContainerStyle={{ paddingBottom: spacing[10] }}
           onEndReachedThreshold={0.3}
           onEndReached={() => { if (hasNextPage && !isFetchingNextPage) fetchNextPage() }}
           ListFooterComponent={
@@ -318,14 +330,16 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   summaryItem: { alignItems: "center", gap: 2 },
-  list: { padding: spacing[4], paddingBottom: spacing[10] },
-  card: { gap: spacing[3] },
-  cardHeader: {
+  row: {
+    paddingHorizontal: spacing[5],
+    paddingVertical: spacing[4],
+    borderBottomWidth: 1,
+    gap: spacing[3],
+  },
+  rowHeader: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[2],
-    paddingBottom: spacing[2],
-    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   outcomeBadge: { paddingHorizontal: spacing[2], paddingVertical: 2, borderRadius: 4 },
   eventList: { gap: 0 },

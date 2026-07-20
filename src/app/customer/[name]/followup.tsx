@@ -336,14 +336,14 @@ export default function AddFollowupScreen() {
           )}
 
           {/* ── Next Follow-up Date ── */}
-          <View style={styles.section}>
+          {/* <View style={styles.section}>
             <SectionLabel label="NEXT FOLLOW-UP DATE (OPTIONAL)" />
             <DatePickerField
               value={nextFollowUpDate}
               onChange={setNextFollowUpDate}
               placeholder="Select date"
             />
-          </View>
+          </View> */}
 
           {/* ── Quick Remarks ── */}
           <View style={styles.section}>
@@ -425,7 +425,6 @@ const styles = StyleSheet.create({
   mobileContent: { flex: 1 },
   desktopContent: {
     flex: 1,
-    maxWidth: 860,
     width: "100%",
     alignSelf: "center",
   },

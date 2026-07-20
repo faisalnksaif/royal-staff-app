@@ -2,11 +2,13 @@ import { useInfiniteQuery } from "@tanstack/react-query"
 import { billService } from "../services/billService"
 import type { PaymentVelocityParams, PaymentVelocitySortBy, SortOrder } from "../types"
 
-export function usePaymentVelocity(params: Omit<PaymentVelocityParams, "page"> = {}) {
+export function usePaymentVelocity(params: Omit<PaymentVelocityParams, "page"> & { enabled?: boolean } = {}) {
+  const { enabled = true, ...rest } = params
   return useInfiniteQuery({
-    queryKey: ["payment-velocity", params],
+    queryKey: ["payment-velocity", rest],
+    enabled,
     queryFn: ({ pageParam = 1 }) =>
-      billService.getPaymentVelocity({ ...params, page: pageParam as number, limit: 50 }),
+      billService.getPaymentVelocity({ ...rest, page: pageParam as number, limit: 50 }),
     getNextPageParam: (last) => {
       const { page, pages } = last.pagination
       return page < pages ? page + 1 : undefined

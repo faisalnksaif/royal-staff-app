@@ -156,7 +156,7 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   mobileContent: { flex: 1 },
-  desktopContent: { flex: 1, maxWidth: 640, width: "100%", alignSelf: "center" },
+  desktopContent: { flex: 1 },
   header: {
     paddingHorizontal: spacing[6],
     paddingTop: spacing[12],

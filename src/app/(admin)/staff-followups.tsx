@@ -6,7 +6,7 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router"
 import {
   Phone, MessageSquare, Mail, UserCheck, MessageCircle,
-  CheckCircle2, Calendar, Clock, Wallet, X, ClipboardList, ChevronRight,
+  CheckCircle2, Calendar, Clock, Wallet, X, ClipboardList, ChevronRight, RefreshCw,
 } from "lucide-react-native"
 import BackButton from "../../components/shared/BackButton"
 import AppText from "../../components/ui/AppText"
@@ -181,31 +181,32 @@ function FollowUpCard({ item }: { item: FollowUp }) {
   }
 
   return (
-    <Pressable onPress={goToCustomer} style={({ pressed }) => [{ opacity: pressed ? 0.75 : 1 }, styles.cursorPointer]}>
-    <AppCard elevation="sm" style={styles.card}>
-      <View style={[styles.cardHeader, { borderBottomColor: colors.border }]}>
-        <ContactIcon method={item.contactMethod} color={colors.text.tertiary as string} />
-        <AppText variant="bodyMedium" style={{ flex: 1 }}>{toTitleCase(item.customerName)}</AppText>
-        <View style={[styles.outcomeBadge, styles.cardHeaderBadge, { backgroundColor: color + "22" }]}>
-          <AppText variant="caption" style={{ color, fontSize: 11 }} numberOfLines={1}>{OUTCOME_LABELS[item.outcome]}</AppText>
+    <TouchableOpacity activeOpacity={0.7} onPress={goToCustomer}>
+      <View style={[styles.row, { borderBottomColor: colors.border as string }]}>
+        {/* Header row */}
+        <View style={styles.rowHeader}>
+          <ContactIcon method={item.contactMethod} color={colors.text.tertiary as string} />
+          <AppText variant="bodyMedium" numberOfLines={1} style={{ flex: 1 }}>{toTitleCase(item.customerName)}</AppText>
+          <View style={[styles.outcomeBadge, { backgroundColor: color + "22", flexShrink: 1 }]}>
+            <AppText variant="caption" style={{ color, fontSize: 11 }} numberOfLines={1}>{OUTCOME_LABELS[item.outcome]}</AppText>
+          </View>
+          <AppText variant="caption" color="tertiary" numberOfLines={1}>{moment(item.loggedAt).fromNow()}</AppText>
+          <ChevronRight size={14} color={colors.text.tertiary} strokeWidth={1.75} />
         </View>
-        <AppText variant="caption" color="tertiary" numberOfLines={1}>{moment(item.loggedAt).fromNow()}</AppText>
-        <ChevronRight size={14} color={colors.text.tertiary} strokeWidth={1.75} />
+        {events.length > 0 && (
+          <View style={styles.eventList}>
+            {events.map((ev, i) => (
+              <EventRow key={i} icon={ev.icon} text={ev.text} color={ev.color} isLast={i === events.length - 1} />
+            ))}
+          </View>
+        )}
+        {item.freeTextRemark ? (
+          <AppText variant="caption" color="secondary" numberOfLines={2} style={styles.remark}>
+            "{item.freeTextRemark}"
+          </AppText>
+        ) : null}
       </View>
-      {events.length > 0 && (
-        <View style={styles.eventList}>
-          {events.map((ev, i) => (
-            <EventRow key={i} icon={ev.icon} text={ev.text} color={ev.color} isLast={i === events.length - 1} />
-          ))}
-        </View>
-      )}
-      {item.freeTextRemark ? (
-        <AppText variant="caption" color="secondary" numberOfLines={2} style={styles.remark}>
-          "{item.freeTextRemark}"
-        </AppText>
-      ) : null}
-    </AppCard>
-    </Pressable>
+    </TouchableOpacity>
   )
 }
 
@@ -250,7 +251,8 @@ function CustomerRow({ item }: { item: LedgerCustomerOutstanding }) {
   const hasResolved = (fu?.resolved ?? 0) > 0
 
   return (
-    <Pressable
+    <TouchableOpacity
+      activeOpacity={0.7}
       onPress={() =>
         router.push({
           pathname: "/customer/[name]",
@@ -264,89 +266,64 @@ function CustomerRow({ item }: { item: LedgerCustomerOutstanding }) {
         })
       }
     >
-      {({ pressed }) => (
-        <AppCard
-          elevation="sm"
-          style={[
-            styles.customerCard,
-            { opacity: pressed ? 0.7 : 1 },
-            isOverdue && styles.overdueCard,
-            isSettled && styles.settledCard,
-          ]}
-        >
-          <View style={styles.customerRow}>
-            <View style={styles.customerLeft}>
-              <View style={styles.customerNameRow}>
-                <AppText variant="body">{toTitleCase(item.name)}</AppText>
-                {isSettled && (
-                  <View style={[styles.pill, { backgroundColor: palette.success.default + "22" }]}>
-                    <AppText variant="caption" style={{ color: palette.success.default, fontSize: 10 }}>Settled</AppText>
-                  </View>
-                )}
-                {isOverdue && (
-                  <View style={[styles.pill, { backgroundColor: palette.warning.default + "22" }]}>
-                    <AppText variant="caption" style={{ color: palette.warning.default, fontSize: 10 }}>Overdue</AppText>
-                  </View>
-                )}
-              </View>
-              {hasFollowUp && (
-                <>
-                  <View style={styles.fuRow}>
-                    <View style={[styles.pill, { backgroundColor: palette.neutral[400] + "22" }]}>
-                      <MessageCircle size={10} color={palette.neutral[500]} strokeWidth={1.75} />
-                      <AppText variant="caption" style={{ color: palette.neutral[500], fontSize: 10 }}>
-                        {fu.total} {fu.total === 1 ? "follow-up" : "follow-ups"}
-                      </AppText>
-                    </View>
-                    {hasResolved && (
-                      <View style={[styles.pill, { backgroundColor: palette.success.default + "22" }]}>
-                        <CheckCircle2 size={10} color={palette.success.default} strokeWidth={1.75} />
-                        <AppText variant="caption" style={{ color: palette.success.default, fontSize: 10 }}>
-                          {fu.resolved} paid
-                        </AppText>
-                      </View>
-                    )}
-                  </View>
-                  {fu.last_logged_at && (
-                    <AppText variant="caption" style={{ fontSize: 10, color: palette.neutral[400] }}>
-                      Last: {formatDate(fu.last_logged_at)}
-                    </AppText>
-                  )}
-                  {fu.next_followup_date && (fu?.open ?? 0) > 0 && (
-                    <AppText variant="caption" style={{ fontSize: 10, color: isOverdue ? palette.warning.default : palette.info.default }}>
-                      Next: {formatDate(fu.next_followup_date)}
-                    </AppText>
-                  )}
-                </>
-              )}
-            </View>
-            <View style={styles.customerRight}>
-              <AppText
-                variant="mono"
-                style={{ color: (isSettled || item.outstanding_dr_cr === "Cr") ? palette.success.default : palette.error.default, fontSize: 16 }}
-              >
-                ₹{formatAmount(item.outstanding_balance)}{item.outstanding_dr_cr === "Cr" ? " Cr" : ""}
-              </AppText>
-              {totalPromised > 0 && (
-                <AppText variant="mono" style={{ color: palette.warning.default, fontSize: 11, textAlign: "right" }}>
-                  ₹{formatAmount(totalPromised)} promised
-                </AppText>
-              )}
-            </View>
-          </View>
-          {(isFullPromise || (totalPromised > 0 && item.outstanding_balance > 0)) && (
-            <View style={[styles.progressTrack, { backgroundColor: progressColor + "22" }]}>
-              <Animated.View
-                style={[styles.progressFill, {
-                  backgroundColor: progressColor,
-                  width: animProgress.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] }),
-                }]}
-              />
+      <View style={[styles.row, { borderBottomColor: colors.border as string }]}>
+        <View style={styles.rowHeader}>
+          <AppText variant="body" numberOfLines={1} style={{ flex: 1 }}>{toTitleCase(item.name)}</AppText>
+          {isSettled && (
+            <View style={[styles.pill, { backgroundColor: palette.success.default + "22" }]}>
+              <AppText variant="caption" numberOfLines={1} style={{ color: palette.success.default, fontSize: 10 }}>Settled</AppText>
             </View>
           )}
-        </AppCard>
-      )}
-    </Pressable>
+          {isOverdue && (
+            <View style={[styles.pill, { backgroundColor: palette.warning.default + "22" }]}>
+              <AppText variant="caption" numberOfLines={1} style={{ color: palette.warning.default, fontSize: 10 }}>Overdue</AppText>
+            </View>
+          )}
+          <AppText
+            variant="mono"
+            style={{ color: (isSettled || item.outstanding_dr_cr === "Cr") ? palette.success.default : palette.error.default, fontSize: 13 }}
+          >
+            ₹{formatAmount(item.outstanding_balance)}{item.outstanding_dr_cr === "Cr" ? " Cr" : ""}
+          </AppText>
+          <ChevronRight size={15} color={colors.text.tertiary} strokeWidth={1.75} />
+        </View>
+
+        {hasFollowUp && (
+          <View style={styles.fuRow}>
+            <View style={[styles.pill, { backgroundColor: palette.neutral[400] + "22" }]}>
+              <MessageCircle size={10} color={palette.neutral[500]} strokeWidth={1.75} />
+              <AppText variant="caption" style={{ color: palette.neutral[500], fontSize: 10 }}>
+                {fu.total} {fu.total === 1 ? "follow-up" : "follow-ups"}
+              </AppText>
+            </View>
+            {hasResolved && (
+              <View style={[styles.pill, { backgroundColor: palette.success.default + "22" }]}>
+                <CheckCircle2 size={10} color={palette.success.default} strokeWidth={1.75} />
+                <AppText variant="caption" style={{ color: palette.success.default, fontSize: 10 }}>
+                  {fu.resolved} paid
+                </AppText>
+              </View>
+            )}
+            {totalPromised > 0 && (
+              <AppText variant="caption" style={{ color: palette.warning.default, fontSize: 10 }}>
+                ₹{formatAmount(totalPromised)} promised
+              </AppText>
+            )}
+          </View>
+        )}
+
+        {(isFullPromise || (totalPromised > 0 && item.outstanding_balance > 0)) && (
+          <View style={[styles.progressTrack, { backgroundColor: progressColor + "22" }]}>
+            <Animated.View
+              style={[styles.progressFill, {
+                backgroundColor: progressColor,
+                width: animProgress.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] }),
+              }]}
+            />
+          </View>
+        )}
+      </View>
+    </TouchableOpacity>
   )
 }
 
@@ -415,8 +392,7 @@ function CustomersTab({ staffId }: { staffId: number }) {
           </ScrollView>
         </View>
       }
-      contentContainerStyle={styles.list}
-      ItemSeparatorComponent={() => <View style={{ height: spacing[2] }} />}
+      contentContainerStyle={{ paddingBottom: spacing[10] }}
       onEndReachedThreshold={0.3}
       onEndReached={() => { if (hasNextPage && !isFetchingNextPage) fetchNextPage() }}
       ListEmptyComponent={
@@ -474,7 +450,7 @@ export default function StaffFollowupsScreen() {
 
   const isCustom = period === "custom"
 
-  const { data, isLoading, isError, refetch, hasNextPage, isFetchingNextPage, fetchNextPage } = useAllFollowups({
+  const { data, isLoading, isError, refetch, isRefetching, hasNextPage, isFetchingNextPage, fetchNextPage } = useAllFollowups({
     staffId,
     limit: 50,
     period: isCustom ? undefined : period,
@@ -495,6 +471,9 @@ export default function StaffFollowupsScreen() {
         <View style={{ flex: 1 }}>
           <AppText variant="heading3">{params.staffName ?? "Staff Follow-ups"}</AppText>
         </View>
+        <Pressable onPress={() => refetch()} hitSlop={8} style={{ padding: spacing[2], cursor: "pointer" } as any}>
+          {isRefetching ? <ActivityIndicator size="small" color={colors.accent} /> : <RefreshCw size={18} color={colors.text.tertiary} strokeWidth={1.75} />}
+        </Pressable>
       </View>
 
       {/* Tabs */}
@@ -586,8 +565,7 @@ export default function StaffFollowupsScreen() {
               data={followups}
               keyExtractor={(item) => item._id}
               renderItem={({ item }) => <FollowUpCard item={item} />}
-              contentContainerStyle={styles.list}
-              ItemSeparatorComponent={() => <View style={{ height: spacing[3] }} />}
+              contentContainerStyle={{ paddingBottom: spacing[10] }}
               onEndReachedThreshold={0.3}
               onEndReached={() => { if (hasNextPage && !isFetchingNextPage) fetchNextPage() }}
               ListFooterComponent={isFetchingNextPage ? <ActivityIndicator color={colors.accent} style={{ marginVertical: spacing[4] }} /> : null}
@@ -648,15 +626,17 @@ const styles = StyleSheet.create({
   summaryItem: { alignItems: "center", gap: 2 },
   list: { padding: spacing[4], paddingBottom: spacing[10] },
   // ─── follow-up card ───────────────────────────────────────────────────────────
-  card: { gap: spacing[3] },
-  cardHeader: {
+  row: {
+    paddingHorizontal: spacing[5],
+    paddingVertical: spacing[4],
+    borderBottomWidth: 1,
+    gap: spacing[3],
+  },
+  rowHeader: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[2],
-    paddingBottom: spacing[2],
-    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  cardHeaderBadge: { flexShrink: 1 },
   outcomeBadge: { paddingHorizontal: spacing[2], paddingVertical: 2, borderRadius: 4 },
   eventList: { gap: 0 },
   eventRow: { flexDirection: "row" },

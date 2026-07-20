@@ -1,13 +1,12 @@
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import {
   View, FlatList, StyleSheet, Pressable, TouchableOpacity,
   ActivityIndicator, Animated, Easing, ScrollView, Platform, UIManager,
 } from "react-native"
-import { useRouter } from "expo-router"
+import { useRouter, useFocusEffect } from "expo-router"
 import { CheckCircle2, MessageCircle, X, ChevronRight } from "lucide-react-native"
 import BackButton from "../../components/shared/BackButton"
 import AppText from "../../components/ui/AppText"
-import AppCard from "../../components/ui/AppCard"
 import AppInput from "../../components/ui/AppInput"
 import { useTheme } from "../../providers/ThemeProvider"
 import { spacing, colors as palette } from "../../constants/theme"
@@ -80,8 +79,11 @@ function OutstandingRow({ item }: { item: LedgerCustomerOutstanding }) {
   const isSettled = item.outstanding_balance === 0 && (fu?.open ?? 0) === 0 && (fu?.resolved ?? 0) > 0
   const hasResolved = (fu?.resolved ?? 0) > 0
 
+  const { colors } = useTheme()
+
   return (
-    <Pressable
+    <TouchableOpacity
+      activeOpacity={0.7}
       onPress={() =>
         router.push({
           pathname: "/customer/[name]",
@@ -95,121 +97,87 @@ function OutstandingRow({ item }: { item: LedgerCustomerOutstanding }) {
         })
       }
     >
-      {({ pressed }) => (
-        <AppCard
-          elevation="sm"
-          style={[
-            styles.customerCard,
-            { opacity: pressed ? 0.7 : 1 },
-            isOverdue && styles.overdueCard,
-            isSettled && styles.settledCard,
-          ]}
-        >
-          <View style={styles.customerRow}>
-            <View style={styles.customerLeft}>
-              <View style={styles.customerNameRow}>
-                <AppText variant="body">{toTitleCase(item.name)}</AppText>
-                {isSettled && (
-                  <View style={[styles.pill, { backgroundColor: palette.success.default + "22" }]}>
-                    <AppText variant="caption" style={{ color: palette.success.default, fontSize: 10 }}>Settled</AppText>
-                  </View>
-                )}
-                {isOverdue && (
-                  <View style={[styles.pill, { backgroundColor: palette.warning.default + "22" }]}>
-                    <AppText variant="caption" style={{ color: palette.warning.default, fontSize: 10 }}>Overdue</AppText>
-                  </View>
-                )}
-              </View>
-              {/* retention + velocity hints */}
-              <View style={styles.fuRow}>
-                {item.retention_status && item.retention_status !== "never_purchased" && (() => {
-                  const color = RETENTION_COLOR[item.retention_status]
-                  return (
-                    <View style={[styles.pill, { backgroundColor: color + "18" }]}>
-                      <AppText variant="caption" numberOfLines={1} style={{ color, fontSize: 10 }}>
-                        {RETENTION_STATUS_LABEL[item.retention_status]}
-                      </AppText>
-                    </View>
-                  )
-                })()}
-                {item.days_since_last_purchase != null && (
-                  <AppText variant="caption" style={{ fontSize: 10, color: palette.neutral[400] }}>
-                    {item.days_since_last_purchase}d since purchase
-                  </AppText>
-                )}
-                {item.avg_days_to_clear != null && (
-                  <AppText variant="caption" style={{ fontSize: 10, color: palette.neutral[400] }}>
-                    · clears in {item.avg_days_to_clear.toFixed(0)}d
-                  </AppText>
-                )}
-              </View>
-              {item.days_since_last_payment != null && (
-                <AppText variant="caption" style={{ fontSize: 10, color: palette.neutral[400] }}>
-                  Last paid{" "}
-                  <AppText variant="caption" style={{ fontSize: 10, color: item.days_since_last_payment <= 30 ? palette.success.default : item.days_since_last_payment <= 90 ? palette.warning.default : palette.error.default }}>
-                    {item.days_since_last_payment}d ago
-                  </AppText>
-                  {item.last_payment_amount != null ? ` · ₹${formatAmount(item.last_payment_amount)}` : ""}
-                </AppText>
-              )}
-              {hasFollowUp && (
-                <>
-                  <View style={styles.fuRow}>
-                    <View style={[styles.pill, { backgroundColor: palette.neutral[400] + "22" }]}>
-                      <MessageCircle size={10} color={palette.neutral[500]} strokeWidth={1.75} />
-                      <AppText variant="caption" style={{ color: palette.neutral[500], fontSize: 10 }}>
-                        {fu.total} {fu.total === 1 ? "follow-up" : "follow-ups"}
-                      </AppText>
-                    </View>
-                    {hasResolved && (
-                      <View style={[styles.pill, { backgroundColor: palette.success.default + "22" }]}>
-                        <CheckCircle2 size={10} color={palette.success.default} strokeWidth={1.75} />
-                        <AppText variant="caption" style={{ color: palette.success.default, fontSize: 10 }}>
-                          {fu.resolved} paid
-                        </AppText>
-                      </View>
-                    )}
-                  </View>
-                  {fu.last_logged_at && (
-                    <AppText variant="caption" style={{ fontSize: 10, color: palette.neutral[400] }}>
-                      Last: {formatDate(fu.last_logged_at)}
-                    </AppText>
-                  )}
-                  {fu.next_followup_date && (fu?.open ?? 0) > 0 && (
-                    <AppText variant="caption" style={{ fontSize: 10, color: isOverdue ? palette.warning.default : palette.info.default }}>
-                      Next: {formatDate(fu.next_followup_date)}
-                    </AppText>
-                  )}
-                </>
-              )}
-            </View>
-            <View style={styles.customerRight}>
-              <AppText
-                variant="mono"
-                style={{ color: (isSettled || item.outstanding_dr_cr === "Cr") ? palette.success.default : palette.error.default, fontSize: 16 }}
-              >
-                ₹{formatAmount(item.outstanding_balance)}{item.outstanding_dr_cr === "Cr" ? " Cr" : ""}
-              </AppText>
-              {totalPromised > 0 && (
-                <AppText variant="mono" style={{ color: palette.warning.default, fontSize: 11, textAlign: "right" }}>
-                  ₹{formatAmount(totalPromised)} promised
-                </AppText>
-              )}
-            </View>
-          </View>
-          {(isFullPromise || (totalPromised > 0 && item.outstanding_balance > 0)) && (
-            <View style={[styles.progressTrack, { backgroundColor: progressColor + "22" }]}>
-              <Animated.View
-                style={[styles.progressFill, {
-                  backgroundColor: progressColor,
-                  width: animProgress.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] }),
-                }]}
-              />
+      <View style={[styles.retentionRow, { borderBottomColor: colors.border as string }]}>
+        <View style={styles.customerNameRow}>
+          <AppText variant="body" numberOfLines={1} style={{ flex: 1 }}>{toTitleCase(item.name)}</AppText>
+          {isSettled && (
+            <View style={[styles.pill, { backgroundColor: palette.success.default + "22" }]}>
+              <AppText variant="caption" numberOfLines={1} style={{ color: palette.success.default, fontSize: 10 }}>Settled</AppText>
             </View>
           )}
-        </AppCard>
-      )}
-    </Pressable>
+          {isOverdue && (
+            <View style={[styles.pill, { backgroundColor: palette.warning.default + "22" }]}>
+              <AppText variant="caption" numberOfLines={1} style={{ color: palette.warning.default, fontSize: 10 }}>Overdue</AppText>
+            </View>
+          )}
+          <AppText
+            variant="mono"
+            style={{ color: (isSettled || item.outstanding_dr_cr === "Cr") ? palette.success.default : palette.error.default, fontSize: 13 }}
+          >
+            ₹{formatAmount(item.outstanding_balance)}{item.outstanding_dr_cr === "Cr" ? " Cr" : ""}
+          </AppText>
+          <ChevronRight size={15} color={colors.text.tertiary} strokeWidth={1.75} />
+        </View>
+
+        <View style={styles.fuRow}>
+          {item.retention_status && item.retention_status !== "never_purchased" && (() => {
+            const color = RETENTION_COLOR[item.retention_status]
+            return (
+              <View style={[styles.pill, { backgroundColor: color + "18" }]}>
+                <AppText variant="caption" numberOfLines={1} style={{ color, fontSize: 10 }}>
+                  {RETENTION_STATUS_LABEL[item.retention_status]}
+                </AppText>
+              </View>
+            )
+          })()}
+          {item.days_since_last_purchase != null && (
+            <AppText variant="caption" style={{ fontSize: 10, color: palette.neutral[400] }}>
+              {item.days_since_last_purchase}d since purchase
+            </AppText>
+          )}
+          {item.avg_days_to_clear != null && (
+            <AppText variant="caption" style={{ fontSize: 10, color: palette.neutral[400] }}>
+              · clears in {item.avg_days_to_clear.toFixed(0)}d
+            </AppText>
+          )}
+        </View>
+
+        {hasFollowUp && (
+          <View style={styles.fuRow}>
+            <View style={[styles.pill, { backgroundColor: palette.neutral[400] + "22" }]}>
+              <MessageCircle size={10} color={palette.neutral[500]} strokeWidth={1.75} />
+              <AppText variant="caption" style={{ color: palette.neutral[500], fontSize: 10 }}>
+                {fu.total} {fu.total === 1 ? "follow-up" : "follow-ups"}
+              </AppText>
+            </View>
+            {hasResolved && (
+              <View style={[styles.pill, { backgroundColor: palette.success.default + "22" }]}>
+                <CheckCircle2 size={10} color={palette.success.default} strokeWidth={1.75} />
+                <AppText variant="caption" style={{ color: palette.success.default, fontSize: 10 }}>
+                  {fu.resolved} paid
+                </AppText>
+              </View>
+            )}
+            {totalPromised > 0 && (
+              <AppText variant="caption" style={{ color: palette.warning.default, fontSize: 10 }}>
+                ₹{formatAmount(totalPromised)} promised
+              </AppText>
+            )}
+          </View>
+        )}
+
+        {(isFullPromise || (totalPromised > 0 && item.outstanding_balance > 0)) && (
+          <View style={[styles.progressTrack, { backgroundColor: progressColor + "22", marginTop: spacing[2] }]}>
+            <Animated.View
+              style={[styles.progressFill, {
+                backgroundColor: progressColor,
+                width: animProgress.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] }),
+              }]}
+            />
+          </View>
+        )}
+      </View>
+    </TouchableOpacity>
   )
 }
 
@@ -284,7 +252,8 @@ function RetentionRow({ customer }: { customer: RetentionCustomer }) {
   const color = RETENTION_COLOR[customer.status]
 
   return (
-    <Pressable
+    <TouchableOpacity
+      activeOpacity={0.7}
       onPress={() =>
         router.push({
           pathname: "/customer/[name]",
@@ -298,43 +267,44 @@ function RetentionRow({ customer }: { customer: RetentionCustomer }) {
           },
         })
       }
-      style={({ pressed }) => [styles.retentionRow, { borderBottomColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
     >
-      <View style={styles.retentionRowMain}>
-        <View style={styles.customerNameRow}>
-          <AppText variant="body" numberOfLines={1} style={{ flex: 1 }}>{toTitleCase(customer.name)}</AppText>
-          <View style={[styles.pill, { backgroundColor: color + "18" }]}>
-            <AppText variant="caption" numberOfLines={1} style={{ color, fontSize: 10 }}>{RETENTION_STATUS_LABEL[customer.status]}</AppText>
-          </View>
-          <AppText variant="mono" style={{
-            color: customer.outstanding_balance === 0 || customer.outstanding_dr_cr === "Cr"
-              ? palette.success.default
-              : palette.error.default,
-            fontSize: 13,
-          }}>
-            ₹{formatAmount(customer.outstanding_balance)}{customer.outstanding_dr_cr === "Cr" ? " Cr" : ""}
-          </AppText>
-          <ChevronRight size={15} color={colors.text.tertiary} strokeWidth={1.75} />
-        </View>
-        <View style={styles.fuRow}>
-          {customer.days_since_last_purchase != null ? (
-            <AppText variant="caption" color="secondary" style={{ fontSize: 12 }}>
-              Last purchase <AppText variant="caption" style={{ color, fontSize: 12 }}>{customer.days_since_last_purchase}d ago</AppText>
+      <View style={[styles.retentionRow, { borderBottomColor: colors.border as string }]}>
+        <View style={styles.retentionRowMain}>
+          <View style={styles.customerNameRow}>
+            <AppText variant="body" numberOfLines={1} style={{ flex: 1 }}>{toTitleCase(customer.name)}</AppText>
+            <View style={[styles.pill, { backgroundColor: color + "18" }]}>
+              <AppText variant="caption" numberOfLines={1} style={{ color, fontSize: 10 }}>{RETENTION_STATUS_LABEL[customer.status]}</AppText>
+            </View>
+            <AppText variant="mono" style={{
+              color: customer.outstanding_balance === 0 || customer.outstanding_dr_cr === "Cr"
+                ? palette.success.default
+                : palette.error.default,
+              fontSize: 13,
+            }}>
+              ₹{formatAmount(customer.outstanding_balance)}{customer.outstanding_dr_cr === "Cr" ? " Cr" : ""}
             </AppText>
-          ) : (
-            <AppText variant="caption" color="tertiary" style={{ fontSize: 12 }}>No purchases recorded</AppText>
+            <ChevronRight size={15} color={colors.text.tertiary} strokeWidth={1.75} />
+          </View>
+          <View style={styles.fuRow}>
+            {customer.days_since_last_purchase != null ? (
+              <AppText variant="caption" color="secondary" style={{ fontSize: 12 }}>
+                Last purchase <AppText variant="caption" style={{ color, fontSize: 12 }}>{customer.days_since_last_purchase}d ago</AppText>
+              </AppText>
+            ) : (
+              <AppText variant="caption" color="tertiary" style={{ fontSize: 12 }}>No purchases recorded</AppText>
+            )}
+            <AppText variant="caption" color="tertiary" style={{ fontSize: 12 }}>
+              · {customer.total_purchases} purchase{customer.total_purchases !== 1 ? "s" : ""}
+            </AppText>
+          </View>
+          {customer.last_purchase_date && (
+            <AppText variant="caption" color="tertiary" style={{ fontSize: 11 }}>
+              Last: {new Date(customer.last_purchase_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+            </AppText>
           )}
-          <AppText variant="caption" color="tertiary" style={{ fontSize: 12 }}>
-            · {customer.total_purchases} purchase{customer.total_purchases !== 1 ? "s" : ""}
-          </AppText>
         </View>
-        {customer.last_purchase_date && (
-          <AppText variant="caption" color="tertiary" style={{ fontSize: 11 }}>
-            Last: {new Date(customer.last_purchase_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
-          </AppText>
-        )}
       </View>
-    </Pressable>
+    </TouchableOpacity>
   )
 }
 
@@ -373,7 +343,8 @@ function VelocityRow({ customer, companyAvg }: { customer: PaymentVelocityCustom
   const router = useRouter()
   const color = velocityColor(customer.avg_days_to_clear, companyAvg)
   return (
-    <Pressable
+    <TouchableOpacity
+      activeOpacity={0.7}
       onPress={() =>
         router.push({
           pathname: "/customer/[name]",
@@ -387,48 +358,49 @@ function VelocityRow({ customer, companyAvg }: { customer: PaymentVelocityCustom
           },
         })
       }
-      style={({ pressed }) => [styles.retentionRow, { borderBottomColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
     >
-      <View style={styles.velRowInner}>
-        <View style={{ flex: 1, gap: 3 }}>
-          <AppText variant="body" numberOfLines={1}>{toTitleCase(customer.name)}</AppText>
-          <View style={styles.fuRow}>
-            <AppText variant="caption" color="secondary" style={{ fontSize: 12 }}>
-              Clears in <AppText variant="caption" style={{ color, fontSize: 12 }}>{customer.avg_days_to_clear.toFixed(1)}d</AppText> avg
-            </AppText>
-            <AppText variant="caption" color="tertiary" style={{ fontSize: 12 }}>
-              · {customer.cleared_pct.toFixed(0)}% cleared
-            </AppText>
-          </View>
-          {customer.days_since_last_payment != null && (
-            <AppText variant="caption" color="tertiary" style={{ fontSize: 11 }}>
-              Last paid{" "}
-              <AppText variant="caption" style={{ fontSize: 11, color: customer.days_since_last_payment <= 30 ? palette.success.default : customer.days_since_last_payment <= 90 ? palette.warning.default : palette.error.default }}>
-                {customer.days_since_last_payment}d ago
+      <View style={[styles.retentionRow, { borderBottomColor: colors.border as string }]}>
+        <View style={styles.velRowInner}>
+          <View style={{ flex: 1, gap: 3 }}>
+            <AppText variant="body" numberOfLines={1}>{toTitleCase(customer.name)}</AppText>
+            <View style={styles.fuRow}>
+              <AppText variant="caption" color="secondary" style={{ fontSize: 12 }}>
+                Clears in <AppText variant="caption" style={{ color, fontSize: 12 }}>{customer.avg_days_to_clear.toFixed(1)}d</AppText> avg
               </AppText>
-              {customer.last_payment_amount != null && (
-                <AppText variant="caption" color="tertiary" style={{ fontSize: 11 }}>{" "}· ₹{formatAmount(customer.last_payment_amount)}</AppText>
-              )}
+              <AppText variant="caption" color="tertiary" style={{ fontSize: 12 }}>
+                · {customer.cleared_pct.toFixed(0)}% cleared
+              </AppText>
+            </View>
+            {customer.days_since_last_payment != null && (
+              <AppText variant="caption" color="tertiary" style={{ fontSize: 11 }}>
+                Last paid{" "}
+                <AppText variant="caption" style={{ fontSize: 11, color: customer.days_since_last_payment <= 30 ? palette.success.default : customer.days_since_last_payment <= 90 ? palette.warning.default : palette.error.default }}>
+                  {customer.days_since_last_payment}d ago
+                </AppText>
+                {customer.last_payment_amount != null && (
+                  <AppText variant="caption" color="tertiary" style={{ fontSize: 11 }}>{" "}· ₹{formatAmount(customer.last_payment_amount)}</AppText>
+                )}
+              </AppText>
+            )}
+          </View>
+          <View style={{ alignItems: "flex-end", gap: 3 }}>
+            <AppText variant="mono" style={{
+              color: customer.outstanding_balance === 0 || customer.outstanding_dr_cr === "Cr"
+                ? palette.success.default
+                : palette.error.default,
+              fontSize: 14,
+            }}>
+              ₹{formatAmount(customer.outstanding_balance)}{customer.outstanding_dr_cr === "Cr" ? " Cr" : ""}
             </AppText>
-          )}
+            <ChevronRight size={15} color={colors.text.tertiary} strokeWidth={1.75} />
+          </View>
         </View>
-        <View style={{ alignItems: "flex-end", gap: 3 }}>
-          <AppText variant="mono" style={{
-            color: customer.outstanding_balance === 0 || customer.outstanding_dr_cr === "Cr"
-              ? palette.success.default
-              : palette.error.default,
-            fontSize: 14,
-          }}>
-            ₹{formatAmount(customer.outstanding_balance)}{customer.outstanding_dr_cr === "Cr" ? " Cr" : ""}
-          </AppText>
-          <ChevronRight size={15} color={colors.text.tertiary} strokeWidth={1.75} />
+        {/* cleared progress bar */}
+        <View style={[styles.progressTrack, { backgroundColor: color + "22", marginTop: spacing[2] }]}>
+          <View style={[styles.progressFill, { backgroundColor: color, width: `${Math.min(customer.cleared_pct, 100)}%` as any }]} />
         </View>
       </View>
-      {/* cleared progress bar */}
-      <View style={[styles.progressTrack, { backgroundColor: color + "22", marginTop: spacing[2] }]}>
-        <View style={[styles.progressFill, { backgroundColor: color, width: `${Math.min(customer.cleared_pct, 100)}%` as any }]} />
-      </View>
-    </Pressable>
+    </TouchableOpacity>
   )
 }
 
@@ -462,10 +434,10 @@ export default function AllCustomersScreen() {
   }, [retSearch])
 
   const { data: outData, isLoading: outLoading, isError: outError, refetch, hasNextPage: outHasNext, isFetchingNextPage: outFetching, fetchNextPage: outFetchNext } =
-    useAllCustomers({ limit: 50, search: outSearchDebounced || undefined, filter: outFilter, sortBy: outSort })
+    useAllCustomers({ limit: 50, search: outSearchDebounced || undefined, filter: outFilter, sortBy: outSort, enabled: mainTab === "outstanding" })
 
-  const { data: retData, isLoading: retLoading, isError: retError, hasNextPage: retHasNext, isFetchingNextPage: retFetching, fetchNextPage: retFetchNext } =
-    useRetention({ status: retFilter, search: retSearchDebounced || undefined, sortBy: retSortBy, order: retOrder })
+  const { data: retData, isLoading: retLoading, isError: retError, refetch: retRefetch, hasNextPage: retHasNext, isFetchingNextPage: retFetching, fetchNextPage: retFetchNext } =
+    useRetention({ status: retFilter, search: retSearchDebounced || undefined, sortBy: retSortBy, order: retOrder, enabled: mainTab === "retention" })
 
   // velocity state
   const [velSearch, setVelSearch] = useState("")
@@ -477,8 +449,14 @@ export default function AllCustomersScreen() {
     return () => clearTimeout(t)
   }, [velSearch])
 
-  const { data: velData, isLoading: velLoading, isError: velError, hasNextPage: velHasNext, isFetchingNextPage: velFetching, fetchNextPage: velFetchNext } =
-    usePaymentVelocity({ search: velSearchDebounced || undefined, sortBy: velSortBy, order: velOrder })
+  const { data: velData, isLoading: velLoading, isError: velError, refetch: velRefetch, hasNextPage: velHasNext, isFetchingNextPage: velFetching, fetchNextPage: velFetchNext } =
+    usePaymentVelocity({ search: velSearchDebounced || undefined, sortBy: velSortBy, order: velOrder, enabled: mainTab === "velocity" })
+
+  useFocusEffect(useCallback(() => {
+    if (mainTab === "outstanding") refetch()
+    else if (mainTab === "retention") retRefetch()
+    else if (mainTab === "velocity") velRefetch()
+  }, [mainTab]))
 
   const customers = outData?.pages.flatMap((p) => p.data) ?? []
   const total = outData?.pages[0]?.pagination.total ?? 0
@@ -593,11 +571,11 @@ export default function AllCustomersScreen() {
             </View>
           ) : (
             <FlatList
+              style={{ flex: 1 }}
               data={customers}
               keyExtractor={(item) => String(item.ledger_id)}
               renderItem={({ item }) => <OutstandingRow item={item} />}
-              contentContainerStyle={styles.list}
-              ItemSeparatorComponent={() => <View style={{ height: spacing[2] }} />}
+              contentContainerStyle={{ paddingBottom: spacing[12] }}
               onEndReachedThreshold={0.3}
               onEndReached={() => { if (outHasNext && !outFetching) outFetchNext() }}
               ListFooterComponent={outFetching ? <ActivityIndicator color={colors.accent} style={{ marginVertical: spacing[4] }} /> : null}
@@ -763,6 +741,7 @@ export default function AllCustomersScreen() {
             <View style={styles.center}><AppText color="secondary">Couldn't load retention data.</AppText></View>
           ) : (
             <FlatList
+              style={{ flex: 1 }}
               data={retCustomers}
               keyExtractor={(item) => String(item.ledger_id)}
               renderItem={({ item }) => <RetentionRow customer={item} />}
@@ -841,7 +820,7 @@ const styles = StyleSheet.create({
   retentionRow: {
     paddingHorizontal: spacing[5],
     paddingVertical: spacing[4],
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: 1,
   },
   retentionRowMain: { gap: spacing[1] },
   velRowInner: {

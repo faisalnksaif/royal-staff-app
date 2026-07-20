@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react"
 import { View, FlatList, ActivityIndicator, StyleSheet, Pressable } from "react-native"
 import { useQuery, useMutation } from "@tanstack/react-query"
-import { Check, X, AlertCircle } from "lucide-react-native"
+import { Check, X, AlertCircle, RefreshCw } from "lucide-react-native"
 import moment from "moment"
 import BackButton from "../../components/shared/BackButton"
 import AppText from "../../components/ui/AppText"
@@ -118,17 +118,22 @@ export default function AppearanceScreen() {
   const [initialized, setInitialized] = useState(false)
   const [updatingIds, setUpdatingIds] = useState<Set<number>>(new Set())
 
-  const { data: staffData, isLoading: isLoadingStaff } = useQuery({
+  const { data: staffData, isLoading: isLoadingStaff, refetch: refetchStaff } = useQuery({
     queryKey: ["staff"],
     queryFn: () => attendanceService.getStaff(),
   })
 
-  const { data: appearanceData, isLoading: isLoadingAppearance } = useQuery({
+  const { data: appearanceData, isLoading: isLoadingAppearance, isRefetching, refetch: refetchAppearance } = useQuery({
     queryKey: ["appearance-today"],
     queryFn: () => appearanceService.getTodayAppearance(),
   })
 
   const isLoading = isLoadingStaff || isLoadingAppearance
+
+  function refetch() {
+    refetchStaff()
+    refetchAppearance()
+  }
 
   useEffect(() => {
     if (staffData?.data && !isLoadingAppearance && !initialized) {
@@ -211,6 +216,12 @@ export default function AppearanceScreen() {
             )}
           </View>
         )}
+        <Pressable onPress={refetch} hitSlop={8} style={{ padding: spacing[2] }}>
+          {isRefetching
+            ? <ActivityIndicator size="small" color={colors.accent} />
+            : <RefreshCw size={18} color={colors.text.tertiary} strokeWidth={1.75} />
+          }
+        </Pressable>
       </View>
 
       {/* Legend */}

@@ -6,14 +6,14 @@ import {
   StyleSheet,
   Pressable,
   Modal,
+  TouchableOpacity,
 } from "react-native"
 import { useRouter } from "expo-router"
 import { useQuery } from "@tanstack/react-query"
-import { Fingerprint, CheckCircle, XCircle, X, UserPlus, ChevronLeft } from "lucide-react-native"
+import { Fingerprint, CheckCircle, XCircle, X, UserPlus, ChevronLeft, RefreshCw } from "lucide-react-native"
 import BackButton from "../../components/shared/BackButton"
 import moment from "moment"
 import AppText from "../../components/ui/AppText"
-import AppCard from "../../components/ui/AppCard"
 import AppInput from "../../components/ui/AppInput"
 import AppButton from "../../components/ui/AppButton"
 import FingerprintScanner from "../../components/shared/FingerprintScanner"
@@ -77,6 +77,7 @@ function SummaryBar({
 // ─── AttendanceRow ────────────────────────────────────────────────────────────
 
 function AttendanceRow({ record }: { record: AttendanceRecord }) {
+  const { colors } = useTheme()
   const color = statusColor(record.status)
   const initials = record.staffName
     .split(" ").slice(0, 2).map((w) => w[0] ?? "").join("").toUpperCase()
@@ -84,7 +85,7 @@ function AttendanceRow({ record }: { record: AttendanceRecord }) {
   const firstSession = record.sessions?.[0]
 
   return (
-    <AppCard elevation="sm" style={styles.rowCard}>
+    <View style={[styles.row, { borderBottomColor: colors.border as string }]}>
       <View style={styles.rowContent}>
         <View style={[styles.avatar, { backgroundColor: color + "22" }]}>
           <AppText variant="bodyMedium" style={{ color }}>{initials}</AppText>
@@ -119,7 +120,7 @@ function AttendanceRow({ record }: { record: AttendanceRecord }) {
           </AppText>
         </View>
       </View>
-    </AppCard>
+    </View>
   )
 }
 
@@ -197,26 +198,24 @@ function FingerprintModal({
           data={filtered}
           keyExtractor={(item) => String(item.id)}
           renderItem={({ item }) => (
-            <Pressable
+            <TouchableOpacity
+              activeOpacity={0.7}
               onPress={() => { setSelectedStaff(item); setPhase("scan") }}
             >
-              {({ pressed }) => (
-                <AppCard elevation="sm" style={[styles.staffCard, { opacity: pressed ? 0.7 : 1 }]}>
-                  <View style={[styles.avatar, { backgroundColor: colors.accentSubtle }]}>
-                    <AppText variant="bodyMedium" style={{ color: colors.accent }}>
-                      {item.name.slice(0, 2).toUpperCase()}
-                    </AppText>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <AppText variant="bodyMedium">{toTitleCase(item.name)}</AppText>
-                    <AppText variant="caption" color="secondary">ID: {item.id}</AppText>
-                  </View>
-                </AppCard>
-              )}
-            </Pressable>
+              <View style={[styles.staffRow, { borderBottomColor: colors.border as string }]}>
+                <View style={[styles.avatar, { backgroundColor: colors.accentSubtle }]}>
+                  <AppText variant="bodyMedium" style={{ color: colors.accent }}>
+                    {item.name.slice(0, 2).toUpperCase()}
+                  </AppText>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <AppText variant="bodyMedium">{toTitleCase(item.name)}</AppText>
+                  <AppText variant="caption" color="secondary">ID: {item.id}</AppText>
+                </View>
+              </View>
+            </TouchableOpacity>
           )}
-          contentContainerStyle={styles.list}
-          ItemSeparatorComponent={() => <View style={{ height: spacing[2] }} />}
+          contentContainerStyle={{ paddingBottom: spacing[10] }}
           ListEmptyComponent={
             staffLoading ? (
               <ActivityIndicator size="large" color={colors.accent} style={styles.center} />
@@ -349,6 +348,9 @@ export default function AttendanceScreen() {
           <AppText variant="heading3">Attendance</AppText>
           <AppText variant="caption" color="tertiary">{moment().format("D MMM YYYY")}</AppText>
         </View>
+        <Pressable onPress={() => refetch()} hitSlop={8} style={{ padding: spacing[2] }}>
+          {isRefetching ? <ActivityIndicator size="small" color={colors.accent} /> : <RefreshCw size={18} color={colors.text.tertiary} strokeWidth={1.75} />}
+        </Pressable>
         <Pressable
           onPress={() => router.push("/(admin)/enroll")}
           style={styles.enrollBtn}
@@ -371,8 +373,7 @@ export default function AttendanceScreen() {
         data={records}
         keyExtractor={(item) => String(item.staffId)}
         renderItem={({ item }) => <AttendanceRow record={item} />}
-        contentContainerStyle={styles.list}
-        ItemSeparatorComponent={() => <View style={{ height: spacing[2] }} />}
+        contentContainerStyle={{ paddingBottom: spacing[20] }}
         refreshing={isRefetching}
         onRefresh={refetch}
         ListEmptyComponent={
@@ -441,18 +442,20 @@ const styles = StyleSheet.create({
   summaryItem: { alignItems: "center", gap: spacing[1], paddingHorizontal: spacing[4] },
   summaryDivider: { width: StyleSheet.hairlineWidth, height: 32 },
 
-  list: { padding: spacing[4], paddingBottom: spacing[20] },
   center: {
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: spacing[16],
   },
 
-  rowCard: { padding: 0, overflow: "hidden" },
+  row: {
+    borderBottomWidth: 1,
+  },
   rowContent: {
     flexDirection: "row",
     alignItems: "center",
-    padding: spacing[4],
+    paddingHorizontal: spacing[5],
+    paddingVertical: spacing[4],
     gap: spacing[3],
   },
   avatar: {
@@ -502,10 +505,12 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[3],
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  staffCard: {
+  staffRow: {
     flexDirection: "row",
     alignItems: "center",
-    padding: spacing[4],
+    paddingHorizontal: spacing[5],
+    paddingVertical: spacing[4],
+    borderBottomWidth: 1,
     gap: spacing[3],
   },
 
