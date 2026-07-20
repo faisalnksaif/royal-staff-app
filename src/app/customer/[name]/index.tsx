@@ -27,6 +27,7 @@ import {
   ClipboardList,
   TrendingUp,
   TrendingDown,
+  BellRing,
 } from "lucide-react-native"
 import { Linking } from "react-native"
 import AppText from "../../../components/ui/AppText"
@@ -602,6 +603,19 @@ export default function CustomerDetailScreen() {
                 <MessageCircle size={11} color={palette.success.default} strokeWidth={1.75} />
                 <AppText variant="caption" style={{ color: palette.success.default }}>WhatsApp</AppText>
               </TouchableOpacity>
+              {!isSettled && hasBalance && balanceDrCr === "Dr" && (
+                <TouchableOpacity
+                  activeOpacity={0.6}
+                  style={styles.contactBtn}
+                  onPress={() => {
+                    const msg = `Dear ${toTitleCase(name)},\n\nThis is a friendly reminder that you have an outstanding balance of ₹${formatAmount(balanceAmount!)}.\n\nKindly clear the dues at your earliest convenience.\n\nThank you!\nRoyal Glass Vengara`
+                    Linking.openURL(`whatsapp://send?phone=${mobile}&text=${encodeURIComponent(msg)}`)
+                  }}
+                >
+                  <BellRing size={11} color={palette.warning.default} strokeWidth={1.75} />
+                  <AppText variant="caption" style={{ color: palette.warning.default }}>Remind</AppText>
+                </TouchableOpacity>
+              )}
             </View>
           ) : null}
         </View>
