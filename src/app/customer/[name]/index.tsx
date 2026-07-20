@@ -1153,7 +1153,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   // ─── profile tab ───────────────────────────────────────────────────────────
-  profileScroll: { padding: spacing[4], gap: spacing[4], paddingBottom: spacing[20] },
+  profileScroll: { padding: spacing[4], gap: spacing[4], paddingBottom: spacing[20], maxWidth: 640, width: "100%", alignSelf: "center" },
   profileCard: { gap: spacing[3] },
   profileSectionLabel: { letterSpacing: 0.5, marginBottom: spacing[1] },
   profileCardBody: { gap: spacing[3] },
