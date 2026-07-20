@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <script>
-    // Redirect all 404s back to index with the path encoded in the query string
-    var path = window.location.pathname.replace('/royal-staff-app', '') + window.location.search
-    window.location.replace('/royal-staff-app/?p=' + encodeURIComponent(path))
+    var path = window.location.pathname.replace('/royal-staff-app', '') + window.location.search + window.location.hash;
+    sessionStorage.setItem('__spa_path', path || '/');
+    window.location.replace('/royal-staff-app/');
   </script>
 </head>
 <body></body>
