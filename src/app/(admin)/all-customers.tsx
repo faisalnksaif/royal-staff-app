@@ -112,7 +112,7 @@ function OutstandingRow({ item }: { item: LedgerCustomerOutstanding }) {
           )}
           <AppText
             variant="mono"
-            style={{ color: (isSettled || item.outstanding_dr_cr === "Cr") ? palette.success.default : palette.error.default, fontSize: 13 }}
+            style={{ color: (isSettled || item.outstanding_dr_cr === "Cr") ? palette.success.default : palette.error.default, fontSize: 16 }}
           >
             ₹{formatAmount(item.outstanding_balance)}{item.outstanding_dr_cr === "Cr" ? " Cr" : ""}
           </AppText>
