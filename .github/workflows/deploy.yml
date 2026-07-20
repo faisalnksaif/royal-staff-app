@@ -34,8 +34,10 @@ jobs:
           EXPO_PUBLIC_API_BASE_URL: https://api.sulthanpages.com/project/royal/api
           EXPO_BASE_URL: /royal-staff-app
 
-      - name: Inject SPA routing scripts
+      - name: Fix asset paths and inject SPA routing scripts
         run: |
+          sed -i 's|href="/|href="/royal-staff-app/|g' dist/index.html
+          sed -i 's|src="/|src="/royal-staff-app/|g' dist/index.html
           sed -i 's|<head>|<head><script>if(window.location.pathname==="/royal-staff-app")window.location.replace("/royal-staff-app/");</script><script>(function(){var p=sessionStorage.getItem("__spa_path");if(p){sessionStorage.removeItem("__spa_path");window.history.replaceState(null,"","/royal-staff-app"+p);}})();</script>|' dist/index.html
 
       - name: Copy 404 fallback
