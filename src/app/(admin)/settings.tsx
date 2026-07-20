@@ -6,7 +6,7 @@ import AppCard from "../../components/ui/AppCard"
 import AppButton from "../../components/ui/AppButton"
 import AppToggle from "../../components/ui/AppToggle"
 import { useTheme } from "../../providers/ThemeProvider"
-import useThemeStore from "../../stores/useThemeStore"
+import useThemeStore, { type FontSize } from "../../stores/useThemeStore"
 import useAuthStore from "../../stores/useAuthStore"
 import { APP_CONFIG } from "../../constants/config"
 import { spacing } from "../../constants/theme"
@@ -57,7 +57,7 @@ function SettingRow({
 export default function SuperAdminSettingsScreen() {
   const router = useRouter()
   const { colors, isDark } = useTheme()
-  const { theme, setTheme } = useThemeStore()
+  const { theme, setTheme, fontSize, setFontSize } = useThemeStore()
   const { user, logout, isLoading } = useAuthStore()
 
   async function handleLogout() {
@@ -107,6 +107,28 @@ export default function SuperAdminSettingsScreen() {
                   value={theme === "system"}
                   onValueChange={(v: boolean) => setTheme(v ? "system" : isDark ? "dark" : "light")}
                 />
+              }
+            />
+            <SettingRow
+              label="Font Size"
+              right={
+                <View style={styles.fontSizePicker}>
+                  {(["sm", "md", "lg"] as FontSize[]).map((s) => (
+                    <TouchableOpacity
+                      key={s}
+                      activeOpacity={0.7}
+                      onPress={() => setFontSize(s)}
+                      style={[
+                        styles.fontSizeBtn,
+                        { borderColor: colors.border, backgroundColor: fontSize === s ? colors.accent : "transparent" },
+                      ]}
+                    >
+                      <AppText variant="caption" style={{ color: fontSize === s ? "#fff" : colors.text.secondary, fontSize: s === "sm" ? 10 : s === "md" ? 12 : 14 }}>
+                        A
+                      </AppText>
+                    </TouchableOpacity>
+                  ))}
+                </View>
               }
             />
           </RowList>
@@ -166,4 +188,13 @@ const styles = StyleSheet.create({
   separator: { height: StyleSheet.hairlineWidth },
   rowRight: { flexDirection: "row", alignItems: "center", gap: spacing[2] },
   logoutBtn: { marginTop: spacing[6] },
+  fontSizePicker: { flexDirection: "row", gap: spacing[1] },
+  fontSizeBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 })
