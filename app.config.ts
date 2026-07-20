@@ -53,5 +53,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   experiments: {
     typedRoutes: true,
+    baseUrl: process.env.EXPO_BASE_URL ?? "",
   },
 })
