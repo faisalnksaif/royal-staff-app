@@ -49,6 +49,7 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
+    "build": "eas build --platform production --profile production",
     "deploy": "eas update --channel production --message \"$(git log -1 --pretty=%s)\"",
     "deploy:msg": "eas update --channel production --message",
     "generate:api": "swagger-typescript-api generate -p ./swagger.yaml -o ./src/services/generated -n Api.ts --axios --single-http-client --module-name-first-tag",

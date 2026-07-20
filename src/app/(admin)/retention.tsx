@@ -116,7 +116,7 @@ function CustomerRow({ customer }: { customer: RetentionCustomer }) {
             {customer.name}
           </AppText>
           <View style={[styles.statusPill, { backgroundColor: color + "18" }]}>
-            <AppText variant="caption" style={{ color, fontSize: 11 }}>
+            <AppText variant="caption" numberOfLines={1} style={{ color, fontSize: 11 }}>
               {STATUS_LABEL[customer.status]}
             </AppText>
           </View>

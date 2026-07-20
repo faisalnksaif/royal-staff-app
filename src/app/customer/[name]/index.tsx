@@ -775,7 +775,7 @@ export default function CustomerDetailScreen() {
                     <View style={styles.profileRow}>
                       <AppText variant="caption" color="secondary">Status</AppText>
                       <View style={[styles.profilePill, { backgroundColor: color + "18" }]}>
-                        <AppText variant="caption" style={{ color, fontSize: 12 }}>{RETENTION_STATUS_LABEL[ret.status]}</AppText>
+                        <AppText variant="caption" numberOfLines={1} style={{ color, fontSize: 12 }}>{RETENTION_STATUS_LABEL[ret.status]}</AppText>
                       </View>
                     </View>
                     {ret.days_since_last_purchase != null && (

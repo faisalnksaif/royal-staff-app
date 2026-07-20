@@ -126,7 +126,7 @@ function OutstandingRow({ item }: { item: LedgerCustomerOutstanding }) {
                   const color = RETENTION_COLOR[item.retention_status]
                   return (
                     <View style={[styles.pill, { backgroundColor: color + "18" }]}>
-                      <AppText variant="caption" style={{ color, fontSize: 10 }}>
+                      <AppText variant="caption" numberOfLines={1} style={{ color, fontSize: 10 }}>
                         {RETENTION_STATUS_LABEL[item.retention_status]}
                       </AppText>
                     </View>
@@ -304,7 +304,7 @@ function RetentionRow({ customer }: { customer: RetentionCustomer }) {
         <View style={styles.customerNameRow}>
           <AppText variant="body" numberOfLines={1} style={{ flex: 1 }}>{toTitleCase(customer.name)}</AppText>
           <View style={[styles.pill, { backgroundColor: color + "18" }]}>
-            <AppText variant="caption" style={{ color, fontSize: 10 }}>{RETENTION_STATUS_LABEL[customer.status]}</AppText>
+            <AppText variant="caption" numberOfLines={1} style={{ color, fontSize: 10 }}>{RETENTION_STATUS_LABEL[customer.status]}</AppText>
           </View>
           <AppText variant="mono" style={{
             color: customer.outstanding_balance === 0 || customer.outstanding_dr_cr === "Cr"

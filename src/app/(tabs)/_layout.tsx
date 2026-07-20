@@ -1,5 +1,6 @@
+import { useState } from "react"
 import { Tabs, useRouter, usePathname } from "expo-router"
-import { StyleSheet, View, Pressable } from "react-native"
+import { StyleSheet, View, Pressable, ScrollView, Platform, StatusBar } from "react-native"
 import type { ColorValue } from "react-native"
 import {
   LayoutDashboard,
@@ -9,7 +10,12 @@ import {
   Award,
   Settings,
   LogOut,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react-native"
+
+const EXPANDED_WIDTH = 240
+const COLLAPSED_WIDTH = 60
 import { useTheme } from "../../providers/ThemeProvider"
 import { colors as palette, spacing, radii } from "../../constants/theme"
 import { useTablet } from "../../hooks/useTablet"
@@ -30,6 +36,7 @@ function StaffSidebar() {
   const router = useRouter()
   const pathname = usePathname()
   const { user, logout } = useAuthStore()
+  const [collapsed, setCollapsed] = useState(false)
 
   function isActive(match: string) {
     if (match === "__home__") return pathname === "/" || pathname === "/index"
@@ -41,14 +48,26 @@ function StaffSidebar() {
     router.replace("/(auth)/login")
   }
 
+  const w = collapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH
+
   return (
-    <View style={[styles.sidebar, { backgroundColor: colors.background.secondary, borderRightColor: colors.border }]}>
-      <View style={[styles.brand, { borderBottomColor: colors.border }]}>
-        <AppText variant="heading3" style={{ color: colors.accent }}>RoyalPulse</AppText>
-        <AppText variant="caption" color="tertiary">{user?.name ?? "Staff"}</AppText>
+    <View style={[styles.sidebar, { width: w, backgroundColor: colors.background.secondary, borderRightColor: colors.border }]}>
+      <View style={[styles.brand, { borderBottomColor: colors.border, justifyContent: collapsed ? "center" : "space-between" }]}>
+        {!collapsed && (
+          <View style={{ flex: 1 }}>
+            <AppText variant="heading3" style={{ color: colors.accent }}>RoyalPulse</AppText>
+            <AppText variant="caption" color="tertiary">{user?.name ?? "Staff"}</AppText>
+          </View>
+        )}
+        <Pressable onPress={() => setCollapsed(!collapsed)} hitSlop={8}>
+          {collapsed
+            ? <ChevronRight size={18} color={colors.text.tertiary} strokeWidth={1.75} />
+            : <ChevronLeft size={18} color={colors.text.tertiary} strokeWidth={1.75} />
+          }
+        </Pressable>
       </View>
 
-      <View style={styles.nav}>
+      <ScrollView style={styles.navScroll} contentContainerStyle={styles.nav} showsVerticalScrollIndicator={false} alwaysBounceVertical={false}>
         {NAV_ITEMS.map((item) => {
           const active = isActive(item.match)
           const Icon = item.icon
@@ -62,24 +81,31 @@ function StaffSidebar() {
                 pressed && { opacity: 0.7 },
               ]}
             >
-              <Icon size={20} strokeWidth={active ? 2 : 1.6} color={active ? colors.accent : colors.text.secondary} />
-              <AppText
-                variant={active ? "bodyMedium" : "body"}
-                style={{ color: active ? colors.accent : colors.text.secondary }}
-              >
-                {item.label}
-              </AppText>
+              {() => (
+                <View style={[styles.navItemInner, { justifyContent: collapsed ? "center" : "flex-start" }]}>
+                  <Icon size={20} strokeWidth={active ? 2 : 1.6} color={active ? colors.accent : colors.text.secondary} />
+                  {!collapsed && (
+                    <AppText variant={active ? "bodyMedium" : "body"} style={{ color: active ? colors.accent : colors.text.secondary }} numberOfLines={1}>
+                      {item.label}
+                    </AppText>
+                  )}
+                </View>
+              )}
             </Pressable>
           )
         })}
-      </View>
+      </ScrollView>
 
       <Pressable
         onPress={handleLogout}
         style={({ pressed }) => [styles.logoutBtn, { borderTopColor: colors.border, opacity: pressed ? 0.6 : 1 }]}
       >
-        <LogOut size={18} color={colors.text.tertiary} strokeWidth={1.6} />
-        <AppText variant="body" color="tertiary">Logout</AppText>
+        {() => (
+          <View style={[styles.navItemInner, { justifyContent: collapsed ? "center" : "flex-start" }]}>
+            <LogOut size={18} color={colors.text.tertiary} strokeWidth={1.6} />
+            {!collapsed && <AppText variant="body" color="tertiary">Logout</AppText>}
+          </View>
+        )}
       </Pressable>
     </View>
   )
@@ -141,38 +167,32 @@ export default function TabsLayout() {
 const styles = StyleSheet.create({
   row: { flex: 1, flexDirection: "row" },
   sidebar: {
-    width: 240,
     borderRightWidth: StyleSheet.hairlineWidth,
-    paddingTop: spacing[12],
+    paddingTop: Platform.OS === "android" ? (StatusBar.currentHeight ?? 24) + spacing[4] : spacing[12],
+    flexDirection: "column",
+    overflow: "hidden",
   },
   main: { flex: 1 },
   brand: {
-    paddingHorizontal: spacing[5],
-    paddingBottom: spacing[5],
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: spacing[4],
+    paddingBottom: spacing[4],
     borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: spacing[1],
+    gap: spacing[2],
     marginBottom: spacing[3],
   },
-  nav: { gap: spacing[1], paddingHorizontal: spacing[3] },
-  navItem: {
+  navScroll: { flex: 1 },
+  nav: { flexDirection: "column", gap: spacing[1], paddingHorizontal: spacing[2], paddingBottom: spacing[4] },
+  navItem: { borderRadius: radii.md, width: "100%" },
+  navItemInner: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[3],
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[3],
-    borderRadius: radii.md,
-    cursor: "pointer",
   },
   logoutBtn: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[3],
-    paddingHorizontal: spacing[5],
-    paddingVertical: spacing[5],
     borderTopWidth: StyleSheet.hairlineWidth,
   },
 })
