@@ -25,7 +25,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   web: {
     favicon: "./assets/favicon.png",
-    baseUrl: "/royal-staff-app",
   },
   updates: {
     url: "https://u.expo.dev/b25217cd-b963-4c83-9e11-650f8bdf097f",
