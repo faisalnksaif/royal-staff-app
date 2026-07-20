@@ -69,6 +69,7 @@ const OUTCOME_LABELS: Record<FollowUpOutcome, string> = {
   promisedPartial: "Promised Partial",
   dispute:         "Dispute",
   noResponse:      "No Response",
+  reminderSent:    "Reminder Sent",
 }
 
 function outcomeColor(o: FollowUpOutcome): string {
@@ -77,6 +78,7 @@ function outcomeColor(o: FollowUpOutcome): string {
     case "promisedPartial": return palette.warning.default
     case "dispute":         return palette.error.default
     case "noResponse":      return palette.neutral[500]
+    case "reminderSent":    return palette.info.default
   }
 }
 
@@ -529,7 +531,7 @@ export default function CustomerDetailScreen() {
 
   const isStaff = user?.role === "staff"
 
-  const { data, isLoading } = useCustomerFollowups(customerId)
+  const { data, isLoading, refetch: refetchFollowups } = useCustomerFollowups(customerId)
   const {
     data: ledgerData,
     isLoading: ledgerLoading,
@@ -610,6 +612,11 @@ export default function CustomerDetailScreen() {
                   onPress={() => {
                     const msg = `Dear ${toTitleCase(name)},\n\nThis is a friendly reminder that you have an outstanding balance of ₹${formatAmount(balanceAmount!)}.\n\nKindly clear the dues at your earliest convenience.\n\nThank you!\nRoyal Glass Vengara`
                     Linking.openURL(`whatsapp://send?phone=${mobile}&text=${encodeURIComponent(msg)}`)
+                    if (customerId) {
+                      followupService.logReminder({ ledgerId: Number(customerId), amountMentioned: balanceAmount! })
+                        .then(() => refetchFollowups())
+                        .catch(() => {})
+                    }
                   }}
                 >
                   <BellRing size={11} color={palette.warning.default} strokeWidth={1.75} />

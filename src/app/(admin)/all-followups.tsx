@@ -37,6 +37,7 @@ const OUTCOME_LABELS: Record<FollowUpOutcome, string> = {
   promisedPartial: "Promised Partial",
   dispute:         "Dispute",
   noResponse:      "No Response",
+  reminderSent:    "Reminder Sent",
 }
 
 function outcomeColor(o: FollowUpOutcome): string {
@@ -45,6 +46,7 @@ function outcomeColor(o: FollowUpOutcome): string {
     case "promisedPartial": return palette.warning.default
     case "dispute":         return palette.error.default
     case "noResponse":      return palette.neutral[500]
+    case "reminderSent":    return palette.info.default
   }
 }
 

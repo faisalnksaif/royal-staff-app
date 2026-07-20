@@ -98,4 +98,14 @@ async function logWhatsApp(
   })
 }
 
-export const followupService = { getStaffFollowups, getAllFollowups, getCustomerFollowups, createFollowup, logWhatsApp }
+async function logReminder(payload: { ledgerId: number; amountMentioned?: number }): Promise<void> {
+  await api.http.request({
+    path: `/followups/reminder`,
+    method: "POST",
+    body: payload,
+    secure: true,
+    type: "application/json",
+  })
+}
+
+export const followupService = { getStaffFollowups, getAllFollowups, getCustomerFollowups, createFollowup, logWhatsApp, logReminder }

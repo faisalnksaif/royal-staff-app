@@ -27,6 +27,7 @@ const OUTCOME_LABELS: Record<string, string> = {
   promisedPartial: "Promised Partial",
   dispute:         "Dispute",
   noResponse:      "No Response",
+  reminderSent:    "Reminder Sent",
 }
 
 const OUTCOME_COLORS: Record<string, string> = {
@@ -34,6 +35,7 @@ const OUTCOME_COLORS: Record<string, string> = {
   promisedPartial: palette.warning.default,
   dispute:         palette.error.default,
   noResponse:      palette.neutral[400],
+  reminderSent:    palette.info.default,
 }
 
 

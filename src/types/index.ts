@@ -279,7 +279,7 @@ export interface StaffBillsSummaryResponse {
 }
 
 export type ContactMethod = "phoneCall" | "sms" | "email" | "inPerson" | "whatsapp"
-export type FollowUpOutcome = "promisedToPay" | "promisedPartial" | "dispute" | "noResponse"
+export type FollowUpOutcome = "promisedToPay" | "promisedPartial" | "dispute" | "noResponse" | "reminderSent"
 
 export interface FollowUp {
   _id: string
@@ -401,6 +401,7 @@ export interface FollowupsSummary {
     promisedPartial: number
     dispute: number
     noResponse: number
+    reminderSent?: number
   }
   byResolution: {
     resolved: number

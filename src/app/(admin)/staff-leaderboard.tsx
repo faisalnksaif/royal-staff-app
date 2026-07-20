@@ -24,7 +24,7 @@ function isDateField(value: unknown): value is FollowupDateField {
 }
 
 function isOutcome(value: unknown): value is FollowUpOutcome {
-  return value === "promisedToPay" || value === "promisedPartial" || value === "dispute" || value === "noResponse"
+  return value === "promisedToPay" || value === "promisedPartial" || value === "dispute" || value === "noResponse" || value === "reminderSent"
 }
 
 function parseParamDate(value: string | undefined): Date | null {
