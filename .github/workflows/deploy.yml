@@ -38,7 +38,10 @@ jobs:
         run: |
           sed -i 's|href="/|href="/royal-staff-app/|g' dist/index.html
           sed -i 's|src="/|src="/royal-staff-app/|g' dist/index.html
-          find dist -name "*.js" -exec sed -i 's|"/assets/|"/royal-staff-app/assets/|g; s|"/_expo/|"/royal-staff-app/_expo/|g' {} \;
+          find dist -name "*.js" -exec sed -i \
+            's|"/assets/|"/royal-staff-app/assets/|g
+             s|"/_expo/|"/royal-staff-app/_expo/|g
+             s|process\.env\.EXPO_BASE_URL|"/royal-staff-app"|g' {} \;
 
       - name: Copy 404 fallback
         run: cp web/404.html dist/404.html
