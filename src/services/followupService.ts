@@ -22,6 +22,7 @@ export interface AllFollowUpsParams {
   endDate?: string
   dateField?: FollowupDateField
   outcome?: string
+  resolutionStatus?: string
   customerId?: string
   ledgerId?: number
 }
@@ -47,7 +48,7 @@ async function getStaffFollowups(
 }
 
 async function getAllFollowups(params: AllFollowUpsParams = {}): Promise<AllFollowUpsResponse> {
-  const { staffId, page = 1, limit = 50, period, startDate, endDate, dateField, outcome, customerId, ledgerId } = params
+  const { staffId, page = 1, limit = 50, period, startDate, endDate, dateField, outcome, resolutionStatus, customerId, ledgerId } = params
   const qs = new URLSearchParams({ page: String(page), limit: String(limit) })
   if (staffId != null) qs.set("staffId", String(staffId))
   if (period) qs.set("period", period)
@@ -55,6 +56,7 @@ async function getAllFollowups(params: AllFollowUpsParams = {}): Promise<AllFoll
   if (endDate) qs.set("endDate", endDate)
   if (dateField && dateField !== "loggedAt") qs.set("dateField", dateField)
   if (outcome) qs.set("outcome", outcome)
+  if (resolutionStatus) qs.set("resolutionStatus", resolutionStatus)
   if (customerId) qs.set("customerId", customerId)
   if (ledgerId != null) qs.set("ledgerId", String(ledgerId))
   const { data } = await api.http.request<AllFollowUpsResponse>({

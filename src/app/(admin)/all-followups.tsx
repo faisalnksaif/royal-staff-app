@@ -202,6 +202,7 @@ export default function AllFollowupsScreen() {
     endDate: isCustom && endDate ? toAPIDate(endDate) : undefined,
     dateField,
     outcome: outcome === "all" ? undefined : outcome,
+    resolutionStatus: resolutionStatus === "all" ? undefined : resolutionStatus,
   })
 
   const followups = data?.pages.flatMap((p) => p.data) ?? []
