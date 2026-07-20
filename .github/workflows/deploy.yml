@@ -41,11 +41,8 @@ jobs:
 
           BASE = "/royal-staff-app"
 
-          # Fix HTML asset paths
           p = pathlib.Path("dist/index.html")
           html = p.read_text()
-          html = html.replace('href="/', f'href="{BASE}/')
-          html = html.replace('src="/', f'src="{BASE}/')
 
           # Inject SPA routing scripts right after <head>
           scripts = (
