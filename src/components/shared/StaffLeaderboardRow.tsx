@@ -1,12 +1,10 @@
+import { formatAmount } from "../../utils/helpers"
 import { View, StyleSheet } from "react-native"
 import { ChevronRight } from "lucide-react-native"
 import AppText from "../ui/AppText"
 import { useTheme } from "../../providers/ThemeProvider"
 import { spacing, radii, colors as palette } from "../../constants/theme"
 
-function formatAmount(value: number): string {
-  return value.toLocaleString("en-IN", { maximumFractionDigits: 0 })
-}
 
 export interface StaffLeaderboardEntry {
   staff_id: number

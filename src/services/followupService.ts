@@ -1,5 +1,5 @@
 import api from "./apiClient"
-import type { StaffFollowupsResponse, AllFollowUpsResponse, CreateFollowupPayload } from "../types"
+import type { StaffFollowupsResponse, CustomerFollowupsResponse, AllFollowUpsResponse, CreateFollowupPayload } from "../types"
 
 export type FollowupPeriod = "today" | "yesterday" | "this_month"
 export type FollowupDateField = "loggedAt" | "promisedDate" | "resolvedAt"
@@ -71,8 +71,8 @@ async function getAllFollowups(params: AllFollowUpsParams = {}): Promise<AllFoll
 async function getCustomerFollowups(
   customerId: number | string,
   limit = 50
-): Promise<StaffFollowupsResponse> {
-  const { data } = await api.http.request<StaffFollowupsResponse>({
+): Promise<CustomerFollowupsResponse> {
+  const { data } = await api.http.request<CustomerFollowupsResponse>({
     path: `/followups/customer/${customerId}?limit=${limit}`,
     method: "GET",
     secure: true,
@@ -82,7 +82,7 @@ async function getCustomerFollowups(
 }
 
 async function createFollowup(payload: CreateFollowupPayload): Promise<void> {
-  await api.followUps.followupsCreate(payload)
+  await api.followUps.followupsCreate(payload as any)
 }
 
 async function logWhatsApp(
@@ -94,7 +94,7 @@ async function logWhatsApp(
     method: "POST",
     body: payload,
     secure: true,
-    type: "application/json",
+    type: "application/json" as any,
   })
 }
 
@@ -104,7 +104,7 @@ async function logReminder(payload: { ledgerId: number; amountMentioned?: number
     method: "POST",
     body: payload,
     secure: true,
-    type: "application/json",
+    type: "application/json" as any,
   })
 }
 

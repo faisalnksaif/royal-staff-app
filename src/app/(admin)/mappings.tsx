@@ -1,3 +1,4 @@
+import { formatAmount } from "../../utils/helpers"
 import { useState, useRef, useMemo } from "react"
 import {
   View,
@@ -20,9 +21,6 @@ import { mappingService, type CustomerMapping, type StaffOption } from "../../se
 
 const PAGE_SIZE = 50
 
-function formatAmount(v: number) {
-  return v.toLocaleString("en-IN", { maximumFractionDigits: 0 })
-}
 
 // ─── Staff picker modal ───────────────────────────────────────────────────────
 

@@ -1,3 +1,5 @@
+import { formatAmount } from "../../utils/helpers"
+import { OUTCOME_LABELS, OUTCOME_COLORS } from "./OutcomeBadge"
 import { View, StyleSheet } from "react-native"
 import Svg, { Circle } from "react-native-svg"
 import Animated, {
@@ -22,23 +24,6 @@ interface FollowupSummary {
   totalPaidAmount: number
 }
 
-const OUTCOME_COLORS: Record<string, string> = {
-  promisedToPay:   palette.success.default,
-  promisedPartial: palette.warning.default,
-  dispute:         palette.error.default,
-  noResponse:      palette.neutral[400],
-}
-
-const OUTCOME_LABELS: Record<string, string> = {
-  promisedToPay:   "Promised Full",
-  promisedPartial: "Promised Partial",
-  dispute:         "Dispute",
-  noResponse:      "No Response",
-}
-
-function formatAmount(v: number) {
-  return v.toLocaleString("en-IN", { maximumFractionDigits: 0 })
-}
 
 // ─── static donut built from SVG circles ──────────────────────────────────────
 

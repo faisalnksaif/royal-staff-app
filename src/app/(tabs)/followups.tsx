@@ -2,10 +2,6 @@ import { useMemo, useState } from "react"
 import { View, FlatList, ActivityIndicator, StyleSheet, TouchableOpacity, ScrollView } from "react-native"
 import { useRouter } from "expo-router"
 import {
-  Phone,
-  MessageSquare,
-  Mail,
-  UserCheck,
   MessageCircle,
   CheckCircle2,
   SlidersHorizontal,
@@ -13,33 +9,31 @@ import {
   Clock,
   Wallet,
   ClipboardList,
-  RefreshCw,
 } from "lucide-react-native"
 import AppText from "../../components/ui/AppText"
 import AppCard from "../../components/ui/AppCard"
 import DatePickerField from "../../components/shared/DatePickerField"
 import BackButton from "../../components/shared/BackButton"
 import WhatsAppActions from "../../components/shared/WhatsAppActions"
+import RefreshButton from "../../components/shared/RefreshButton"
+import ContactMethodIcon from "../../components/shared/ContactMethodIcon"
+import OutcomeBadge, { outcomeColor } from "../../components/shared/OutcomeBadge"
+import FollowUpListCard from "../../components/shared/FollowUpListCard"
+import FollowupSummaryStrip from "../../components/shared/FollowupSummaryStrip"
 import { useTheme } from "../../providers/ThemeProvider"
 import { spacing, colors as palette } from "../../constants/theme"
 import useAuthStore from "../../stores/useAuthStore"
 import { useStaffFollowups } from "../../hooks/useStaffFollowups"
 import { followupService } from "../../services/followupService"
-import { formatDate } from "../../utils/helpers"
+import { formatDate, formatAmount, toTitleCase } from "../../utils/helpers"
 import moment from "moment"
-import type { FollowUp, ContactMethod, FollowUpOutcome, FollowupsSummary } from "../../types"
+import type { FollowUp, ContactMethod, FollowUpOutcome } from "../../types"
 import type { FollowupPeriod, FollowupDateField } from "../../services/followupService"
 import { useTablet } from "../../hooks/useTablet"
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
-function formatAmount(n: number) {
-  return n.toLocaleString("en-IN", { maximumFractionDigits: 0 })
-}
 
-function toTitleCase(s: string) {
-  return s.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())
-}
 
 const CONTACT_LABELS: Record<ContactMethod, string> = {
   phoneCall: "Phone",
@@ -49,34 +43,7 @@ const CONTACT_LABELS: Record<ContactMethod, string> = {
   whatsapp: "WhatsApp",
 }
 
-const OUTCOME_LABELS: Record<FollowUpOutcome, string> = {
-  promisedToPay:   "Promised Full Payment",
-  promisedPartial: "Promised Partial",
-  dispute:         "Dispute",
-  noResponse:      "No Response",
-  reminderSent:    "Reminder Sent",
-}
 
-function outcomeColor(o: FollowUpOutcome): string {
-  switch (o) {
-    case "promisedToPay":   return palette.success.default
-    case "promisedPartial": return palette.warning.default
-    case "dispute":         return palette.error.default
-    case "noResponse":      return palette.neutral[500]
-    case "reminderSent":    return palette.info.default
-  }
-}
-
-function ContactIcon({ method, color }: { method: ContactMethod; color: string }) {
-  const p = { size: 12, color, strokeWidth: 1.75 }
-  switch (method) {
-    case "phoneCall":  return <Phone {...p} />
-    case "sms":        return <MessageSquare {...p} />
-    case "email":      return <Mail {...p} />
-    case "inPerson":   return <UserCheck {...p} />
-    case "whatsapp":   return <MessageCircle {...p} />
-  }
-}
 
 // ─── filter tabs ─────────────────────────────────────────────────────────────
 
@@ -112,185 +79,6 @@ const OUTCOME_CHIPS: { value: FollowUpOutcome | "all"; label: string }[] = [
 ]
 
 // ─── summary strip ────────────────────────────────────────────────────────────
-
-function SummaryStrip({ summary }: { summary: FollowupsSummary }) {
-  const { byOutcome, byResolution } = summary
-  const items = [
-    { label: "Total",    value: summary.totalFollowUps,                              color: palette.neutral[500] },
-    { label: "Open",     value: byResolution.open,                                   color: palette.info.default },
-    { label: "Paid",     value: byResolution.resolved,                               color: palette.success.default },
-    { label: "Promised", value: byOutcome.promisedToPay + byOutcome.promisedPartial, color: palette.warning.default },
-    { label: "Dispute",  value: byOutcome.dispute,                                   color: palette.error.default },
-  ]
-  return (
-    <View style={styles.summaryStrip}>
-      {items.map(({ label, value, color }) => (
-        <View key={label} style={styles.summaryItem}>
-          <AppText variant="heading3" style={{ color }}>{value}</AppText>
-          <AppText variant="caption" color="tertiary">{label}</AppText>
-        </View>
-      ))}
-      {summary.totalPromisedAmount > 0 && (
-        <View style={[styles.summaryItem, { borderLeftWidth: 1, borderLeftColor: palette.neutral[200], paddingLeft: spacing[3] }]}>
-          <AppText variant="heading3" style={{ color: palette.warning.default }}>
-            ₹{summary.totalPromisedAmount.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-          </AppText>
-          <AppText variant="caption" color="tertiary">Promised</AppText>
-        </View>
-      )}
-      {summary.totalPaidAmount > 0 && (
-        <View style={[styles.summaryItem, { borderLeftWidth: 1, borderLeftColor: palette.neutral[200], paddingLeft: spacing[3] }]}>
-          <AppText variant="heading3" style={{ color: palette.success.default }}>
-            ₹{summary.totalPaidAmount.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-          </AppText>
-          <AppText variant="caption" color="tertiary">Collected</AppText>
-        </View>
-      )}
-    </View>
-  )
-}
-
-// ─── event row (inner timeline) ───────────────────────────────────────────────
-
-function EventRow({
-  icon, text, color, isLast,
-}: {
-  icon: React.ReactNode; text: string; color: string; isLast: boolean
-}) {
-  return (
-    <View style={styles.eventRow}>
-      <View style={styles.eventDotCol}>
-        <View style={[styles.eventDot, { backgroundColor: color }]} />
-        {!isLast && <View style={[styles.eventLine, { backgroundColor: color + "40" }]} />}
-      </View>
-      <View style={[styles.eventText, !isLast && styles.eventTextSpaced]}>
-        <View style={styles.eventTextInner}>
-          {icon}
-          <AppText variant="caption" style={{ color, flex: 1, fontSize: 12 }}>{text}</AppText>
-        </View>
-      </View>
-    </View>
-  )
-}
-
-// ─── follow-up card ───────────────────────────────────────────────────────────
-
-function FollowUpCard({ item, userId }: { item: FollowUp; userId: number }) {
-  const { colors } = useTheme()
-  const router = useRouter()
-  const color = outcomeColor(item.outcome)
-  const resolved = item.resolvedByPayment
-  const mobile = item.mobile ?? ""
-
-  function goToCustomer() {
-    if (!item.ledgerId) return
-    router.push({
-      pathname: "/customer/[name]",
-      params: { name: item.customerName, customerId: String(item.ledgerId), totalBalance: "", drCr: "", mobile },
-    })
-  }
-
-  type Event = { icon: React.ReactNode; text: string; color: string }
-  const events: Event[] = [
-    {
-      icon: <ClipboardList size={11} color={palette.neutral[400]} strokeWidth={1.75} />,
-      text: `Logged ${formatDate(item.loggedAt)}`,
-      color: palette.neutral[500],
-    },
-  ]
-  if (item.outstandingAmount != null && !item.outstandingBackfilled) {
-    events.push({
-      icon: <Wallet size={11} color={palette.neutral[400]} strokeWidth={1.75} />,
-      text: `Balance then: ₹${formatAmount(item.outstandingAmount)} ${item.outstandingDrCr}`,
-      color: palette.neutral[500],
-    })
-  }
-  if (item.promisedAmount != null) {
-    events.push({
-      icon: <Calendar size={11} color={palette.warning.default} strokeWidth={1.75} />,
-      text: `Promised ₹${formatAmount(item.promisedAmount)}${item.promisedDate ? ` by ${formatDate(item.promisedDate)}` : ""}`,
-      color: palette.warning.default,
-    })
-  }
-  if (item.nextFollowUpDate && !resolved) {
-    events.push({
-      icon: <Clock size={11} color={palette.info.default} strokeWidth={1.75} />,
-      text: `Next follow-up: ${formatDate(item.nextFollowUpDate)}`,
-      color: palette.info.default,
-    })
-  }
-  if (resolved && item.resolvedAt) {
-    events.push({
-      icon: <CheckCircle2 size={11} color={palette.success.default} strokeWidth={1.75} />,
-      text: `Paid on ${formatDate(item.resolvedAt)}${item.amountRecovered ? ` · ₹${formatAmount(item.amountRecovered)} recovered` : ""}`,
-      color: palette.success.default,
-    })
-  }
-  if (resolved && item.outstandingAmountAtResolution != null) {
-    const bal = item.outstandingAmountAtResolution
-    const balDrCr = item.outstandingDrCrAtResolution ?? "Dr"
-    events.push({
-      icon: <Wallet size={11} color={bal === 0 ? palette.success.default : palette.neutral[400]} strokeWidth={1.75} />,
-      text: bal === 0 ? `Balance cleared` : `Balance after: ₹${formatAmount(bal)} ${balDrCr}`,
-      color: bal === 0 ? palette.success.default : palette.neutral[500],
-    })
-  }
-  for (const send of (item.whatsappSends ?? [])) {
-    const isReceipt = send.type === "receipt"
-    const color = isReceipt ? palette.success.dark : palette.warning.dark
-    events.push({
-      icon: <MessageCircle size={11} color={color} strokeWidth={1.75} />,
-      text: `WhatsApp ${isReceipt ? "receipt" : "reminder"} sent ${formatDate(send.sentAt)}`,
-      color,
-    })
-  }
-
-  return (
-    <TouchableOpacity onPress={goToCustomer} activeOpacity={0.75}>
-      <AppCard elevation="sm" style={styles.card}>
-        {/* Header: contact icon + customer name + outcome badge + time ago */}
-        <View style={[styles.cardHeader, { borderBottomColor: colors.border }]}>
-          <ContactIcon method={item.contactMethod} color={colors.text.tertiary as string} />
-          <AppText variant="bodyMedium" style={{ flex: 1 }}>{toTitleCase(item.customerName)}</AppText>
-          <View style={[styles.outcomeBadge, { backgroundColor: color + "22" }]}>
-            <AppText variant="caption" style={{ color, fontSize: 11 }}>{OUTCOME_LABELS[item.outcome]}</AppText>
-          </View>
-          <AppText variant="caption" color="tertiary">{moment(item.loggedAt).fromNow()}</AppText>
-        </View>
-
-        {/* Inner event timeline */}
-        {events.length > 0 && (
-          <View style={styles.eventList}>
-            {events.map((ev, i) => (
-              <EventRow key={i} icon={ev.icon} text={ev.text} color={ev.color} isLast={i === events.length - 1} />
-            ))}
-          </View>
-        )}
-
-        {item.freeTextRemark ? (
-          <AppText variant="caption" color="secondary" numberOfLines={2} style={styles.remark}>
-            "{item.freeTextRemark}"
-          </AppText>
-        ) : null}
-
-        {!!mobile && (
-          <WhatsAppActions
-            mobile={mobile}
-            customerName={toTitleCase(item.customerName)}
-            showReceipt={resolved}
-            receiptAmount={item.amountRecovered ?? item.promisedAmount ?? 0}
-            onReceiptSent={() => followupService.logWhatsApp(item._id, { staffId: userId, type: "receipt", mobile, amountMentioned: item.amountRecovered ?? item.promisedAmount ?? 0 }).catch(() => {})}
-            showReminder={!resolved && !!item.promisedAmount}
-            reminderAmount={item.promisedAmount ?? 0}
-            reminderDateLine={item.promisedDate ? ` by ${formatDate(item.promisedDate)}` : ""}
-            onReminderSent={() => followupService.logWhatsApp(item._id, { staffId: userId, type: "reminder", mobile, amountMentioned: item.promisedAmount ?? 0 }).catch(() => {})}
-          />
-        )}
-
-      </AppCard>
-    </TouchableOpacity>
-  )
-}
 
 // ─── screen ──────────────────────────────────────────────────────────────────
 
@@ -341,9 +129,7 @@ export default function FollowUpsScreen() {
             <AppText variant="heading2">Follow-ups</AppText>
             <AppText variant="caption" color="tertiary">Only my follow-ups</AppText>
           </View>
-          <TouchableOpacity activeOpacity={0.7} onPress={() => refetch()} style={{ padding: spacing[2] }}>
-            {isRefetching ? <ActivityIndicator size="small" color={colors.accent} /> : <RefreshCw size={18} color={colors.text.tertiary} strokeWidth={1.75} />}
-          </TouchableOpacity>
+          <RefreshButton onPress={() => refetch()} isRefreshing={isRefetching} />
           <TouchableOpacity
             activeOpacity={0.7}
             onPress={() => setShowFilters((v) => !v)}
@@ -445,7 +231,7 @@ export default function FollowUpsScreen() {
           <View style={[styles.tabDivider, { backgroundColor: colors.border }]} />
         </View>
 
-        {data?.summary && <SummaryStrip summary={data.summary} />}
+        {data?.summary && <FollowupSummaryStrip summary={data.summary} />}
 
         {isLoading ? (
           <ActivityIndicator size="large" color={colors.accent} style={styles.center} />
@@ -453,7 +239,7 @@ export default function FollowUpsScreen() {
           <FlatList
             data={followups}
             keyExtractor={(item) => item._id}
-            renderItem={({ item }) => <FollowUpCard item={item} userId={user?.user_id ?? 0} />}
+            renderItem={({ item }) => <FollowUpListCard item={item} />}
             contentContainerStyle={styles.list}
             ItemSeparatorComponent={() => <View style={{ height: spacing[2] }} />}
             ListEmptyComponent={
@@ -504,15 +290,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2,
   },
   tabDivider: { height: StyleSheet.hairlineWidth },
-  summaryStrip: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: spacing[4],
-    paddingVertical: spacing[3],
-    gap: spacing[4],
-    flexWrap: "wrap",
-  },
-  summaryItem: { alignItems: "center", gap: 2 },
   list: { padding: spacing[4], paddingBottom: spacing[10] },
   card: { gap: spacing[3] },
   cardHeader: {

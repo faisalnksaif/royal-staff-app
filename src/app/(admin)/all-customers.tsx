@@ -1,11 +1,14 @@
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useCallback } from "react"
+import { useDebounce } from "../../hooks/useDebounce"
 import {
-  View, FlatList, StyleSheet, Pressable, TouchableOpacity,
+  View, FlatList, StyleSheet, TouchableOpacity,
   ActivityIndicator, Animated, Easing, ScrollView, Platform, UIManager,
 } from "react-native"
 import { useRouter, useFocusEffect } from "expo-router"
-import { CheckCircle2, MessageCircle, X, ChevronRight } from "lucide-react-native"
+import { X, ChevronRight } from "lucide-react-native"
 import BackButton from "../../components/shared/BackButton"
+import CustomerOutstandingRow from "../../components/shared/CustomerOutstandingRow"
+import ErrorRetry from "../../components/shared/ErrorRetry"
 import AppText from "../../components/ui/AppText"
 import AppInput from "../../components/ui/AppInput"
 import { useTheme } from "../../providers/ThemeProvider"
@@ -14,9 +17,8 @@ import { RETENTION_COLOR, RETENTION_STATUS_LABEL } from "../../constants/retenti
 import { useAllCustomers } from "../../hooks/useAllCustomers"
 import { useRetention } from "../../hooks/useRetention"
 import { usePaymentVelocity } from "../../hooks/usePaymentVelocity"
-import { formatDate } from "../../utils/helpers"
+import { formatDate, formatAmount, toTitleCase } from "../../utils/helpers"
 import type {
-  LedgerCustomerOutstanding,
   LedgerOutstandingFilter,
   RetentionCustomer,
   RetentionStatus,
@@ -32,13 +34,7 @@ if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true)
 }
 
-function formatAmount(n: number) {
-  return n.toLocaleString("en-IN", { maximumFractionDigits: 0 })
-}
 
-function toTitleCase(s: string) {
-  return s.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())
-}
 
 // ─── outstanding tab ──────────────────────────────────────────────────────────
 
@@ -51,135 +47,6 @@ const OUTSTANDING_FILTERS: { value: LedgerOutstandingFilter; label: string }[] =
   { value: "paid",            label: "Paid" },
 ]
 
-function OutstandingRow({ item }: { item: LedgerCustomerOutstanding }) {
-  const router = useRouter()
-  const fu = item.follow_up
-
-  const totalPromised = fu?.total_promised_amount ?? 0
-  const isFullPromise = fu?.last_outcome === "promisedToPay"
-  const progressRatio = isFullPromise
-    ? 1
-    : item.outstanding_balance > 0
-    ? Math.min(totalPromised / item.outstanding_balance, 1)
-    : 0
-  const progressColor = isFullPromise ? palette.success.default : palette.warning.default
-
-  const animProgress = useRef(new Animated.Value(0)).current
-  useEffect(() => {
-    Animated.timing(animProgress, {
-      toValue: progressRatio,
-      duration: 700,
-      easing: Easing.out(Easing.quad),
-      useNativeDriver: false,
-    }).start()
-  }, [progressRatio])
-
-  const hasFollowUp = fu && fu.total > 0
-  const isOverdue = fu?.is_overdue ?? false
-  const isSettled = item.outstanding_balance === 0 && (fu?.open ?? 0) === 0 && (fu?.resolved ?? 0) > 0
-  const hasResolved = (fu?.resolved ?? 0) > 0
-
-  const { colors } = useTheme()
-
-  return (
-    <TouchableOpacity
-      activeOpacity={0.7}
-      onPress={() =>
-        router.push({
-          pathname: "/customer/[name]",
-          params: {
-            name: item.name,
-            totalBalance: String(item.outstanding_balance),
-            drCr: item.outstanding_dr_cr,
-            customerId: String(item.ledger_id),
-            mobile: item.mobile ?? "",
-          },
-        })
-      }
-    >
-      <View style={[styles.retentionRow, { borderBottomColor: colors.border as string }]}>
-        <View style={styles.customerNameRow}>
-          <AppText variant="body" numberOfLines={1} style={{ flex: 1 }}>{toTitleCase(item.name)}</AppText>
-          {isSettled && (
-            <View style={[styles.pill, { backgroundColor: palette.success.default + "22" }]}>
-              <AppText variant="caption" numberOfLines={1} style={{ color: palette.success.default, fontSize: 10 }}>Settled</AppText>
-            </View>
-          )}
-          {isOverdue && (
-            <View style={[styles.pill, { backgroundColor: palette.warning.default + "22" }]}>
-              <AppText variant="caption" numberOfLines={1} style={{ color: palette.warning.default, fontSize: 10 }}>Overdue</AppText>
-            </View>
-          )}
-          <AppText
-            variant="mono"
-            style={{ color: (isSettled || item.outstanding_dr_cr === "Cr") ? palette.success.default : palette.error.default, fontSize: 16 }}
-          >
-            ₹{formatAmount(item.outstanding_balance)}{item.outstanding_dr_cr === "Cr" ? " Cr" : ""}
-          </AppText>
-          <ChevronRight size={15} color={colors.text.tertiary} strokeWidth={1.75} />
-        </View>
-
-        <View style={styles.fuRow}>
-          {item.retention_status && item.retention_status !== "never_purchased" && (() => {
-            const color = RETENTION_COLOR[item.retention_status]
-            return (
-              <View style={[styles.pill, { backgroundColor: color + "18" }]}>
-                <AppText variant="caption" numberOfLines={1} style={{ color, fontSize: 10 }}>
-                  {RETENTION_STATUS_LABEL[item.retention_status]}
-                </AppText>
-              </View>
-            )
-          })()}
-          {item.days_since_last_purchase != null && (
-            <AppText variant="caption" style={{ fontSize: 10, color: palette.neutral[400] }}>
-              {item.days_since_last_purchase}d since purchase
-            </AppText>
-          )}
-          {item.avg_days_to_clear != null && (
-            <AppText variant="caption" style={{ fontSize: 10, color: palette.neutral[400] }}>
-              · clears in {item.avg_days_to_clear.toFixed(0)}d
-            </AppText>
-          )}
-        </View>
-
-        {hasFollowUp && (
-          <View style={styles.fuRow}>
-            <View style={[styles.pill, { backgroundColor: palette.neutral[400] + "22" }]}>
-              <MessageCircle size={10} color={palette.neutral[500]} strokeWidth={1.75} />
-              <AppText variant="caption" style={{ color: palette.neutral[500], fontSize: 10 }}>
-                {fu.total} {fu.total === 1 ? "follow-up" : "follow-ups"}
-              </AppText>
-            </View>
-            {hasResolved && (
-              <View style={[styles.pill, { backgroundColor: palette.success.default + "22" }]}>
-                <CheckCircle2 size={10} color={palette.success.default} strokeWidth={1.75} />
-                <AppText variant="caption" style={{ color: palette.success.default, fontSize: 10 }}>
-                  {fu.resolved} paid
-                </AppText>
-              </View>
-            )}
-            {totalPromised > 0 && (
-              <AppText variant="caption" style={{ color: palette.warning.default, fontSize: 10 }}>
-                ₹{formatAmount(totalPromised)} promised
-              </AppText>
-            )}
-          </View>
-        )}
-
-        {(isFullPromise || (totalPromised > 0 && item.outstanding_balance > 0)) && (
-          <View style={[styles.progressTrack, { backgroundColor: progressColor + "22", marginTop: spacing[2] }]}>
-            <Animated.View
-              style={[styles.progressFill, {
-                backgroundColor: progressColor,
-                width: animProgress.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] }),
-              }]}
-            />
-          </View>
-        )}
-      </View>
-    </TouchableOpacity>
-  )
-}
 
 // ─── retention tab ────────────────────────────────────────────────────────────
 
@@ -414,24 +281,16 @@ export default function AllCustomersScreen() {
 
   // outstanding state
   const [outSearch, setOutSearch] = useState("")
-  const [outSearchDebounced, setOutSearchDebounced] = useState("")
+  const outSearchDebounced = useDebounce(outSearch, 400)
   const [outFilter, setOutFilter] = useState<LedgerOutstandingFilter>("all")
   const [outSort, setOutSort] = useState<"priority" | "balance">("priority")
-  useEffect(() => {
-    const t = setTimeout(() => setOutSearchDebounced(outSearch), 400)
-    return () => clearTimeout(t)
-  }, [outSearch])
 
   // retention state
   const [retSearch, setRetSearch] = useState("")
-  const [retSearchDebounced, setRetSearchDebounced] = useState("")
+  const retSearchDebounced = useDebounce(retSearch, 350)
   const [retFilter, setRetFilter] = useState<RetentionFilter>("all")
   const [retSortBy, setRetSortBy] = useState<RetentionSortBy>("days_since_last_purchase")
   const [retOrder, setRetOrder] = useState<SortOrder>("asc")
-  useEffect(() => {
-    const t = setTimeout(() => setRetSearchDebounced(retSearch), 350)
-    return () => clearTimeout(t)
-  }, [retSearch])
 
   const { data: outData, isLoading: outLoading, isError: outError, refetch, hasNextPage: outHasNext, isFetchingNextPage: outFetching, fetchNextPage: outFetchNext } =
     useAllCustomers({ limit: 50, search: outSearchDebounced || undefined, filter: outFilter, sortBy: outSort, enabled: mainTab === "outstanding" })
@@ -441,13 +300,9 @@ export default function AllCustomersScreen() {
 
   // velocity state
   const [velSearch, setVelSearch] = useState("")
-  const [velSearchDebounced, setVelSearchDebounced] = useState("")
+  const velSearchDebounced = useDebounce(velSearch, 350)
   const [velSortBy, setVelSortBy] = useState<PaymentVelocitySortBy>("avg_days_to_clear")
   const [velOrder, setVelOrder] = useState<SortOrder>("asc")
-  useEffect(() => {
-    const t = setTimeout(() => setVelSearchDebounced(velSearch), 350)
-    return () => clearTimeout(t)
-  }, [velSearch])
 
   const { data: velData, isLoading: velLoading, isError: velError, refetch: velRefetch, hasNextPage: velHasNext, isFetchingNextPage: velFetching, fetchNextPage: velFetchNext } =
     usePaymentVelocity({ search: velSearchDebounced || undefined, sortBy: velSortBy, order: velOrder, enabled: mainTab === "velocity" })
@@ -563,18 +418,13 @@ export default function AllCustomersScreen() {
           {outLoading ? (
             <ActivityIndicator size="large" color={colors.accent} style={styles.center} />
           ) : outError ? (
-            <View style={styles.center}>
-              <AppText color="secondary">Couldn't load customers.</AppText>
-              <Pressable onPress={() => refetch()}>
-                <AppText variant="bodyMedium" color="accent">Retry</AppText>
-              </Pressable>
-            </View>
+            <ErrorRetry message="Couldn't load customers." onRetry={refetch} />
           ) : (
             <FlatList
               style={{ flex: 1 }}
               data={customers}
               keyExtractor={(item) => String(item.ledger_id)}
-              renderItem={({ item }) => <OutstandingRow item={item} />}
+              renderItem={({ item }) => <CustomerOutstandingRow item={item} />}
               contentContainerStyle={{ paddingBottom: spacing[12] }}
               onEndReachedThreshold={0.3}
               onEndReached={() => { if (outHasNext && !outFetching) outFetchNext() }}
@@ -645,7 +495,7 @@ export default function AllCustomersScreen() {
           {velLoading ? (
             <ActivityIndicator size="large" color={colors.accent} style={styles.center} />
           ) : velError ? (
-            <View style={styles.center}><AppText color="secondary">Couldn't load velocity data.</AppText></View>
+            <ErrorRetry message="Couldn't load velocity data." onRetry={velRefetch} />
           ) : (
             <FlatList
               data={velCustomers}
@@ -738,7 +588,7 @@ export default function AllCustomersScreen() {
           {retLoading ? (
             <ActivityIndicator size="large" color={colors.accent} style={styles.center} />
           ) : retError ? (
-            <View style={styles.center}><AppText color="secondary">Couldn't load retention data.</AppText></View>
+            <ErrorRetry message="Couldn't load retention data." onRetry={retRefetch} />
           ) : (
             <FlatList
               style={{ flex: 1 }}

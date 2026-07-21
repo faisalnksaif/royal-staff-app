@@ -12,12 +12,9 @@ import { useTablet } from "../../../hooks/useTablet"
 import { useRouter, useLocalSearchParams } from "expo-router"
 import { useQueryClient } from "@tanstack/react-query"
 import DatePickerField from "../../../components/shared/DatePickerField"
+import ContactMethodIcon from "../../../components/shared/ContactMethodIcon"
 import {
   ChevronLeft,
-  Phone,
-  MessageSquare,
-  Mail,
-  UserCheck,
   MessageCircle,
 } from "lucide-react-native"
 import AppText from "../../../components/ui/AppText"
@@ -29,7 +26,7 @@ import { fontFamilies } from "../../../constants/fonts"
 import useAuthStore from "../../../stores/useAuthStore"
 import Toast from "react-native-toast-message"
 import { followupService } from "../../../services/followupService"
-import { toAPIDate } from "../../../utils/helpers"
+import { toAPIDate, formatAmount } from "../../../utils/helpers"
 import type { ContactMethod, FollowUpOutcome } from "../../../types"
 
 // ─── constants ───────────────────────────────────────────────────────────────
@@ -87,9 +84,6 @@ const QUICK_REMARKS_OPTIONS = [
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
-function formatAmount(n: number) {
-  return n.toLocaleString("en-IN", { maximumFractionDigits: 0 })
-}
 
 // ─── sub-components ──────────────────────────────────────────────────────────
 
@@ -105,16 +99,7 @@ function SectionLabel({ label }: { label: string }) {
   )
 }
 
-function ContactMethodIcon({ method, color }: { method: ContactMethod; color: string }) {
-  const p = { size: 18, color, strokeWidth: 1.75 }
-  switch (method) {
-    case "phoneCall": return <Phone {...p} />
-    case "sms":       return <MessageSquare {...p} />
-    case "email":     return <Mail {...p} />
-    case "inPerson":  return <UserCheck {...p} />
-    case "whatsapp":  return <MessageCircle {...p} />
-  }
-}
+
 
 // ─── screen ──────────────────────────────────────────────────────────────────
 

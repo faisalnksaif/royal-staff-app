@@ -1,3 +1,4 @@
+import { toTitleCase } from "../../utils/helpers"
 import { useState } from "react"
 import {
   View,
@@ -10,8 +11,10 @@ import {
 } from "react-native"
 import { useRouter } from "expo-router"
 import { useQuery } from "@tanstack/react-query"
-import { Fingerprint, CheckCircle, XCircle, X, UserPlus, ChevronLeft, RefreshCw } from "lucide-react-native"
+import { Fingerprint, CheckCircle, XCircle, X, UserPlus, ChevronLeft } from "lucide-react-native"
 import BackButton from "../../components/shared/BackButton"
+import RefreshButton from "../../components/shared/RefreshButton"
+import StaffAvatar from "../../components/shared/StaffAvatar"
 import moment from "moment"
 import AppText from "../../components/ui/AppText"
 import AppInput from "../../components/ui/AppInput"
@@ -27,9 +30,6 @@ import type { AttendanceRecord, AttendanceScanResponse, StaffResponse } from "..
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
-function toTitleCase(s: string) {
-  return s.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())
-}
 
 function statusColor(status: AttendanceRecord["status"]): string {
   switch (status) {
@@ -79,17 +79,12 @@ function SummaryBar({
 function AttendanceRow({ record }: { record: AttendanceRecord }) {
   const { colors } = useTheme()
   const color = statusColor(record.status)
-  const initials = record.staffName
-    .split(" ").slice(0, 2).map((w) => w[0] ?? "").join("").toUpperCase()
-
   const firstSession = record.sessions?.[0]
 
   return (
     <View style={[styles.row, { borderBottomColor: colors.border as string }]}>
       <View style={styles.rowContent}>
-        <View style={[styles.avatar, { backgroundColor: color + "22" }]}>
-          <AppText variant="bodyMedium" style={{ color }}>{initials}</AppText>
-        </View>
+        <StaffAvatar name={record.staffName} color={color} bgColor={color + "22"} />
 
         <View style={styles.rowInfo}>
           <AppText variant="bodyMedium">{toTitleCase(record.staffName)}</AppText>
@@ -203,11 +198,7 @@ function FingerprintModal({
               onPress={() => { setSelectedStaff(item); setPhase("scan") }}
             >
               <View style={[styles.staffRow, { borderBottomColor: colors.border as string }]}>
-                <View style={[styles.avatar, { backgroundColor: colors.accentSubtle }]}>
-                  <AppText variant="bodyMedium" style={{ color: colors.accent }}>
-                    {item.name.slice(0, 2).toUpperCase()}
-                  </AppText>
-                </View>
+                <StaffAvatar name={item.name} color={colors.accent} bgColor={colors.accentSubtle} />
                 <View style={{ flex: 1 }}>
                   <AppText variant="bodyMedium">{toTitleCase(item.name)}</AppText>
                   <AppText variant="caption" color="secondary">ID: {item.id}</AppText>
@@ -348,9 +339,7 @@ export default function AttendanceScreen() {
           <AppText variant="heading3">Attendance</AppText>
           <AppText variant="caption" color="tertiary">{moment().format("D MMM YYYY")}</AppText>
         </View>
-        <Pressable onPress={() => refetch()} hitSlop={8} style={{ padding: spacing[2] }}>
-          {isRefetching ? <ActivityIndicator size="small" color={colors.accent} /> : <RefreshCw size={18} color={colors.text.tertiary} strokeWidth={1.75} />}
-        </Pressable>
+        <RefreshButton onPress={() => refetch()} isRefreshing={isRefetching} />
         <Pressable
           onPress={() => router.push("/(admin)/enroll")}
           style={styles.enrollBtn}
@@ -457,13 +446,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[5],
     paddingVertical: spacing[4],
     gap: spacing[3],
-  },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: radii.full,
-    alignItems: "center",
-    justifyContent: "center",
   },
   rowInfo: { flex: 1, gap: spacing[1] },
   rowMeta: { flexDirection: "row", flexWrap: "wrap" },

@@ -1,7 +1,7 @@
 import { View, Pressable, StyleSheet, ScrollView, ActivityIndicator } from "react-native"
 import { useState, useEffect } from "react"
 import { useRouter } from "expo-router"
-import { LogOut, RefreshCw, ChevronRight } from "lucide-react-native"
+import { LogOut, ChevronRight } from "lucide-react-native"
 import type { GestureResponderEvent } from "react-native"
 import AppText from "../../components/ui/AppText"
 import AppCard from "../../components/ui/AppCard"
@@ -13,30 +13,13 @@ import { useDashboardOverview } from "../../hooks/useDashboardOverview"
 import type { FollowupDateField } from "../../services/followupService"
 import type { ResolutionStatus } from "../../services/dashboardService"
 import type { FollowUpOutcome } from "../../types"
-import { toAPIDate } from "../../utils/helpers"
+import { toAPIDate, formatAmount } from "../../utils/helpers"
 import StaffLeaderboardRow from "../../components/shared/StaffLeaderboardRow"
 import DashboardFilterBar, { type DashboardPeriodValue } from "../../components/shared/DashboardFilterBar"
 import DashboardSkeleton from "../../components/shared/DashboardSkeleton"
+import RefreshButton from "../../components/shared/RefreshButton"
+import { OUTCOME_LABELS, OUTCOME_COLORS } from "../../components/shared/OutcomeBadge"
 
-function formatAmount(value: number): string {
-  return value.toLocaleString("en-IN", { maximumFractionDigits: 0 })
-}
-
-const OUTCOME_LABELS: Record<string, string> = {
-  promisedToPay:   "Promised Full",
-  promisedPartial: "Promised Partial",
-  dispute:         "Dispute",
-  noResponse:      "No Response",
-  reminderSent:    "Reminder Sent",
-}
-
-const OUTCOME_COLORS: Record<string, string> = {
-  promisedToPay:   palette.success.default,
-  promisedPartial: palette.warning.default,
-  dispute:         palette.error.default,
-  noResponse:      palette.neutral[400],
-  reminderSent:    palette.info.default,
-}
 
 
 function StatTile({ label, value, color, onPress }: { label: string; value: string; color: string; onPress?: (e: GestureResponderEvent) => void }) {
@@ -117,9 +100,7 @@ export default function SuperAdminHome() {
           <AppText variant="heading2">Dashboard</AppText>
         </View>
         <View style={styles.headerActions}>
-          <Pressable onPress={() => refetch()} style={[styles.headerBtn, styles.cursorPointer]} hitSlop={8}>
-            {isRefetching ? <ActivityIndicator size="small" color={colors.accent} /> : <RefreshCw size={18} color={colors.text.tertiary} strokeWidth={1.75} />}
-          </Pressable>
+          <RefreshButton onPress={() => refetch()} isRefreshing={isRefetching} />
           {!isTablet && (
             <Pressable onPress={handleLogout} style={[styles.headerBtn, styles.cursorPointer]} hitSlop={8}>
               <LogOut size={18} color={colors.text.tertiary} strokeWidth={1.75} />

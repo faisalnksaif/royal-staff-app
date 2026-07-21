@@ -1,3 +1,4 @@
+import { formatAmount } from "../../utils/helpers"
 import { useState } from "react"
 import { View, FlatList, ActivityIndicator, StyleSheet, TouchableOpacity, TextInput, Pressable } from "react-native"
 import AppText from "../../components/ui/AppText"
@@ -10,9 +11,6 @@ import { useRouter } from "expo-router"
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
-function formatAmount(n: number) {
-  return n.toLocaleString("en-IN", { maximumFractionDigits: 0 })
-}
 
 function formatDate(d: string | null) {
   if (!d) return "—"

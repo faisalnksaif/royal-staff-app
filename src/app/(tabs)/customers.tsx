@@ -1,18 +1,20 @@
-import { useState, useEffect, useRef } from "react"
+import { useState, useRef } from "react"
+import { useDebounce } from "../../hooks/useDebounce"
 import { View, FlatList, ActivityIndicator, StyleSheet, TouchableOpacity, Animated, Easing, LayoutAnimation, Platform, UIManager, ScrollView } from "react-native"
 import { useTablet } from "../../hooks/useTablet"
-import { useRouter } from "expo-router"
-import { MessageCircle, CheckCircle2, X, ChevronRight, RefreshCw } from "lucide-react-native"
+import { X } from "lucide-react-native"
 import BackButton from "../../components/shared/BackButton"
+import RefreshButton from "../../components/shared/RefreshButton"
+import CustomerOutstandingRow from "../../components/shared/CustomerOutstandingRow"
+import { OUTCOME_LABELS, OUTCOME_COLORS } from "../../components/shared/OutcomeBadge"
 import AppText from "../../components/ui/AppText"
 import AppInput from "../../components/ui/AppInput"
 import { useTheme } from "../../providers/ThemeProvider"
 import { spacing, colors as palette } from "../../constants/theme"
-import { RETENTION_COLOR, RETENTION_STATUS_LABEL } from "../../constants/retention"
 import useAuthStore from "../../stores/useAuthStore"
 import { useStaffCustomers } from "../../hooks/useStaffCustomers"
-import { formatDate } from "../../utils/helpers"
-import type { LedgerCustomerOutstanding, LedgerFollowUpInsights, FollowUpOutcome, LedgerOutstandingFilter } from "../../types"
+import { formatAmount } from "../../utils/helpers"
+import type { LedgerFollowUpInsights, FollowUpOutcome, LedgerOutstandingFilter } from "../../types"
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true)
@@ -20,21 +22,7 @@ if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental
 
 const PAGE_SIZE = 20
 
-function formatAmount(value: number): string {
-  return value.toLocaleString("en-IN", { maximumFractionDigits: 0 })
-}
 
-function toTitleCase(str: string): string {
-  return str.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())
-}
-
-const OUTCOME_LABELS: Record<FollowUpOutcome, string> = {
-  promisedToPay:   "Promised Full Payment",
-  promisedPartial: "Promised Partial",
-  dispute:         "Dispute",
-  noResponse:      "No Response",
-  reminderSent:    "Reminder Sent",
-}
 
 
 // ─── Filter chips ─────────────────────────────────────────────────────────────
@@ -113,14 +101,6 @@ function FilterChips({
 }
 
 // ─── InsightsPanel ────────────────────────────────────────────────────────────
-
-const OUTCOME_COLORS: Record<string, string> = {
-  promisedToPay:   palette.success.default,
-  promisedPartial: palette.warning.default,
-  dispute:         palette.error.default,
-  noResponse:      palette.neutral[400],
-  reminderSent:    palette.info.default,
-}
 
 function InsightsPanel({ insights }: { insights: LedgerFollowUpInsights }) {
   const { colors } = useTheme()
@@ -303,174 +283,6 @@ function SummaryStrip({
   )
 }
 
-// ─── CustomerRow ─────────────────────────────────────────────────────────────
-
-function CustomerRow({ item }: { item: LedgerCustomerOutstanding }) {
-  const router = useRouter()
-  const { colors } = useTheme()
-  const fu = item.follow_up
-
-  const totalPromised = fu?.total_promised_amount ?? 0
-  const isFullPromise = fu?.last_outcome === "promisedToPay"
-  const progressRatio = isFullPromise
-    ? 1
-    : item.outstanding_balance > 0
-    ? Math.min(totalPromised / item.outstanding_balance, 1)
-    : 0
-  const progressColor = isFullPromise ? palette.success.default : palette.warning.default
-
-  const animProgress = useRef(new Animated.Value(0)).current
-  useEffect(() => {
-    Animated.timing(animProgress, {
-      toValue: progressRatio,
-      duration: 700,
-      easing: Easing.out(Easing.quad),
-      useNativeDriver: false,
-    }).start()
-  }, [progressRatio])
-
-  const hasFollowUp = fu && fu.total > 0
-  const isOverdue = fu?.is_overdue ?? false
-  const isSettled = item.outstanding_balance === 0 && (fu?.open ?? 0) === 0 && (fu?.resolved ?? 0) > 0
-  const hasResolved = (fu?.resolved ?? 0) > 0
-
-  const accentColor = isSettled ? palette.success.default : isOverdue ? palette.warning.default : null
-  const balanceColor = (isSettled || item.outstanding_dr_cr === "Cr") ? palette.success.default : palette.error.default
-
-  return (
-    <TouchableOpacity
-      activeOpacity={0.7}
-      onPress={() =>
-        router.push({
-          pathname: "/customer/[name]",
-          params: {
-            name: item.name,
-            totalBalance: String(item.outstanding_balance),
-            drCr: item.outstanding_dr_cr,
-            customerId: String(item.ledger_id),
-            mobile: item.mobile ?? "",
-          },
-        })
-      }
-    >
-      <View style={[styles.customerCard, { borderBottomColor: colors.border as string }]}>
-        {accentColor && <View style={[styles.accentBar, { backgroundColor: accentColor }]} />}
-        <View style={styles.customerRow}>
-          <View style={styles.customerLeft}>
-            {/* Name + status pills */}
-            <View style={styles.nameRow}>
-              <AppText variant="bodyMedium" style={{ flex: 1 }} numberOfLines={1}>{toTitleCase(item.name)}</AppText>
-              {isSettled && (
-                <View style={[styles.statusPill, { backgroundColor: palette.success.default + "22" }]}>
-                  <AppText variant="caption" style={{ color: palette.success.default, fontSize: 10 }}>Settled</AppText>
-                </View>
-              )}
-              {isOverdue && (
-                <View style={[styles.statusPill, { backgroundColor: palette.warning.default + "22" }]}>
-                  <AppText variant="caption" style={{ color: palette.warning.default, fontSize: 10 }}>Overdue</AppText>
-                </View>
-              )}
-            </View>
-
-            {/* Retention + velocity hints */}
-            <View style={styles.metaRow}>
-              {item.retention_status && item.retention_status !== "never_purchased" && (() => {
-                const color = RETENTION_COLOR[item.retention_status]
-                return (
-                  <View style={[styles.pill, { backgroundColor: color + "18" }]}>
-                    <AppText variant="caption" numberOfLines={1} style={{ color, fontSize: 10 }}>
-                      {RETENTION_STATUS_LABEL[item.retention_status]}
-                    </AppText>
-                  </View>
-                )
-              })()}
-              {item.days_since_last_purchase != null && (
-                <AppText variant="caption" style={{ fontSize: 10, color: palette.neutral[400] }}>
-                  {item.days_since_last_purchase}d since purchase
-                </AppText>
-              )}
-              {item.avg_days_to_clear != null && (
-                <AppText variant="caption" style={{ fontSize: 10, color: palette.neutral[400] }}>
-                  · clears in {item.avg_days_to_clear.toFixed(0)}d
-                </AppText>
-              )}
-            </View>
-
-            {/* Last payment */}
-            {item.days_since_last_payment != null && (
-              <AppText variant="caption" style={{ fontSize: 10, color: palette.neutral[400] }}>
-                Last paid{" "}
-                <AppText variant="caption" style={{ fontSize: 10, color: item.days_since_last_payment <= 30 ? palette.success.default : item.days_since_last_payment <= 90 ? palette.warning.default : palette.error.default }}>
-                  {item.days_since_last_payment}d ago
-                </AppText>
-                {item.last_payment_amount != null ? ` · ₹${formatAmount(item.last_payment_amount)}` : ""}
-              </AppText>
-            )}
-
-            {/* Follow-up summary */}
-            {hasFollowUp && (
-              <>
-                <View style={styles.metaRow}>
-                  <View style={[styles.pill, { backgroundColor: palette.neutral[400] + "22" }]}>
-                    <MessageCircle size={10} color={palette.neutral[500]} strokeWidth={1.75} />
-                    <AppText variant="caption" style={{ color: palette.neutral[500], fontSize: 10 }}>
-                      {fu.total} {fu.total === 1 ? "follow-up" : "follow-ups"}
-                    </AppText>
-                  </View>
-                  {hasResolved && (
-                    <View style={[styles.pill, { backgroundColor: palette.success.default + "22" }]}>
-                      <CheckCircle2 size={10} color={palette.success.default} strokeWidth={1.75} />
-                      <AppText variant="caption" style={{ color: palette.success.default, fontSize: 10 }}>
-                        {fu.resolved} paid
-                      </AppText>
-                    </View>
-                  )}
-                </View>
-                {fu.last_logged_at && (
-                  <AppText variant="caption" style={{ fontSize: 10, color: palette.neutral[400] }}>
-                    Last: {formatDate(fu.last_logged_at)}
-                  </AppText>
-                )}
-                {fu.next_followup_date && (fu?.open ?? 0) > 0 && (
-                  <AppText variant="caption" style={{ fontSize: 10, color: isOverdue ? palette.warning.default : palette.info.default }}>
-                    Next: {formatDate(fu.next_followup_date)}
-                  </AppText>
-                )}
-              </>
-            )}
-          </View>
-
-          {/* Balance */}
-          <View style={styles.customerRight}>
-            <View style={styles.balanceRow}>
-              <AppText variant="mono" style={{ color: balanceColor, fontSize: 16, textAlign: "right" }}>
-                ₹{formatAmount(item.outstanding_balance)}{item.outstanding_dr_cr === "Cr" ? " Cr" : ""}
-              </AppText>
-              <ChevronRight size={14} color={palette.neutral[400]} strokeWidth={1.75} />
-            </View>
-            {totalPromised > 0 && (
-              <AppText variant="mono" style={{ color: palette.warning.default, fontSize: 11, textAlign: "right" }}>
-                ₹{formatAmount(totalPromised)} promised
-              </AppText>
-            )}
-          </View>
-        </View>
-
-        {/* Promise progress bar */}
-        {(isFullPromise || (totalPromised > 0 && item.outstanding_balance > 0)) && (
-          <View style={[styles.progressTrack, { backgroundColor: progressColor + "22" }]}>
-            <Animated.View
-              style={[styles.progressFill, {
-                backgroundColor: progressColor,
-                width: animProgress.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] }),
-              }]}
-            />
-          </View>
-        )}
-      </View>
-    </TouchableOpacity>
-  )
-}
 
 // ─── CustomersScreen ─────────────────────────────────────────────────────────
 
@@ -480,14 +292,9 @@ export default function CustomersScreen() {
   const user = useAuthStore((s) => s.user)
 
   const [searchInput, setSearchInput] = useState("")
-  const [debouncedSearch, setDebouncedSearch] = useState("")
+  const debouncedSearch = useDebounce(searchInput, 400)
   const [activeFilter, setActiveFilter] = useState<LedgerOutstandingFilter>("all")
   const [sortBy, setSortBy] = useState<"priority" | "balance">("priority")
-
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(searchInput), 400)
-    return () => clearTimeout(t)
-  }, [searchInput])
 
   const { data, isLoading, isFetchingNextPage, hasNextPage, fetchNextPage, refetch, isRefetching } =
     useStaffCustomers(user?.user_id, { limit: PAGE_SIZE, search: debouncedSearch || undefined, filter: activeFilter, sortBy })
@@ -508,9 +315,7 @@ export default function CustomersScreen() {
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <BackButton />
         <AppText variant="heading2" style={{ flex: 1 }}>Customers</AppText>
-        <TouchableOpacity activeOpacity={0.7} onPress={() => refetch()} style={{ padding: spacing[2] }}>
-          {isRefetching ? <ActivityIndicator size="small" color={colors.accent} /> : <RefreshCw size={18} color={colors.text.tertiary} strokeWidth={1.75} />}
-        </TouchableOpacity>
+        <RefreshButton onPress={() => refetch()} isRefreshing={isRefetching} />
       </View>
 
       <SummaryStrip
@@ -543,7 +348,7 @@ export default function CustomersScreen() {
       <FlatList
         data={customerList}
         keyExtractor={(item) => String(item.ledger_id)}
-        renderItem={({ item }) => <CustomerRow item={item} />}
+        renderItem={({ item }) => <CustomerOutstandingRow item={item} />}
         ListHeaderComponent={<FilterChips active={activeFilter} onChange={setActiveFilter} sortBy={sortBy} onSortChange={setSortBy} />}
         contentContainerStyle={styles.list}
         onEndReachedThreshold={0.3}

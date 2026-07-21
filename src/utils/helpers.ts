@@ -40,3 +40,11 @@ export function initials(fullName: string): string {
 export function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max)
 }
+
+export function formatAmount(n: number): string {
+  return n.toLocaleString("en-IN", { maximumFractionDigits: 0 })
+}
+
+export function toTitleCase(s: string): string {
+  return s.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())
+}

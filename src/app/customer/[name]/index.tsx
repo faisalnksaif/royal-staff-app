@@ -15,9 +15,6 @@ import { useTablet } from "../../../hooks/useTablet"
 import {
   ChevronLeft,
   Phone,
-  MessageSquare,
-  Mail,
-  UserCheck,
   MessageCircle,
   Plus,
   Calendar,
@@ -36,10 +33,13 @@ import { useTheme } from "../../../providers/ThemeProvider"
 import { spacing, colors as palette } from "../../../constants/theme"
 import useAuthStore from "../../../stores/useAuthStore"
 import WhatsAppActions from "../../../components/shared/WhatsAppActions"
+import ContactMethodIcon from "../../../components/shared/ContactMethodIcon"
+import { outcomeColor, OUTCOME_LABELS } from "../../../components/shared/OutcomeBadge"
+import FollowUpTimeline from "../../../components/shared/FollowUpTimeline"
 import { useCustomerFollowups } from "../../../hooks/useCustomerFollowups"
 import { useCustomerLedger } from "../../../hooks/useCustomerLedger"
 import { followupService } from "../../../services/followupService"
-import { formatDate } from "../../../utils/helpers"
+import { formatDate, formatAmount, toTitleCase } from "../../../utils/helpers"
 import moment from "moment"
 import type { FollowUp, ContactMethod, FollowUpOutcome, LedgerEntry } from "../../../types"
 import { RETENTION_COLOR, RETENTION_STATUS_LABEL } from "../../../constants/retention"
@@ -47,13 +47,7 @@ import Svg, { Path, Defs, LinearGradient, Stop, Circle, Line as SvgLine, Text as
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
-function formatAmount(n: number) {
-  return n.toLocaleString("en-IN", { maximumFractionDigits: 0 })
-}
 
-function toTitleCase(s: string) {
-  return s.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())
-}
 
 // ─── follow-up helpers ───────────────────────────────────────────────────────
 
@@ -65,57 +59,7 @@ const CONTACT_LABELS: Record<ContactMethod, string> = {
   whatsapp: "WhatsApp",
 }
 
-const OUTCOME_LABELS: Record<FollowUpOutcome, string> = {
-  promisedToPay:   "Promised Full Payment",
-  promisedPartial: "Promised Partial",
-  dispute:         "Dispute",
-  noResponse:      "No Response",
-  reminderSent:    "Reminder Sent",
-}
 
-function outcomeColor(o: FollowUpOutcome): string {
-  switch (o) {
-    case "promisedToPay":   return palette.success.default
-    case "promisedPartial": return palette.warning.default
-    case "dispute":         return palette.error.default
-    case "noResponse":      return palette.neutral[500]
-    case "reminderSent":    return palette.info.default
-  }
-}
-
-function ContactIcon({ method, color }: { method: ContactMethod; color: string }) {
-  const p = { size: 13, color, strokeWidth: 1.75 }
-  switch (method) {
-    case "phoneCall":  return <Phone {...p} />
-    case "sms":        return <MessageSquare {...p} />
-    case "email":      return <Mail {...p} />
-    case "inPerson":   return <UserCheck {...p} />
-    case "whatsapp":   return <MessageCircle {...p} />
-  }
-}
-
-// ─── event row (timeline inside card) ────────────────────────────────────────
-
-function EventRow({
-  icon, text, color, isLast,
-}: {
-  icon: React.ReactNode; text: string; color: string; isLast: boolean
-}) {
-  return (
-    <View style={styles.eventRow}>
-      <View style={styles.eventDotCol}>
-        <View style={[styles.eventDot, { backgroundColor: color }]} />
-        {!isLast && <View style={[styles.eventLine, { backgroundColor: color + "40" }]} />}
-      </View>
-      <View style={[styles.eventText, !isLast && styles.eventTextSpaced]}>
-        <View style={styles.eventTextInner}>
-          {icon}
-          <AppText variant="caption" style={{ color, flex: 1, fontSize: 12 }}>{text}</AppText>
-        </View>
-      </View>
-    </View>
-  )
-}
 
 // ─── follow-up card ──────────────────────────────────────────────────────────
 
@@ -193,7 +137,7 @@ function FollowUpCard({
     <AppCard elevation="sm" style={[styles.card, isOtherStaff && { borderLeftWidth: 3, borderLeftColor: palette.info.default }]}>
       {/* Header: contact method + outcome + time ago */}
       <View style={[styles.cardHeader, { borderBottomColor: colors.border }]}>
-        <ContactIcon method={followup.contactMethod} color={colors.text.tertiary as string} />
+        <ContactMethodIcon method={followup.contactMethod} color={colors.text.tertiary as string} />
         <AppText variant="caption" color="secondary">{CONTACT_LABELS[followup.contactMethod]}</AppText>
         {isOtherStaff && (
           <View style={[styles.outcomeBadge, { backgroundColor: palette.info.default + "18" }]}>
@@ -212,11 +156,7 @@ function FollowUpCard({
 
       {/* Inner timeline of events */}
       {events.length > 0 && (
-        <View style={styles.eventList}>
-          {events.map((ev, i) => (
-            <EventRow key={i} icon={ev.icon} text={ev.text} color={ev.color} isLast={i === events.length - 1} />
-          ))}
-        </View>
+        <FollowUpTimeline events={events} />
       )}
 
       {followup.freeTextRemark ? (

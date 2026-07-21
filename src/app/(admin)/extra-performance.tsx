@@ -1,3 +1,4 @@
+import { toTitleCase } from "../../utils/helpers"
 import { useState } from "react"
 import {
   View,
@@ -11,6 +12,7 @@ import {
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { Check, X, Calendar, ChevronLeft, ChevronRight, Award, Clock } from "lucide-react-native"
 import BackButton from "../../components/shared/BackButton"
+import StaffAvatar from "../../components/shared/StaffAvatar"
 import moment from "moment"
 import AppText from "../../components/ui/AppText"
 import AppCard from "../../components/ui/AppCard"
@@ -25,9 +27,6 @@ import type { ExtraPerformance } from "../../types"
 
 type TabFilter = "pending" | "approved"
 
-function toTitleCase(s: string) {
-  return s.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())
-}
 
 // ─── RejectModal ──────────────────────────────────────────────────────────────
 
@@ -102,15 +101,10 @@ function PendingCard({
   isRejecting: boolean
 }) {
   const { colors } = useTheme()
-  const initials = item.staffName
-    .split(" ").slice(0, 2).map((w) => w[0] ?? "").join("").toUpperCase()
-
   return (
     <AppCard elevation="sm" style={styles.card}>
       <View style={styles.cardTop}>
-        <View style={[styles.avatar, { backgroundColor: colors.accentSubtle }]}>
-          <AppText variant="bodyMedium" style={{ color: colors.accent }}>{initials}</AppText>
-        </View>
+        <StaffAvatar name={item.staffName} color={colors.accent} bgColor={colors.accentSubtle} />
         <View style={{ flex: 1, gap: spacing[1] }}>
           <AppText variant="bodyMedium">{toTitleCase(item.staffName)}</AppText>
           <View style={[styles.typeBadge, { backgroundColor: colors.accentSubtle, alignSelf: "flex-start" }]}>
@@ -180,15 +174,10 @@ function PendingCard({
 
 function ApprovedCard({ item }: { item: ExtraPerformance }) {
   const { colors } = useTheme()
-  const initials = item.staffName
-    .split(" ").slice(0, 2).map((w) => w[0] ?? "").join("").toUpperCase()
-
   return (
     <AppCard elevation="sm" style={styles.card}>
       <View style={styles.cardTop}>
-        <View style={[styles.avatar, { backgroundColor: palette.success.default + "18" }]}>
-          <AppText variant="bodyMedium" style={{ color: palette.success.default }}>{initials}</AppText>
-        </View>
+        <StaffAvatar name={item.staffName} color={palette.success.default} bgColor={palette.success.default + "18"} />
         <View style={{ flex: 1, gap: spacing[1] }}>
           <AppText variant="bodyMedium">{toTitleCase(item.staffName)}</AppText>
           <View style={[styles.typeBadge, { backgroundColor: colors.accentSubtle, alignSelf: "flex-start" }]}>
@@ -478,13 +467,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing[3],
     padding: spacing[4],
-  },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: radii.full,
-    alignItems: "center",
-    justifyContent: "center",
   },
   typeBadge: {
     paddingHorizontal: spacing[2],

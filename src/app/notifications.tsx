@@ -2,7 +2,7 @@ import { useCallback, useMemo } from "react"
 import { View, FlatList, ActivityIndicator, StyleSheet, TouchableOpacity } from "react-native"
 import { useRouter } from "expo-router"
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { ChevronLeft, Bell, CheckCheck, RefreshCw, CalendarClock, User } from "lucide-react-native"
+import { ChevronLeft, Bell, CheckCheck, CalendarClock, User } from "lucide-react-native"
 import AppText from "../components/ui/AppText"
 import { useTheme } from "../providers/ThemeProvider"
 import { spacing, colors as palette, radii } from "../constants/theme"
@@ -10,6 +10,7 @@ import useAuthStore from "../stores/useAuthStore"
 import { notificationService } from "../services/notificationService"
 import type { AppNotification, NotificationsResponse } from "../types"
 import moment from "moment"
+import RefreshButton from "../components/shared/RefreshButton"
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -198,9 +199,7 @@ export default function NotificationsScreen() {
             <AppText variant="caption" style={{ color: colors.accent }}>Mark all read</AppText>
           </TouchableOpacity>
         )}
-        <TouchableOpacity activeOpacity={0.7} onPress={() => refetch()} style={styles.iconBtn}>
-          {isRefetching ? <ActivityIndicator size="small" color={colors.accent} /> : <RefreshCw size={18} color={colors.text.tertiary} strokeWidth={1.75} />}
-        </TouchableOpacity>
+        <RefreshButton onPress={() => refetch()} isRefreshing={isRefetching} />
       </View>
 
       {isLoading ? (

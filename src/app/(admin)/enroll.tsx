@@ -1,3 +1,4 @@
+import { toTitleCase } from "../../utils/helpers"
 import { useState } from "react"
 import {
   View,
@@ -23,9 +24,6 @@ import type { StaffResponse } from "../../types"
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
-function toTitleCase(s: string) {
-  return s.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())
-}
 
 const MIN_SCANS = 3
 

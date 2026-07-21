@@ -1,3 +1,4 @@
+import { toTitleCase } from "../../utils/helpers"
 import { useState } from "react"
 import {
   View,
@@ -11,6 +12,7 @@ import {
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { Check, X, Calendar, Clock, RefreshCw } from "lucide-react-native"
 import BackButton from "../../components/shared/BackButton"
+import StaffAvatar from "../../components/shared/StaffAvatar"
 import moment from "moment"
 import AppText from "../../components/ui/AppText"
 import AppCard from "../../components/ui/AppCard"
@@ -23,9 +25,6 @@ import type { LeaveRequest, LeaveStatus } from "../../types"
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
-function toTitleCase(s: string) {
-  return s.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())
-}
 
 const STATUS_CONFIG: Record<LeaveStatus, { label: string; color: string }> = {
   pending:  { label: "Pending",  color: palette.warning.default },
@@ -193,16 +192,11 @@ function LeaveCard({
   const { colors } = useTheme()
   const status = STATUS_CONFIG[item.status]
   const typeColor = TYPE_CONFIG[item.leaveType]?.color ?? colors.accent
-  const initials = item.staffName
-    .split(" ").slice(0, 2).map((w) => w[0] ?? "").join("").toUpperCase()
-
   return (
     <AppCard elevation="sm" style={styles.card}>
       {/* Top row: avatar + name + type + status */}
       <View style={styles.cardTop}>
-        <View style={[styles.avatar, { backgroundColor: colors.accentSubtle }]}>
-          <AppText variant="bodyMedium" style={{ color: colors.accent }}>{initials}</AppText>
-        </View>
+        <StaffAvatar name={item.staffName} color={colors.accent} bgColor={colors.accentSubtle} />
 
         <View style={{ flex: 1, gap: spacing[1] }}>
           <AppText variant="bodyMedium">{toTitleCase(item.staffName)}</AppText>
@@ -464,13 +458,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing[3],
     padding: spacing[4],
-  },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: radii.full,
-    alignItems: "center",
-    justifyContent: "center",
   },
   typeBadge: {
     paddingHorizontal: spacing[2],

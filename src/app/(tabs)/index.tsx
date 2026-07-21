@@ -1,3 +1,4 @@
+import { formatAmount } from "../../utils/helpers"
 import { View, ScrollView, StyleSheet, Pressable, TouchableOpacity, ActivityIndicator } from "react-native"
 import { useRouter } from "expo-router"
 import { useTablet } from "../../hooks/useTablet"
@@ -23,11 +24,6 @@ function greeting() {
   return "Good evening"
 }
 
-function formatAmount(value: number): string {
-  if (value >= 100000) return `₹${(value / 100000).toFixed(1)}L`
-  if (value >= 1000) return `₹${(value / 1000).toFixed(1)}K`
-  return `₹${value}`
-}
 
 // ─── FeatureCard ──────────────────────────────────────────────────────────────
 
