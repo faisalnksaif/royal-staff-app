@@ -19,7 +19,7 @@ import AppText from "../../components/ui/AppText"
 import AppCard from "../../components/ui/AppCard"
 import DatePickerField from "../../components/shared/DatePickerField"
 import BackButton from "../../components/shared/BackButton"
-import { Linking } from "react-native"
+import WhatsAppActions from "../../components/shared/WhatsAppActions"
 import { useTheme } from "../../providers/ThemeProvider"
 import { spacing, colors as palette } from "../../constants/theme"
 import useAuthStore from "../../stores/useAuthStore"
@@ -190,21 +190,6 @@ function FollowUpCard({ item, userId }: { item: FollowUp; userId: number }) {
     })
   }
 
-  function sendReceiptWhatsApp() {
-    const amount = item.amountRecovered ?? item.promisedAmount ?? 0
-    const msg = `Dear ${toTitleCase(item.customerName)},\n\nWe acknowledge receipt of ₹${formatAmount(amount)} payment.\n\nThank you!\nRoyal Glass Vengara`
-    Linking.openURL(`whatsapp://send?phone=${mobile}&text=${encodeURIComponent(msg)}`)
-    followupService.logWhatsApp(item._id, { staffId: userId, type: "receipt", mobile, amountMentioned: amount }).catch(() => {})
-  }
-
-  function sendReminderWhatsApp() {
-    const amount = item.promisedAmount ?? 0
-    const dateLine = item.promisedDate ? ` by ${formatDate(item.promisedDate)}` : ""
-    const msg = `Dear ${toTitleCase(item.customerName)},\n\nThis is a friendly reminder that you have promised to pay ₹${formatAmount(amount)}${dateLine}.\n\nKindly ensure the payment is made on time.\n\nThank you!\nRoyal Glass Vengara`
-    Linking.openURL(`whatsapp://send?phone=${mobile}&text=${encodeURIComponent(msg)}`)
-    followupService.logWhatsApp(item._id, { staffId: userId, type: "reminder", mobile, amountMentioned: amount }).catch(() => {})
-  }
-
   type Event = { icon: React.ReactNode; text: string; color: string }
   const events: Event[] = [
     {
@@ -288,22 +273,18 @@ function FollowUpCard({ item, userId }: { item: FollowUp; userId: number }) {
           </AppText>
         ) : null}
 
-        {/* WhatsApp action buttons */}
-        {(resolved || (!resolved && !!item.promisedAmount)) && !!mobile && (
-          <View style={styles.waActions}>
-            {resolved && (
-              <TouchableOpacity activeOpacity={0.7} onPress={(e) => { e.stopPropagation?.(); sendReceiptWhatsApp() }} style={styles.waBtn}>
-                <MessageCircle size={11} color="#fff" strokeWidth={1.75} />
-                <AppText variant="caption" style={{ color: "#fff", fontSize: 10 }}>Send Receipt</AppText>
-              </TouchableOpacity>
-            )}
-            {!resolved && !!item.promisedAmount && (
-              <TouchableOpacity activeOpacity={0.7} onPress={(e) => { e.stopPropagation?.(); sendReminderWhatsApp() }} style={styles.waBtnReminder}>
-                <MessageCircle size={11} color="#fff" strokeWidth={1.75} />
-                <AppText variant="caption" style={{ color: "#fff", fontSize: 10 }}>Send Reminder</AppText>
-              </TouchableOpacity>
-            )}
-          </View>
+        {!!mobile && (
+          <WhatsAppActions
+            mobile={mobile}
+            customerName={toTitleCase(item.customerName)}
+            showReceipt={resolved}
+            receiptAmount={item.amountRecovered ?? item.promisedAmount ?? 0}
+            onReceiptSent={() => followupService.logWhatsApp(item._id, { staffId: userId, type: "receipt", mobile, amountMentioned: item.amountRecovered ?? item.promisedAmount ?? 0 }).catch(() => {})}
+            showReminder={!resolved && !!item.promisedAmount}
+            reminderAmount={item.promisedAmount ?? 0}
+            reminderDateLine={item.promisedDate ? ` by ${formatDate(item.promisedDate)}` : ""}
+            onReminderSent={() => followupService.logWhatsApp(item._id, { staffId: userId, type: "reminder", mobile, amountMentioned: item.promisedAmount ?? 0 }).catch(() => {})}
+          />
         )}
 
       </AppCard>
@@ -358,9 +339,7 @@ export default function FollowUpsScreen() {
           <BackButton />
           <View style={{ flex: 1 }}>
             <AppText variant="heading2">Follow-ups</AppText>
-            {!isLoading && data?.summary != null && (
-              <AppText variant="caption" color="secondary">{data.summary.totalFollowUps} total</AppText>
-            )}
+            <AppText variant="caption" color="tertiary">Only my follow-ups</AppText>
           </View>
           <TouchableOpacity activeOpacity={0.7} onPress={() => refetch()} style={{ padding: spacing[2] }}>
             {isRefetching ? <ActivityIndicator size="small" color={colors.accent} /> : <RefreshCw size={18} color={colors.text.tertiary} strokeWidth={1.75} />}

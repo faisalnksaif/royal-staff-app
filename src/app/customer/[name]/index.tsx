@@ -35,6 +35,7 @@ import AppCard from "../../../components/ui/AppCard"
 import { useTheme } from "../../../providers/ThemeProvider"
 import { spacing, colors as palette } from "../../../constants/theme"
 import useAuthStore from "../../../stores/useAuthStore"
+import WhatsAppActions from "../../../components/shared/WhatsAppActions"
 import { useCustomerFollowups } from "../../../hooks/useCustomerFollowups"
 import { useCustomerLedger } from "../../../hooks/useCustomerLedger"
 import { followupService } from "../../../services/followupService"
@@ -127,32 +128,16 @@ function FollowUpCard({
   const color = outcomeColor(followup.outcome)
   const resolved = followup.resolvedByPayment
   const user = useAuthStore((s) => s.user)
-
-  function sendReceiptWhatsApp() {
-    const amount = followup.amountRecovered ?? followup.promisedAmount ?? 0
-    const balance = Number(totalBalance)
-    const balanceLine = balance === 0
-      ? `Your account balance is now fully cleared.`
-      : `Your closing balance is ₹${formatAmount(balance)} ${drCr === "Cr" ? "in credit" : "outstanding"}.`
-    const msg = `Dear ${customerName},\n\nWe acknowledge receipt of ₹${formatAmount(amount)} payment.\n\n${balanceLine}\n\nThank you!\nRoyal Glass Vengara`
-    Linking.openURL(`whatsapp://send?phone=${mobile}&text=${encodeURIComponent(msg)}`)
-    followupService.logWhatsApp(followup._id, { staffId: user?.user_id ?? 0, type: "receipt", mobile, amountMentioned: amount }).catch(() => {})
-  }
-
-  function sendReminderWhatsApp() {
-    const amount = followup.promisedAmount ?? 0
-    const dateLine = followup.promisedDate ? ` by ${formatDate(followup.promisedDate)}` : ""
-    const msg = `Dear ${customerName},\n\nThis is a friendly reminder that you have promised to pay ₹${formatAmount(amount)}${dateLine}.\n\nKindly ensure the payment is made on time.\n\nThank you!\nRoyal Glass Vengara`
-    Linking.openURL(`whatsapp://send?phone=${mobile}&text=${encodeURIComponent(msg)}`)
-    followupService.logWhatsApp(followup._id, { staffId: user?.user_id ?? 0, type: "reminder", mobile, amountMentioned: amount }).catch(() => {})
-  }
+  const isOtherStaff = followup.staffId !== user?.user_id
 
   // Build ordered event list so we can know which is last
   type Event = { icon: React.ReactNode; text: string; color: string }
   const events: Event[] = [
     {
       icon: <ClipboardList size={11} color={palette.neutral[400]} strokeWidth={1.75} />,
-      text: `Logged by ${toTitleCase(followup.staffName)} · ${formatDate(followup.loggedAt)}`,
+      text: isOtherStaff
+        ? `Logged ${formatDate(followup.loggedAt)}`
+        : `Logged by you · ${formatDate(followup.loggedAt)}`,
       color: palette.neutral[500],
     },
   ]
@@ -204,11 +189,19 @@ function FollowUpCard({
   }
 
   return (
-    <AppCard elevation="sm" style={styles.card}>
+    <>
+    <AppCard elevation="sm" style={[styles.card, isOtherStaff && { borderLeftWidth: 3, borderLeftColor: palette.info.default }]}>
       {/* Header: contact method + outcome + time ago */}
       <View style={[styles.cardHeader, { borderBottomColor: colors.border }]}>
         <ContactIcon method={followup.contactMethod} color={colors.text.tertiary as string} />
         <AppText variant="caption" color="secondary">{CONTACT_LABELS[followup.contactMethod]}</AppText>
+        {isOtherStaff && (
+          <View style={[styles.outcomeBadge, { backgroundColor: palette.info.default + "18" }]}>
+            <AppText variant="caption" style={{ color: palette.info.default, fontSize: 11 }}>
+              {toTitleCase(followup.staffName)}
+            </AppText>
+          </View>
+        )}
         <View style={[styles.outcomeBadge, { backgroundColor: color + "22" }]}>
           <AppText variant="caption" style={{ color, fontSize: 11 }}>{OUTCOME_LABELS[followup.outcome]}</AppText>
         </View>
@@ -232,25 +225,28 @@ function FollowUpCard({
         </AppText>
       ) : null}
 
-      {/* WhatsApp action buttons */}
-      {(resolved || (!resolved && !!followup.promisedAmount)) && !!mobile && (
-        <View style={styles.waActions}>
-          {resolved && (
-            <TouchableOpacity activeOpacity={0.7} onPress={sendReceiptWhatsApp} style={styles.waBtn}>
-              <MessageCircle size={11} color="#fff" strokeWidth={1.75} />
-              <AppText variant="caption" style={{ color: "#fff", fontSize: 10 }}>Send Receipt</AppText>
-            </TouchableOpacity>
-          )}
-          {!resolved && !!followup.promisedAmount && (
-            <TouchableOpacity activeOpacity={0.7} onPress={sendReminderWhatsApp} style={styles.waBtnReminder}>
-              <MessageCircle size={11} color="#fff" strokeWidth={1.75} />
-              <AppText variant="caption" style={{ color: "#fff", fontSize: 10 }}>Send Reminder</AppText>
-            </TouchableOpacity>
-          )}
-        </View>
+      {!!mobile && (
+        <WhatsAppActions
+          mobile={mobile}
+          customerName={customerName}
+          showReceipt={resolved}
+          receiptAmount={followup.amountRecovered ?? followup.promisedAmount ?? 0}
+          receiptBalanceLine={(() => {
+            const balance = Number(totalBalance)
+            return balance === 0
+              ? "Your account balance is now fully cleared."
+              : `Your closing balance is ₹${formatAmount(balance)} ${drCr === "Cr" ? "in credit" : "outstanding"}.`
+          })()}
+          onReceiptSent={() => followupService.logWhatsApp(followup._id, { staffId: user?.user_id ?? 0, type: "receipt", mobile, amountMentioned: followup.amountRecovered ?? followup.promisedAmount ?? 0 }).catch(() => {})}
+          showReminder={!resolved && !!followup.promisedAmount}
+          reminderAmount={followup.promisedAmount ?? 0}
+          reminderDateLine={followup.promisedDate ? ` by ${formatDate(followup.promisedDate)}` : ""}
+          onReminderSent={() => followupService.logWhatsApp(followup._id, { staffId: user?.user_id ?? 0, type: "reminder", mobile, amountMentioned: followup.promisedAmount ?? 0 }).catch(() => {})}
+        />
       )}
 
     </AppCard>
+    </>
   )
 }
 
@@ -674,6 +670,11 @@ export default function CustomerDetailScreen() {
               />
             )}
             ItemSeparatorComponent={() => <View style={{ height: spacing[3] }} />}
+            ListHeaderComponent={
+              <AppText variant="caption" color="tertiary" style={styles.listSubtitle}>
+                All follow-ups by any staff for this customer
+              </AppText>
+            }
             contentContainerStyle={styles.list}
             ListEmptyComponent={
               <View style={styles.center}>
@@ -992,6 +993,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[4],
     paddingTop: spacing[4],
     paddingBottom: spacing[20],
+  },
+  listSubtitle: {
+    marginBottom: spacing[3],
   },
   // ─── tabs ──────────────────────────────────────────────────────────────────
   tabWrap: { flexGrow: 0 },

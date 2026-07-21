@@ -563,7 +563,7 @@ paths:
                       last_outcome:
                         type: string
                         nullable: true
-                        enum: [promisedToPay, promisedPartial, dispute, noResponse]
+                        enum: [promisedToPay, promisedPartial, dispute, noResponse, reminderSent]
                       next_followup_date:
                         type: string
                         format: date-time
@@ -819,7 +819,7 @@ paths:
                             last_outcome:
                               type: string
                               nullable: true
-                              enum: [promisedToPay, promisedPartial, dispute, noResponse]
+                              enum: [promisedToPay, promisedPartial, dispute, noResponse, reminderSent]
                             next_followup_date:
                               type: string
                               format: date-time
@@ -834,7 +834,7 @@ paths:
                           type: string
                           format: date-time
                           nullable: true
-                          description: Most recent synced Sales voucher date, all-time
+                          description: Most recent synced Sales voucher date, all-time - as of the last ledger sync (~10 min lag), not live
                         days_since_last_purchase:
                           type: integer
                           nullable: true
@@ -845,12 +845,12 @@ paths:
                         avg_days_to_clear:
                           type: number
                           nullable: true
-                          description: FIFO-derived average days this customer takes to clear debt once incurred - same logic as GET /ledger/payment-velocity. Null if they've never cleared anything yet.
+                          description: FIFO-derived average days this customer takes to clear debt once incurred - same logic as GET /ledger/payment-velocity, as of the last ledger sync. Null if they've never cleared anything yet.
                         last_payment_date:
                           type: string
                           format: date-time
                           nullable: true
-                          description: Most recent actual Receipt voucher date - independent of avg_days_to_clear, answers "have they paid recently?"
+                          description: Most recent actual Receipt voucher date, as of the last ledger sync - independent of avg_days_to_clear, answers "have they paid recently?"
                         last_payment_amount:
                           type: number
                           nullable: true
@@ -1050,7 +1050,7 @@ paths:
                             last_outcome:
                               type: string
                               nullable: true
-                              enum: [promisedToPay, promisedPartial, dispute, noResponse]
+                              enum: [promisedToPay, promisedPartial, dispute, noResponse, reminderSent]
                             next_followup_date:
                               type: string
                               format: date-time
@@ -1063,7 +1063,7 @@ paths:
                           type: string
                           format: date-time
                           nullable: true
-                          description: Most recent synced Sales voucher date, all-time
+                          description: Most recent synced Sales voucher date, all-time - as of the last ledger sync (~10 min lag), not live
                         days_since_last_purchase:
                           type: integer
                           nullable: true
@@ -1074,12 +1074,12 @@ paths:
                         avg_days_to_clear:
                           type: number
                           nullable: true
-                          description: FIFO-derived average days this customer takes to clear debt once incurred - same logic as GET /ledger/payment-velocity. Null if they've never cleared anything yet.
+                          description: FIFO-derived average days this customer takes to clear debt once incurred - same logic as GET /ledger/payment-velocity, as of the last ledger sync. Null if they've never cleared anything yet.
                         last_payment_date:
                           type: string
                           format: date-time
                           nullable: true
-                          description: Most recent actual Receipt voucher date - independent of avg_days_to_clear, answers "have they paid recently?"
+                          description: Most recent actual Receipt voucher date, as of the last ledger sync - independent of avg_days_to_clear, answers "have they paid recently?"
                         last_payment_amount:
                           type: number
                           nullable: true
@@ -1363,11 +1363,18 @@ paths:
                           nullable: true
                         avg_days_to_clear:
                           type: number
-                          description: Credit-weighted average days between a debit and whatever credit(s) paid it off
+                          description: Credit-weighted average days between a debit and whatever credit(s) paid it off, as of the last ledger sync (~10 min lag)
                           example: 0
                         total_debt_amount:
                           type: number
-                          description: Sum of every debit entry ever synced for this customer
+                          description: >
+                            Sum of every debit entry ever synced for this customer,
+                            plus their pre-sync opening balance if captured (see
+                            `npm run ledger:sync:opening-balances`) - covers debt
+                            carried over from a legacy pre-rowbest system that
+                            can't be synced as individual entries, so this
+                            reconciles with the live outstanding balance instead
+                            of only reflecting locally-synced history.
                         total_cleared_amount:
                           type: number
                           description: Sum of debt actually matched against a later credit (FIFO)
@@ -1384,7 +1391,7 @@ paths:
                           type: string
                           format: date-time
                           nullable: true
-                          description: Most recent actual Receipt voucher date - independent of the FIFO clearance calculation, contextualizes avg_days_to_clear with "have they paid recently?"
+                          description: Most recent actual Receipt voucher date, as of the last ledger sync - independent of the FIFO clearance calculation, contextualizes avg_days_to_clear with "have they paid recently?"
                           example: "2026-06-26T04:00:00.000Z"
                         last_payment_amount:
                           type: number
@@ -1473,7 +1480,7 @@ paths:
     get:
       tags:
         - Ledger
-      summary: List staff for the mapping-assignment dropdown (superAdmin only)
+      summary: List staff for the mapping-assignment dropdown (managers/superAdmin)
       description: Lightweight id+name list (sorted by name) of every staff member, for populating a "reassign to" dropdown alongside GET/PUT /ledger/mappings.
       security:
         - BearerAuth: []
@@ -1499,13 +1506,13 @@ paths:
                           type: string
                           example: ANAS
         '403':
-          description: Forbidden - superAdmin only
+          description: Forbidden - managers/superAdmin only
 
   /ledger/mappings:
     get:
       tags:
         - Ledger
-      summary: List customer->staff assignments (superAdmin only)
+      summary: List customer->staff assignments (managers/superAdmin)
       description: >
         The manually-maintained staff-customer mapping
         (LedgerCustomer.assigned_staff_id) that drives ownership before the
@@ -1577,13 +1584,13 @@ paths:
                           type: string
                           nullable: true
         '403':
-          description: Forbidden - superAdmin only
+          description: Forbidden - managers/superAdmin only
 
   /ledger/mappings/{ledgerId}:
     put:
       tags:
         - Ledger
-      summary: Reassign a customer to a different staff member (superAdmin only)
+      summary: Reassign a customer to a different staff member (managers/superAdmin)
       security:
         - BearerAuth: []
       parameters:
@@ -1630,7 +1637,7 @@ paths:
         '400':
           description: staffId is required
         '403':
-          description: Forbidden - superAdmin only
+          description: Forbidden - managers/superAdmin only
         '404':
           description: Ledger customer or staff not found
 
@@ -1699,6 +1706,7 @@ paths:
                     - promisedPartial
                     - dispute
                     - noResponse
+                    - reminderSent
                   example: promisedToPay
                 promisedAmount:
                   type: number
@@ -1816,6 +1824,7 @@ paths:
                     - promisedPartial
                     - dispute
                     - noResponse
+                    - reminderSent
                 promisedAmount:
                   type: number
                 promisedDate:
@@ -1933,11 +1942,65 @@ paths:
         '404':
           description: Follow-up not found
 
+  /followups/reminder:
+    post:
+      tags:
+        - Follow-ups
+      summary: Send a WhatsApp reminder without an existing follow-up (managers/superAdmin)
+      description: >
+        For sending a reminder to a customer who doesn't have any logged
+        follow-up yet - creates a new FollowUpResponse representing the
+        reminder itself (contactMethod: whatsapp, outcome: reminderSent)
+        and immediately logs the WhatsApp send against it (same mechanism
+        as POST /followups/{id}/whatsapp), so `sentAt` is captured and it
+        shows up in the customer's normal follow-up history and stats.
+        customerName/mobile/outstandingAmount are resolved from
+        LedgerCustomer, not supplied by the caller.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - ledgerId
+              properties:
+                ledgerId:
+                  type: integer
+                  description: Rowbest ledger id (LedgerCustomer.ledger_id)
+                  example: 688580
+                amountMentioned:
+                  type: number
+                  nullable: true
+                  example: 5000
+      responses:
+        '201':
+          description: Reminder sent and logged - the newly-created follow-up
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  data:
+                    $ref: '#/components/schemas/FollowUpResponse'
+        '400':
+          description: Missing ledgerId, or customer has no mobile number on file
+        '403':
+          description: Forbidden - managers/superAdmin only
+        '404':
+          description: Ledger customer not found
+
   /followups/all:
     get:
       tags:
         - Follow-ups
-      summary: Get all follow-ups across all staff (superAdmin only)
+      summary: Get all follow-ups across all staff (managers/superAdmin)
       description: |
         Company-wide follow-up list, optionally narrowed to one staff via
         `staffId`. Same filter convention and `summary` block as
@@ -2001,7 +2064,17 @@ paths:
           description: Filter to a single outcome
           schema:
             type: string
-            enum: [promisedToPay, promisedPartial, dispute, noResponse]
+            enum: [promisedToPay, promisedPartial, dispute, noResponse, reminderSent]
+        - name: resolutionStatus
+          in: query
+          description: >
+            Filter by system-detected payment status - `resolved` means a
+            real payment has landed for that customer since the follow-up
+            was logged (resolvedByPayment=true), `open` means it hasn't
+            yet. Independent of `outcome`.
+          schema:
+            type: string
+            enum: [resolved, open]
       responses:
         '200':
           description: Paginated follow-ups across all (or one) staff, with a summary block
@@ -2051,9 +2124,9 @@ paths:
                       totalPaidAmount:
                         type: number
         '400':
-          description: Invalid dateField or outcome value
+          description: Invalid dateField, outcome, or resolutionStatus value
         '403':
-          description: Forbidden - superAdmin only
+          description: Forbidden - managers/superAdmin only
 
   /followups/customer/{customerId}:
     get:
@@ -2179,7 +2252,17 @@ paths:
           description: Filter to a single outcome (e.g. noResponse)
           schema:
             type: string
-            enum: [promisedToPay, promisedPartial, dispute, noResponse]
+            enum: [promisedToPay, promisedPartial, dispute, noResponse, reminderSent]
+        - name: resolutionStatus
+          in: query
+          description: >
+            Filter by system-detected payment status - `resolved` means a
+            real payment has landed for that customer since the follow-up
+            was logged (resolvedByPayment=true), `open` means it hasn't
+            yet. Independent of `outcome`.
+          schema:
+            type: string
+            enum: [resolved, open]
       responses:
         '200':
           description: Paginated follow-ups with a summary block
@@ -2223,6 +2306,8 @@ paths:
                             type: integer
                           noResponse:
                             type: integer
+                          reminderSent:
+                            type: integer
                       byResolution:
                         type: object
                         description: Whether the ledger sync has detected a real payment for this customer since the follow-up was logged
@@ -2240,7 +2325,7 @@ paths:
                         type: number
                         description: Sum of amountRecovered across resolved follow-ups - actual money collected as a result
         '400':
-          description: Invalid dateField or outcome value
+          description: Invalid dateField, outcome, or resolutionStatus value
         '403':
           description: Forbidden - staff can only access their own follow-ups
 
@@ -2283,7 +2368,17 @@ paths:
           description: Filter to a single outcome
           schema:
             type: string
-            enum: [promisedToPay, promisedPartial, dispute, noResponse]
+            enum: [promisedToPay, promisedPartial, dispute, noResponse, reminderSent]
+        - name: resolutionStatus
+          in: query
+          description: >
+            Filter by system-detected payment status - `resolved` means a
+            real payment has landed for that customer since the follow-up
+            was logged (resolvedByPayment=true), `open` means it hasn't
+            yet. Independent of `outcome`.
+          schema:
+            type: string
+            enum: [resolved, open]
       responses:
         '200':
           description: Total follow-up summary
@@ -2314,6 +2409,8 @@ paths:
                             type: integer
                           noResponse:
                             type: integer
+                          reminderSent:
+                            type: integer
                       byResolution:
                         type: object
                         properties:
@@ -2328,7 +2425,7 @@ paths:
                       totalPaidAmount:
                         type: number
         '400':
-          description: Invalid dateField, period, or outcome value
+          description: Invalid dateField, period, outcome, or resolutionStatus value
         '403':
           description: Forbidden - managers only
 
@@ -2382,6 +2479,8 @@ paths:
                           dispute:
                             type: integer
                           noResponse:
+                            type: integer
+                          reminderSent:
                             type: integer
                       byResolution:
                         type: object
@@ -2561,7 +2660,7 @@ paths:
     get:
       tags:
         - Dashboard
-      summary: Company-wide overview for superAdmin
+      summary: Company-wide overview for managers/superAdmin
       description: |
         Totals across the whole company plus a per-staff leaderboard,
         sorted by outstanding balance descending. Outstanding balances are
@@ -2600,7 +2699,7 @@ paths:
           description: Filter the follow-up numbers to a single outcome
           schema:
             type: string
-            enum: [promisedToPay, promisedPartial, dispute, noResponse]
+            enum: [promisedToPay, promisedPartial, dispute, noResponse, reminderSent]
         - name: resolutionStatus
           in: query
           description: >
@@ -2724,7 +2823,7 @@ paths:
         '400':
           description: Invalid dateField, period, outcome, or resolutionStatus value
         '403':
-          description: Forbidden - superAdmin only
+          description: Forbidden - managers/superAdmin only
 
   /attendance/scan:
     post:
@@ -3089,7 +3188,7 @@ paths:
       tags:
         - Attendance
       summary: Delete fingerprint enrollment (reset)
-      description: Remove all fingerprint enrollment data for a staff member. They can re-enroll afterward. Requires owner or superAdmin role.
+      description: Remove all fingerprint enrollment data for a staff member. They can re-enroll afterward. Requires owner, manager, or superAdmin role.
       security:
         - BearerAuth: []
       parameters:
@@ -3121,7 +3220,7 @@ paths:
       tags:
         - Leaves
       summary: Request a leave
-      description: Staff requests a leave. Requires approval from superAdmin. Maximum 3 leaves per month, 12 per year.
+      description: Staff requests a leave. Requires approval from a manager or superAdmin. Maximum 3 leaves per month, 12 per year.
       security:
         - BearerAuth: []
       requestBody:
@@ -3287,7 +3386,7 @@ paths:
     get:
       tags:
         - Leaves
-      summary: Get all leave requests (SUPER ADMIN ONLY)
+      summary: Get all leave requests (MANAGERS/SUPER ADMIN)
       description: Retrieve all leave requests across all staff with optional status filter
       security:
         - BearerAuth: []
@@ -3341,13 +3440,13 @@ paths:
                               type: string
                               format: date-time
         '403':
-          description: Forbidden - superadmin only
+          description: Forbidden - managers/superadmin only
 
   /leaves/{leaveId}/approve:
     put:
       tags:
         - Leaves
-      summary: Approve leave request (SUPER ADMIN ONLY)
+      summary: Approve leave request (MANAGERS/SUPER ADMIN)
       description: Approve a pending leave request. Automatically deducts from leave balance.
       security:
         - BearerAuth: []
@@ -3379,7 +3478,7 @@ paths:
                         type: string
                         format: date-time
         '403':
-          description: Forbidden - superadmin only
+          description: Forbidden - managers/superadmin only
         '400':
           description: Bad request - invalid status
 
@@ -3387,7 +3486,7 @@ paths:
     put:
       tags:
         - Leaves
-      summary: Reject leave request (SUPER ADMIN ONLY)
+      summary: Reject leave request (MANAGERS/SUPER ADMIN)
       description: Reject a pending leave request with reason
       security:
         - BearerAuth: []
@@ -3428,7 +3527,7 @@ paths:
                         type: string
                         example: rejected
         '403':
-          description: Forbidden - superadmin only
+          description: Forbidden - managers/superadmin only
         '400':
           description: Bad request - invalid status
 
@@ -3487,7 +3586,7 @@ paths:
     get:
       tags:
         - Leaves
-      summary: Get leave statistics (SUPER ADMIN ONLY)
+      summary: Get leave statistics (MANAGERS/SUPER ADMIN)
       description: Retrieve aggregated leave statistics across the organization
       security:
         - BearerAuth: []
@@ -3525,13 +3624,13 @@ paths:
                       currentMonth:
                         type: integer
         '403':
-          description: Forbidden - superadmin only
+          description: Forbidden - managers/superadmin only
 
   /appearance/{staffId}:
     put:
       tags:
         - Appearance
-      summary: Update staff appearance (SUPER ADMIN ONLY)
+      summary: Update staff appearance (MANAGERS/SUPER ADMIN)
       description: Update appearance status for a staff member. Use status "ok" to reset, or "bad" with violations to mark violations.
       security:
         - BearerAuth: []
@@ -3578,7 +3677,7 @@ paths:
         '400':
           description: Bad request - issues required when status is bad
         '403':
-          description: Forbidden - superadmin only
+          description: Forbidden - managers/superadmin only
         '404':
           description: Staff not found
 
@@ -3586,7 +3685,7 @@ paths:
     get:
       tags:
         - Appearance
-      summary: Get today's appearance for all staff (SUPER ADMIN ONLY)
+      summary: Get today's appearance for all staff (MANAGERS/SUPER ADMIN)
       description: Retrieve appearance status for all staff members for today. Defaults to OK for all staff.
       security:
         - BearerAuth: []
@@ -3640,13 +3739,13 @@ paths:
                               format: date-time
                               nullable: true
         '403':
-          description: Forbidden - superadmin only
+          description: Forbidden - managers/superadmin only
 
   /appearance/mark-bad/{staffId}:
     post:
       tags:
         - Appearance
-      summary: Mark staff appearance as bad (SUPER ADMIN ONLY)
+      summary: Mark staff appearance as bad (MANAGERS/SUPER ADMIN)
       description: Mark specific appearance violations for a staff member for today
       security:
         - BearerAuth: []
@@ -3711,7 +3810,7 @@ paths:
         '400':
           description: Bad request
         '403':
-          description: Forbidden - superadmin only
+          description: Forbidden - managers/superadmin only
         '404':
           description: Staff not found
 
@@ -3719,7 +3818,7 @@ paths:
     post:
       tags:
         - Appearance
-      summary: Reset appearance to OK (SUPER ADMIN ONLY)
+      summary: Reset appearance to OK (MANAGERS/SUPER ADMIN)
       description: Reset staff appearance status back to OK for today
       security:
         - BearerAuth: []
@@ -3750,7 +3849,7 @@ paths:
                         type: string
                         example: ok
         '403':
-          description: Forbidden - superadmin only
+          description: Forbidden - managers/superadmin only
         '404':
           description: Staff not found
 
@@ -3758,7 +3857,7 @@ paths:
     get:
       tags:
         - Appearance
-      summary: Get appearance history (SUPER ADMIN ONLY)
+      summary: Get appearance history (MANAGERS/SUPER ADMIN)
       description: Get appearance history for a specific staff member
       security:
         - BearerAuth: []
@@ -3809,7 +3908,7 @@ paths:
                         items:
                           type: object
         '403':
-          description: Forbidden - superadmin only
+          description: Forbidden - managers/superadmin only
         '404':
           description: Staff not found
 
@@ -3817,7 +3916,7 @@ paths:
     get:
       tags:
         - Appearance
-      summary: Get appearance statistics (SUPER ADMIN ONLY)
+      summary: Get appearance statistics (MANAGERS/SUPER ADMIN)
       description: Get aggregated appearance statistics across staff
       security:
         - BearerAuth: []
@@ -3856,7 +3955,7 @@ paths:
                         items:
                           type: object
         '403':
-          description: Forbidden - superadmin only
+          description: Forbidden - managers/superadmin only
 
   /scores/{staffId}/month/{month}:
     get:
@@ -3955,7 +4054,7 @@ paths:
     get:
       tags:
         - Scoring
-      summary: Get all staff scores for a month with statistics (SUPER ADMIN ONLY)
+      summary: Get all staff scores for a month with statistics (MANAGERS/SUPER ADMIN)
       description: |
         Retrieve all staff scores for a given month with detailed statistics.
 
@@ -3999,13 +4098,13 @@ paths:
                         items:
                           $ref: '#/components/schemas/StaffScoreResponse'
         '403':
-          description: Forbidden - superadmin only
+          description: Forbidden - managers/superadmin only
 
   /scores/calculate-monthly:
     post:
       tags:
         - Scoring
-      summary: Calculate monthly scores for all staff (SUPER ADMIN ONLY)
+      summary: Calculate monthly scores for all staff (MANAGERS/SUPER ADMIN)
       description: |
         Trigger score calculation for all active staff for a given month.
 
@@ -4069,7 +4168,7 @@ paths:
                         nullable: true
                         description: Any errors encountered during calculation
         '403':
-          description: Forbidden - superadmin only
+          description: Forbidden - managers/superadmin only
 
   /extra-performance:
     get:
@@ -4187,7 +4286,7 @@ paths:
     get:
       tags:
         - Extra Performance
-      summary: Get pending performances for approval (SUPER ADMIN ONLY)
+      summary: Get pending performances for approval (MANAGERS/SUPER ADMIN)
       description: Retrieve all pending performance submissions across all staff for a given month. SuperAdmin uses this to review and approve/reject submissions.
       security:
         - BearerAuth: []
@@ -4222,13 +4321,13 @@ paths:
                         items:
                           $ref: '#/components/schemas/ExtraPerformanceResponse'
         '403':
-          description: Forbidden - superadmin only
+          description: Forbidden - managers/superadmin only
 
   /extra-performance/{performanceId}/approve:
     put:
       tags:
         - Extra Performance
-      summary: Approve extra performance (SUPER ADMIN ONLY)
+      summary: Approve extra performance (MANAGERS/SUPER ADMIN)
       description: Approve a pending performance submission. Staff will receive 10 points on monthly score.
       security:
         - BearerAuth: []
@@ -4252,7 +4351,7 @@ paths:
                   data:
                     $ref: '#/components/schemas/ExtraPerformanceResponse'
         '403':
-          description: Forbidden - superadmin only
+          description: Forbidden - managers/superadmin only
         '404':
           description: Performance not found
 
@@ -4260,7 +4359,7 @@ paths:
     put:
       tags:
         - Extra Performance
-      summary: Reject extra performance (SUPER ADMIN ONLY)
+      summary: Reject extra performance (MANAGERS/SUPER ADMIN)
       description: Reject a pending performance submission with a reason.
       security:
         - BearerAuth: []
@@ -4298,7 +4397,7 @@ paths:
         '400':
           description: Bad request - missing rejectionReason
         '403':
-          description: Forbidden - superadmin only
+          description: Forbidden - managers/superadmin only
         '404':
           description: Performance not found
 
@@ -4368,7 +4467,7 @@ paths:
     get:
       tags:
         - Scoring
-      summary: Get scoring configuration (SUPER ADMIN ONLY)
+      summary: Get scoring configuration (MANAGERS/SUPER ADMIN)
       description: Retrieve the scoring rules and parameters for a given month.
       security:
         - BearerAuth: []
@@ -4394,14 +4493,14 @@ paths:
                   data:
                     $ref: '#/components/schemas/ScoringConfigResponse'
         '403':
-          description: Forbidden - superadmin only
+          description: Forbidden - managers/superadmin only
         '404':
           description: Configuration not found
 
     put:
       tags:
         - Scoring
-      summary: Update scoring configuration (SUPER ADMIN ONLY)
+      summary: Update scoring configuration (MANAGERS/SUPER ADMIN)
       description: Update the scoring rules and parameters for a month. SuperAdmin only.
       security:
         - BearerAuth: []
@@ -4475,7 +4574,7 @@ paths:
                   data:
                     $ref: '#/components/schemas/ScoringConfigResponse'
         '403':
-          description: Forbidden - superadmin only
+          description: Forbidden - managers/superadmin only
         '400':
           description: Bad request - invalid configuration
 
@@ -4908,6 +5007,7 @@ components:
             - promisedPartial
             - dispute
             - noResponse
+            - reminderSent
           example: promisedToPay
         promisedAmount:
           type: number
@@ -5331,7 +5431,7 @@ tags:
   - name: Notifications
     description: Staff notifications (e.g. new ledger transactions), with read/unread tracking
   - name: Dashboard
-    description: Company-wide overview and reporting for superAdmin
+    description: Company-wide overview and reporting for managers/superAdmin
   - name: Attendance
     description: Biometric fingerprint attendance tracking and management
   - name: Leaves
