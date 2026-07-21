@@ -13,6 +13,7 @@ import {
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { Plus, Calendar, X, Award, Clock, RefreshCw } from "lucide-react-native"
 import BackButton from "../../components/shared/BackButton"
+import AnimatedListItem from "../../components/shared/AnimatedListItem"
 import DatePickerField from "../../components/shared/DatePickerField"
 import moment from "moment"
 import AppText from "../../components/ui/AppText"
@@ -364,7 +365,11 @@ export default function ExtraPerformanceScreen() {
       <FlatList
         data={filtered}
         keyExtractor={(item) => item._id}
-        renderItem={({ item }) => <PerformanceCard item={item} />}
+        renderItem={({ item, index }) => (
+          <AnimatedListItem index={index}>
+            <PerformanceCard item={item} />
+          </AnimatedListItem>
+        )}
         contentContainerStyle={styles.list}
         ItemSeparatorComponent={() => <View style={{ height: spacing[3] }} />}
         refreshing={isRefetching}

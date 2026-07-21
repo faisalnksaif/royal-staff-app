@@ -8,6 +8,7 @@ import {
 import BackButton from "../../components/shared/BackButton"
 import RefreshButton from "../../components/shared/RefreshButton"
 import ErrorRetry from "../../components/shared/ErrorRetry"
+import AnimatedListItem from "../../components/shared/AnimatedListItem"
 import ContactMethodIcon from "../../components/shared/ContactMethodIcon"
 import OutcomeBadge, { outcomeColor } from "../../components/shared/OutcomeBadge"
 import FollowUpListCard from "../../components/shared/FollowUpListCard"
@@ -105,7 +106,11 @@ export default function AllFollowupsScreen() {
         <FlatList
           data={followups}
           keyExtractor={(item) => item._id}
-          renderItem={({ item }) => <FollowUpListCard item={item} showStaffName />}
+          renderItem={({ item, index }) => (
+            <AnimatedListItem index={index}>
+              <FollowUpListCard item={item} showStaffName />
+            </AnimatedListItem>
+          )}
           contentContainerStyle={{ paddingBottom: spacing[10] }}
           onEndReachedThreshold={0.3}
           onEndReached={() => { if (hasNextPage && !isFetchingNextPage) fetchNextPage() }}

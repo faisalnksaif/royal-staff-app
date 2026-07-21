@@ -1,7 +1,7 @@
-import { useState } from "react"
-import { View, Pressable, ScrollView, StyleSheet, Platform, StatusBar } from "react-native"
+import { useState, useRef } from "react"
+import { View, Pressable, ScrollView, StyleSheet, Platform, StatusBar, Modal, Animated, TouchableWithoutFeedback } from "react-native"
 import { Stack, useRouter, usePathname } from "expo-router"
-import { MessageCircleMore, CalendarCheck, CalendarClock, ShieldCheck, Trophy, Award, Users, Settings, LogOut, UsersRound, Bell, ChevronLeft, ChevronRight } from "lucide-react-native"
+import { MessageCircleMore, CalendarCheck, CalendarClock, ShieldCheck, Trophy, Award, Users, Settings, LogOut, UsersRound, Bell, ChevronLeft, ChevronRight, Menu } from "lucide-react-native"
 import { useQuery } from "@tanstack/react-query"
 import AppText from "../../components/ui/AppText"
 import { useTheme } from "../../providers/ThemeProvider"
@@ -140,12 +140,172 @@ function Sidebar() {
   )
 }
 
+// ─── MobileDrawer ─────────────────────────────────────────────────────────────
+
+function MobileDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { colors } = useTheme()
+  const router = useRouter()
+  const pathname = usePathname()
+  const { logout, user } = useAuthStore()
+  const { role } = useRole()
+  const translateX = useRef(new Animated.Value(-EXPANDED_WIDTH)).current
+
+  const { data: unreadCount = 0 } = useQuery({
+    queryKey: ["unread-count", user?.user_id],
+    queryFn: () => notificationService.getUnreadCount(user!.user_id!),
+    enabled: user?.user_id != null,
+    refetchInterval: 60_000,
+  })
+
+  useState(() => {
+    Animated.timing(translateX, {
+      toValue: open ? 0 : -EXPANDED_WIDTH,
+      duration: 260,
+      useNativeDriver: true,
+    }).start()
+  })
+
+  // Re-animate whenever open changes
+  if (open) {
+    Animated.timing(translateX, { toValue: 0, duration: 260, useNativeDriver: true }).start()
+  } else {
+    Animated.timing(translateX, { toValue: -EXPANDED_WIDTH, duration: 220, useNativeDriver: true }).start()
+  }
+
+  const visibleItems = NAV_ITEMS.filter(
+    (item) => !item.roles || (role && item.roles.includes(role))
+  )
+
+  function isActive(item: NavItem) {
+    if (item.matchExact) return pathname === "/" || pathname === "/index"
+    return pathname.includes(item.href.split("/").pop() ?? "")
+  }
+
+  function navigate(href: string) {
+    onClose()
+    router.push(href as any)
+  }
+
+  async function handleLogout() {
+    onClose()
+    await logout()
+    router.replace("/(auth)/login")
+  }
+
+  return (
+    <Modal visible={open} transparent animationType="none" onRequestClose={onClose}>
+      {/* Scrim */}
+      <TouchableWithoutFeedback onPress={onClose}>
+        <View style={styles.scrim} />
+      </TouchableWithoutFeedback>
+
+      {/* Drawer panel */}
+      <Animated.View
+        style={[
+          styles.drawer,
+          {
+            transform: [{ translateX }],
+            backgroundColor: colors.background.secondary as string,
+            borderRightColor: colors.border as string,
+          },
+        ]}
+      >
+        {/* Brand */}
+        <View style={[styles.brand, { borderBottomColor: colors.border, justifyContent: "space-between" }]}>
+          <View style={{ flex: 1 }}>
+            <AppText variant="heading3" style={{ color: colors.accent }}>RoyalPulse</AppText>
+            <AppText variant="caption" color="tertiary">{user?.name ?? "Admin"}</AppText>
+          </View>
+          <Pressable onPress={onClose} hitSlop={8}>
+            <ChevronLeft size={18} color={colors.text.tertiary} strokeWidth={1.75} />
+          </Pressable>
+        </View>
+
+        {/* Nav */}
+        <ScrollView style={styles.navScroll} contentContainerStyle={styles.nav} showsVerticalScrollIndicator={false}>
+          {visibleItems.map((item) => {
+            const active = isActive(item)
+            const Icon = item.icon
+            return (
+              <Pressable
+                key={item.href}
+                onPress={() => navigate(item.href)}
+                style={({ pressed }) => [
+                  styles.navItem,
+                  active && { backgroundColor: colors.accent + "18" },
+                  pressed && { opacity: 0.7 },
+                ]}
+              >
+                {() => (
+                  <View style={styles.navItemInner}>
+                    <View style={{ position: "relative" }}>
+                      <Icon size={20} strokeWidth={active ? 2 : 1.6} color={active ? colors.accent : colors.text.secondary} />
+                      {item.label === "Notifications" && unreadCount > 0 && (
+                        <View style={[styles.badge, { backgroundColor: colors.accent }]}>
+                          <AppText variant="caption" style={{ color: "#fff", fontSize: 9, lineHeight: 13 }}>
+                            {unreadCount > 99 ? "99+" : unreadCount}
+                          </AppText>
+                        </View>
+                      )}
+                    </View>
+                    <AppText
+                      variant={active ? "bodyMedium" : "body"}
+                      style={{ color: active ? colors.accent : colors.text.secondary }}
+                      numberOfLines={1}
+                    >
+                      {item.label}
+                    </AppText>
+                  </View>
+                )}
+              </Pressable>
+            )
+          })}
+        </ScrollView>
+
+        {/* Logout */}
+        <Pressable
+          onPress={handleLogout}
+          style={({ pressed }) => [styles.logoutBtn, { borderTopColor: colors.border, opacity: pressed ? 0.6 : 1 }]}
+        >
+          {() => (
+            <View style={styles.navItemInner}>
+              <LogOut size={18} color={colors.text.tertiary} strokeWidth={1.6} />
+              <AppText variant="body" color="tertiary">Logout</AppText>
+            </View>
+          )}
+        </Pressable>
+      </Animated.View>
+    </Modal>
+  )
+}
+
+// ─── AdminLayout ──────────────────────────────────────────────────────────────
+
 export default function AdminLayout() {
   const { isTablet } = useTablet()
   const { colors } = useTheme()
+  const [drawerOpen, setDrawerOpen] = useState(false)
 
   if (!isTablet) {
-    return <Stack screenOptions={{ headerShown: false }} />
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.background.primary as string }}>
+        <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
+        <Stack
+          screenOptions={{
+            headerShown: true,
+            headerLeft: () => (
+              <Pressable onPress={() => setDrawerOpen(true)} hitSlop={8} style={{ paddingHorizontal: spacing[2] }}>
+                <Menu size={22} color={colors.text.primary} strokeWidth={1.75} />
+              </Pressable>
+            ),
+            headerStyle: { backgroundColor: colors.background.secondary as string },
+            headerTintColor: colors.text.primary as string,
+            headerShadowVisible: false,
+            headerTitle: "",
+          }}
+        />
+      </View>
+    )
   }
 
   return (
@@ -199,5 +359,20 @@ const styles = StyleSheet.create({
   },
   logoutBtn: {
     borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  scrim: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: "rgba(0,0,0,0.4)",
+  },
+  drawer: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    left: 0,
+    width: EXPANDED_WIDTH,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    paddingTop: Platform.OS === "android" ? (StatusBar.currentHeight ?? 24) + spacing[4] : spacing[12],
+    flexDirection: "column",
+    overflow: "hidden",
   },
 })

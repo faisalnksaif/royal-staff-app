@@ -143,15 +143,31 @@ export default function SuperAdminHome() {
             )}
 
             {/* Company totals */}
-            <View style={styles.statRow}>
-              <StatTile label="Staff" value={String(overview.totals.total_staff)} color={colors.text.primary} />
-              <StatTile label="Customers" value={String(overview.totals.total_customers)} color={colors.text.primary} onPress={() => router.push("/(admin)/all-customers")} />
-              <StatTile
-                label="Outstanding"
-                value={`₹${formatAmount(overview.totals.total_outstanding)}`}
-                color={palette.error.default}
-              />
-            </View>
+            {isTablet ? (
+              <View style={styles.statRow}>
+                <StatTile label="Staff" value={String(overview.totals.total_staff)} color={colors.text.primary} />
+                <StatTile label="Customers" value={String(overview.totals.total_customers)} color={colors.text.primary} onPress={() => router.push("/(admin)/all-customers")} />
+                <StatTile
+                  label="Outstanding"
+                  value={`₹${formatAmount(overview.totals.total_outstanding)}`}
+                  color={palette.error.default}
+                  onPress={() => router.push("/(admin)/debt-history")}
+                />
+              </View>
+            ) : (
+              <View style={styles.statGrid}>
+                <View style={styles.statRow}>
+                  <StatTile label="Staff" value={String(overview.totals.total_staff)} color={colors.text.primary} />
+                  <StatTile label="Customers" value={String(overview.totals.total_customers)} color={colors.text.primary} onPress={() => router.push("/(admin)/all-customers")} />
+                </View>
+                <StatTile
+                  label="Outstanding"
+                  value={`₹${formatAmount(overview.totals.total_outstanding)}`}
+                  color={palette.error.default}
+                  onPress={() => router.push("/(admin)/debt-history")}
+                />
+              </View>
+            )}
 
             {/* Follow-up summary */}
             <Pressable onPress={() => router.push("/(admin)/all-followups")} style={({ pressed }) => [{ opacity: pressed ? 0.75 : 1 }, styles.cursorPointer]}>
@@ -160,22 +176,22 @@ export default function SuperAdminHome() {
                 <AppText variant="bodyMedium">Follow-ups</AppText>
                 <ChevronRight size={16} color={colors.text.tertiary} strokeWidth={1.75} />
               </View>
-              <View style={styles.followupMoneyRow}>
+              <View style={[styles.followupMoneyRow, !isTablet && styles.followupMoneyRowMobile]}>
                 <View style={styles.followupMoneyItem}>
                   <AppText variant="caption" color="tertiary">Logged</AppText>
                   <AppText variant="heading3">{overview.followups.totalFollowUps}</AppText>
                 </View>
-                <View style={[styles.followupMoneyDivider, { backgroundColor: colors.border }]} />
+                <View style={[styles.followupMoneyDivider, { backgroundColor: colors.border }, !isTablet && styles.followupDividerMobile]} />
                 <View style={styles.followupMoneyItem}>
                   <AppText variant="caption" color="tertiary">Promised</AppText>
-                  <AppText variant="heading3" style={{ color: palette.warning.default }}>
+                  <AppText variant={isTablet ? "heading3" : "bodyMedium"} style={{ color: palette.warning.default }}>
                     ₹{formatAmount(overview.followups.totalPromisedAmount)}
                   </AppText>
                 </View>
-                <View style={[styles.followupMoneyDivider, { backgroundColor: colors.border }]} />
+                <View style={[styles.followupMoneyDivider, { backgroundColor: colors.border }, !isTablet && styles.followupDividerMobile]} />
                 <View style={styles.followupMoneyItem}>
                   <AppText variant="caption" color="tertiary">Recovered</AppText>
-                  <AppText variant="heading3" style={{ color: palette.success.default }}>
+                  <AppText variant={isTablet ? "heading3" : "bodyMedium"} style={{ color: palette.success.default }}>
                     ₹{formatAmount(overview.followups.totalPaidAmount)}
                   </AppText>
                 </View>
@@ -315,6 +331,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing[2],
   },
+  statGrid: {
+    gap: spacing[3],
+    marginBottom: spacing[3],
+  },
   statRow: {
     flexDirection: "row",
     gap: spacing[3],
@@ -343,6 +363,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     marginBottom: spacing[3],
   },
+  followupMoneyRowMobile: {
+    alignItems: "flex-start",
+  },
   followupMoneyItem: {
     flex: 1,
     gap: spacing[1],
@@ -350,6 +373,9 @@ const styles = StyleSheet.create({
   followupMoneyDivider: {
     width: StyleSheet.hairlineWidth,
     marginHorizontal: spacing[3],
+  },
+  followupDividerMobile: {
+    marginHorizontal: spacing[2],
   },
   outcomePillRow: {
     flexDirection: "row",

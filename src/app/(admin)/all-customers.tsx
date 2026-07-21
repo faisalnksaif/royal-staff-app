@@ -9,6 +9,7 @@ import { X, ChevronRight } from "lucide-react-native"
 import BackButton from "../../components/shared/BackButton"
 import CustomerOutstandingRow from "../../components/shared/CustomerOutstandingRow"
 import ErrorRetry from "../../components/shared/ErrorRetry"
+import AnimatedListItem from "../../components/shared/AnimatedListItem"
 import AppText from "../../components/ui/AppText"
 import AppInput from "../../components/ui/AppInput"
 import { useTheme } from "../../providers/ThemeProvider"
@@ -424,7 +425,11 @@ export default function AllCustomersScreen() {
               style={{ flex: 1 }}
               data={customers}
               keyExtractor={(item) => String(item.ledger_id)}
-              renderItem={({ item }) => <CustomerOutstandingRow item={item} />}
+              renderItem={({ item, index }) => (
+                <AnimatedListItem index={index}>
+                  <CustomerOutstandingRow item={item} />
+                </AnimatedListItem>
+              )}
               contentContainerStyle={{ paddingBottom: spacing[12] }}
               onEndReachedThreshold={0.3}
               onEndReached={() => { if (outHasNext && !outFetching) outFetchNext() }}
@@ -500,7 +505,11 @@ export default function AllCustomersScreen() {
             <FlatList
               data={velCustomers}
               keyExtractor={(item) => String(item.ledger_id)}
-              renderItem={({ item }) => <VelocityRow customer={item} companyAvg={velSummary?.company_avg_days_to_clear ?? null} />}
+              renderItem={({ item, index }) => (
+                <AnimatedListItem index={index}>
+                  <VelocityRow customer={item} companyAvg={velSummary?.company_avg_days_to_clear ?? null} />
+                </AnimatedListItem>
+              )}
               contentContainerStyle={{ paddingBottom: spacing[12] }}
               onEndReachedThreshold={0.3}
               onEndReached={() => { if (velHasNext && !velFetching) velFetchNext() }}
@@ -594,7 +603,11 @@ export default function AllCustomersScreen() {
               style={{ flex: 1 }}
               data={retCustomers}
               keyExtractor={(item) => String(item.ledger_id)}
-              renderItem={({ item }) => <RetentionRow customer={item} />}
+              renderItem={({ item, index }) => (
+                <AnimatedListItem index={index}>
+                  <RetentionRow customer={item} />
+                </AnimatedListItem>
+              )}
               contentContainerStyle={{ paddingBottom: spacing[12] }}
               onEndReachedThreshold={0.3}
               onEndReached={() => { if (retHasNext && !retFetching) retFetchNext() }}

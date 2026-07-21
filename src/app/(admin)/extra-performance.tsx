@@ -13,6 +13,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { Check, X, Calendar, ChevronLeft, ChevronRight, Award, Clock } from "lucide-react-native"
 import BackButton from "../../components/shared/BackButton"
 import StaffAvatar from "../../components/shared/StaffAvatar"
+import AnimatedListItem from "../../components/shared/AnimatedListItem"
 import moment from "moment"
 import AppText from "../../components/ui/AppText"
 import AppCard from "../../components/ui/AppCard"
@@ -340,20 +341,22 @@ export default function ExtraPerformanceScreen() {
           key="pending"
           data={pendingList}
           keyExtractor={(item) => item._id}
-          renderItem={({ item }) => (
-            <PendingCard
-              item={item}
-              onApprove={() => {
-                setActionId(item._id)
-                approveMutation.mutate(item._id)
-              }}
-              onReject={() => {
-                setActionId(item._id)
-                setRejectTarget(item._id)
-              }}
-              isApproving={approveMutation.isPending && actionId === item._id}
-              isRejecting={rejectMutation.isPending && actionId === item._id}
-            />
+          renderItem={({ item, index }) => (
+            <AnimatedListItem index={index}>
+              <PendingCard
+                item={item}
+                onApprove={() => {
+                  setActionId(item._id)
+                  approveMutation.mutate(item._id)
+                }}
+                onReject={() => {
+                  setActionId(item._id)
+                  setRejectTarget(item._id)
+                }}
+                isApproving={approveMutation.isPending && actionId === item._id}
+                isRejecting={rejectMutation.isPending && actionId === item._id}
+              />
+            </AnimatedListItem>
           )}
           contentContainerStyle={styles.list}
           ItemSeparatorComponent={() => <View style={{ height: spacing[3] }} />}
@@ -377,7 +380,11 @@ export default function ExtraPerformanceScreen() {
           key="approved"
           data={approvedList}
           keyExtractor={(item) => item._id}
-          renderItem={({ item }) => <ApprovedCard item={item} />}
+          renderItem={({ item, index }) => (
+            <AnimatedListItem index={index}>
+              <ApprovedCard item={item} />
+            </AnimatedListItem>
+          )}
           contentContainerStyle={styles.list}
           ItemSeparatorComponent={() => <View style={{ height: spacing[3] }} />}
           refreshing={refetchingApproved}

@@ -20,6 +20,7 @@ import ContactMethodIcon from "../../components/shared/ContactMethodIcon"
 import OutcomeBadge, { outcomeColor } from "../../components/shared/OutcomeBadge"
 import FollowUpListCard from "../../components/shared/FollowUpListCard"
 import FollowupSummaryStrip from "../../components/shared/FollowupSummaryStrip"
+import AnimatedListItem from "../../components/shared/AnimatedListItem"
 import { useTheme } from "../../providers/ThemeProvider"
 import { spacing, colors as palette } from "../../constants/theme"
 import useAuthStore from "../../stores/useAuthStore"
@@ -239,7 +240,11 @@ export default function FollowUpsScreen() {
           <FlatList
             data={followups}
             keyExtractor={(item) => item._id}
-            renderItem={({ item }) => <FollowUpListCard item={item} />}
+            renderItem={({ item, index }) => (
+              <AnimatedListItem index={index}>
+                <FollowUpListCard item={item} />
+              </AnimatedListItem>
+            )}
             contentContainerStyle={styles.list}
             ItemSeparatorComponent={() => <View style={{ height: spacing[2] }} />}
             ListEmptyComponent={

@@ -11,6 +11,7 @@ import { notificationService } from "../services/notificationService"
 import type { AppNotification, NotificationsResponse } from "../types"
 import moment from "moment"
 import RefreshButton from "../components/shared/RefreshButton"
+import AnimatedListItem from "../components/shared/AnimatedListItem"
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -208,7 +209,7 @@ export default function NotificationsScreen() {
         <FlatList
           data={listItems}
           keyExtractor={(item, i) => item.type === "header" ? `h-${item.label}` : item.data._id}
-          renderItem={({ item }) => {
+          renderItem={({ item, index }) => {
             if (item.type === "header") {
               return (
                 <View style={[styles.sectionHeader, { borderBottomColor: colors.border, backgroundColor: colors.background.secondary }]}>
@@ -218,7 +219,11 @@ export default function NotificationsScreen() {
                 </View>
               )
             }
-            return <NotificationRow item={item.data} onPress={() => handlePress(item.data)} />
+            return (
+              <AnimatedListItem index={index}>
+                <NotificationRow item={item.data} onPress={() => handlePress(item.data)} />
+              </AnimatedListItem>
+            )
           }}
           contentContainerStyle={{ paddingBottom: spacing[10] }}
           onEndReachedThreshold={0.3}

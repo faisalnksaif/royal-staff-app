@@ -13,6 +13,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { Check, X, Calendar, Clock, RefreshCw } from "lucide-react-native"
 import BackButton from "../../components/shared/BackButton"
 import StaffAvatar from "../../components/shared/StaffAvatar"
+import AnimatedListItem from "../../components/shared/AnimatedListItem"
 import moment from "moment"
 import AppText from "../../components/ui/AppText"
 import AppCard from "../../components/ui/AppCard"
@@ -366,20 +367,22 @@ export default function LeavesScreen() {
       <FlatList
         data={leaves}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <LeaveCard
-            item={item}
-            onApprove={() => {
-              setActionId(item.id)
-              approveMutation.mutate(item.id)
-            }}
-            onReject={() => {
-              setActionId(item.id)
-              setRejectTarget(item.id)
-            }}
-            isApproving={approveMutation.isPending && actionId === item.id}
-            isRejecting={rejectMutation.isPending && actionId === item.id}
-          />
+        renderItem={({ item, index }) => (
+          <AnimatedListItem index={index}>
+            <LeaveCard
+              item={item}
+              onApprove={() => {
+                setActionId(item.id)
+                approveMutation.mutate(item.id)
+              }}
+              onReject={() => {
+                setActionId(item.id)
+                setRejectTarget(item.id)
+              }}
+              isApproving={approveMutation.isPending && actionId === item.id}
+              isRejecting={rejectMutation.isPending && actionId === item.id}
+            />
+          </AnimatedListItem>
         )}
         contentContainerStyle={styles.list}
         ItemSeparatorComponent={() => <View style={{ height: spacing[3] }} />}

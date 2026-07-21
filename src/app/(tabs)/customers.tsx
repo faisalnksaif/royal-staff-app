@@ -6,6 +6,7 @@ import { X } from "lucide-react-native"
 import BackButton from "../../components/shared/BackButton"
 import RefreshButton from "../../components/shared/RefreshButton"
 import CustomerOutstandingRow from "../../components/shared/CustomerOutstandingRow"
+import AnimatedListItem from "../../components/shared/AnimatedListItem"
 import { OUTCOME_LABELS, OUTCOME_COLORS } from "../../components/shared/OutcomeBadge"
 import AppText from "../../components/ui/AppText"
 import AppInput from "../../components/ui/AppInput"
@@ -348,7 +349,11 @@ export default function CustomersScreen() {
       <FlatList
         data={customerList}
         keyExtractor={(item) => String(item.ledger_id)}
-        renderItem={({ item }) => <CustomerOutstandingRow item={item} />}
+        renderItem={({ item, index }) => (
+          <AnimatedListItem index={index}>
+            <CustomerOutstandingRow item={item} />
+          </AnimatedListItem>
+        )}
         ListHeaderComponent={<FilterChips active={activeFilter} onChange={setActiveFilter} sortBy={sortBy} onSortChange={setSortBy} />}
         contentContainerStyle={styles.list}
         onEndReachedThreshold={0.3}

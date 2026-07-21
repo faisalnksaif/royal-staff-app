@@ -36,6 +36,7 @@ import WhatsAppActions from "../../../components/shared/WhatsAppActions"
 import ContactMethodIcon from "../../../components/shared/ContactMethodIcon"
 import { outcomeColor, OUTCOME_LABELS } from "../../../components/shared/OutcomeBadge"
 import FollowUpTimeline from "../../../components/shared/FollowUpTimeline"
+import AnimatedListItem from "../../../components/shared/AnimatedListItem"
 import { useCustomerFollowups } from "../../../hooks/useCustomerFollowups"
 import { useCustomerLedger } from "../../../hooks/useCustomerLedger"
 import { followupService } from "../../../services/followupService"
@@ -600,14 +601,16 @@ export default function CustomerDetailScreen() {
           <FlatList
             data={customerFollowups}
             keyExtractor={(item) => item._id}
-            renderItem={({ item }) => (
-              <FollowUpCard
-                followup={item}
-                mobile={mobile ?? ""}
-                customerName={toTitleCase(name)}
-                totalBalance={totalBalance ?? "0"}
-                drCr={drCr ?? "Dr"}
-              />
+            renderItem={({ item, index }) => (
+              <AnimatedListItem index={index}>
+                <FollowUpCard
+                  followup={item}
+                  mobile={mobile ?? ""}
+                  customerName={toTitleCase(name)}
+                  totalBalance={totalBalance ?? "0"}
+                  drCr={drCr ?? "Dr"}
+                />
+              </AnimatedListItem>
             )}
             ItemSeparatorComponent={() => <View style={{ height: spacing[3] }} />}
             ListHeaderComponent={
@@ -643,37 +646,62 @@ export default function CustomerDetailScreen() {
             ListHeaderComponent={(
               <>
                 {ledgerSummary && (
-                  <View style={[styles.ledgerSummary, { borderBottomColor: colors.border, backgroundColor: colors.background.secondary }]}>
-                    <View style={styles.summaryItem}>
-                      <AppText
-                        variant="heading3"
-                        style={{ color: calculatedOpening?.drCr === "Dr" ? palette.error.default : palette.success.default }}
-                      >
-                        {calculatedOpening ? `₹${formatAmount(calculatedOpening.balance)}` : "—"}
-                      </AppText>
-                      <AppText variant="caption" color="tertiary">Opening {calculatedOpening?.drCr ?? ""}</AppText>
+                  isTablet ? (
+                    <View style={[styles.ledgerSummary, { borderBottomColor: colors.border, backgroundColor: colors.background.secondary }]}>
+                      <View style={styles.summaryItem}>
+                        <AppText variant="heading3" style={{ color: calculatedOpening?.drCr === "Dr" ? palette.error.default : palette.success.default }}>
+                          {calculatedOpening ? `₹${formatAmount(calculatedOpening.balance)}` : "—"}
+                        </AppText>
+                        <AppText variant="caption" color="tertiary">Opening {calculatedOpening?.drCr ?? ""}</AppText>
+                      </View>
+                      <View style={[styles.summaryDivider, { backgroundColor: colors.border }]} />
+                      <View style={styles.summaryItem}>
+                        <AppText variant="heading3" style={{ color: palette.error.default }}>₹{formatAmount(ledgerSummary.total_debit)}</AppText>
+                        <AppText variant="caption" color="tertiary">Debit</AppText>
+                      </View>
+                      <View style={[styles.summaryDivider, { backgroundColor: colors.border }]} />
+                      <View style={styles.summaryItem}>
+                        <AppText variant="heading3" style={{ color: palette.success.default }}>₹{formatAmount(ledgerSummary.total_credit)}</AppText>
+                        <AppText variant="caption" color="tertiary">Credit</AppText>
+                      </View>
+                      <View style={[styles.summaryDivider, { backgroundColor: colors.border }]} />
+                      <View style={styles.summaryItem}>
+                        <AppText variant="heading3" style={{ color: ledgerSummary.closing_dr_cr === "Dr" ? palette.error.default : palette.success.default }}>
+                          ₹{formatAmount(Math.abs(ledgerSummary.closing_balance ?? 0))}
+                        </AppText>
+                        <AppText variant="caption" color="tertiary">Closing {ledgerSummary.closing_dr_cr ?? ""}</AppText>
+                      </View>
                     </View>
-                    <View style={[styles.summaryDivider, { backgroundColor: colors.border }]} />
-                    <View style={styles.summaryItem}>
-                      <AppText variant="heading3" style={{ color: palette.error.default }}>₹{formatAmount(ledgerSummary.total_debit)}</AppText>
-                      <AppText variant="caption" color="tertiary">Debit</AppText>
+                  ) : (
+                    <View style={[styles.ledgerSummaryGrid, { borderBottomColor: colors.border, backgroundColor: colors.background.secondary }]}>
+                      <View style={[styles.summaryGridRow, { borderBottomColor: colors.border }]}>
+                        <View style={styles.summaryGridItem}>
+                          <AppText variant="bodyMedium" style={{ color: calculatedOpening?.drCr === "Dr" ? palette.error.default : palette.success.default }}>
+                            {calculatedOpening ? `₹${formatAmount(calculatedOpening.balance)}` : "—"}
+                          </AppText>
+                          <AppText variant="caption" color="tertiary">Opening {calculatedOpening?.drCr ?? ""}</AppText>
+                        </View>
+                        <View style={[styles.summaryGridDivider, { backgroundColor: colors.border }]} />
+                        <View style={styles.summaryGridItem}>
+                          <AppText variant="bodyMedium" style={{ color: ledgerSummary.closing_dr_cr === "Dr" ? palette.error.default : palette.success.default }}>
+                            ₹{formatAmount(Math.abs(ledgerSummary.closing_balance ?? 0))}
+                          </AppText>
+                          <AppText variant="caption" color="tertiary">Closing {ledgerSummary.closing_dr_cr ?? ""}</AppText>
+                        </View>
+                      </View>
+                      <View style={styles.summaryGridRow}>
+                        <View style={styles.summaryGridItem}>
+                          <AppText variant="bodyMedium" style={{ color: palette.error.default }}>₹{formatAmount(ledgerSummary.total_debit)}</AppText>
+                          <AppText variant="caption" color="tertiary">Total Debit</AppText>
+                        </View>
+                        <View style={[styles.summaryGridDivider, { backgroundColor: colors.border }]} />
+                        <View style={styles.summaryGridItem}>
+                          <AppText variant="bodyMedium" style={{ color: palette.success.default }}>₹{formatAmount(ledgerSummary.total_credit)}</AppText>
+                          <AppText variant="caption" color="tertiary">Total Credit</AppText>
+                        </View>
+                      </View>
                     </View>
-                    <View style={[styles.summaryDivider, { backgroundColor: colors.border }]} />
-                    <View style={styles.summaryItem}>
-                      <AppText variant="heading3" style={{ color: palette.success.default }}>₹{formatAmount(ledgerSummary.total_credit)}</AppText>
-                      <AppText variant="caption" color="tertiary">Credit</AppText>
-                    </View>
-                    <View style={[styles.summaryDivider, { backgroundColor: colors.border }]} />
-                    <View style={styles.summaryItem}>
-                      <AppText
-                        variant="heading3"
-                        style={{ color: ledgerSummary.closing_dr_cr === "Dr" ? palette.error.default : palette.success.default }}
-                      >
-                        ₹{formatAmount(Math.abs(ledgerSummary.closing_balance ?? 0))}
-                      </AppText>
-                      <AppText variant="caption" color="tertiary">Closing {ledgerSummary.closing_dr_cr ?? ""}</AppText>
-                    </View>
-                  </View>
+                  )
                 )}
                 {isTablet && ledgerEntries.length > 1 && (
                   <View
@@ -1071,6 +1099,18 @@ const styles = StyleSheet.create({
   },
   summaryItem: { flex: 1, alignItems: "center", gap: 2 },
   summaryDivider: { width: StyleSheet.hairlineWidth, height: 32 },
+  ledgerSummaryGrid: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    marginBottom: spacing[1],
+  },
+  summaryGridRow: {
+    flexDirection: "row",
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3],
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  summaryGridItem: { flex: 1, gap: 2 },
+  summaryGridDivider: { width: StyleSheet.hairlineWidth, marginHorizontal: spacing[4] },
   tlRow: { flexDirection: "row" },
   tlDotCol: { width: 22, alignItems: "center", paddingTop: 4 },
   tlDot: { width: 10, height: 10, borderRadius: 5 },

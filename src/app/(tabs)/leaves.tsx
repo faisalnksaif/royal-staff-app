@@ -18,6 +18,7 @@ import {
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { Plus, Calendar, Clock, X, Trash2 } from "lucide-react-native"
 import BackButton from "../../components/shared/BackButton"
+import AnimatedListItem from "../../components/shared/AnimatedListItem"
 import DatePickerField from "../../components/shared/DatePickerField"
 import moment from "moment"
 import AppText from "../../components/ui/AppText"
@@ -466,17 +467,19 @@ export default function LeavesScreen() {
       <FlatList
         data={leaves}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) =>
-          item.status === "pending" ? (
-            <SwipeableLeaveCard
-              item={item}
-              onDelete={deleteMutation.mutate}
-              isDeleting={deleteMutation.isPending && deleteMutation.variables === item.id}
-            />
-          ) : (
-            <LeaveCard item={item} />
-          )
-        }
+        renderItem={({ item, index }) => (
+          <AnimatedListItem index={index}>
+            {item.status === "pending" ? (
+              <SwipeableLeaveCard
+                item={item}
+                onDelete={deleteMutation.mutate}
+                isDeleting={deleteMutation.isPending && deleteMutation.variables === item.id}
+              />
+            ) : (
+              <LeaveCard item={item} />
+            )}
+          </AnimatedListItem>
+        )}
         contentContainerStyle={styles.list}
         ItemSeparatorComponent={() => <View style={{ height: spacing[3] }} />}
         refreshing={isRefetching}

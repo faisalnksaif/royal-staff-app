@@ -1277,6 +1277,60 @@ paths:
         '403':
           description: Forbidden - managers only
 
+  /ledger/debt-history:
+    get:
+      tags:
+        - Ledger
+      summary: Total company-wide debt for each of the last N days (for charting)
+      description: >
+        Reconstructs total signed outstanding debt (sum of LedgerCustomer.balance,
+        same convention as GET /dashboard/overview's total_outstanding) for
+        each calendar day going back `days` days - with no separate
+        snapshot/history collection. Derived from each LedgerEntry's own
+        running_balance (rowbest's balance-as-of-that-transaction), forward-
+        filled per customer against the requested day list, seeded by
+        opening_balance before a customer's earliest synced entry. History
+        only goes back as far as sync history exists for each customer -
+        there's no daily granularity into the pre-rowbest legacy era.
+        Today's point can lag slightly behind the live dashboard total since
+        it depends on the last completed sync, not real-time. Managers only.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: days
+          in: query
+          description: How many days of history to return, ending today
+          schema:
+            type: integer
+            default: 30
+            maximum: 365
+      responses:
+        '200':
+          description: One total_debt figure per day, oldest first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        date:
+                          type: string
+                          example: '2026-07-21'
+                        total_debt:
+                          type: number
+                          example: 25022177.34
+        '400':
+          description: days must be a positive number, max 365
+        '403':
+          description: Forbidden - managers only
+
   /ledger/payment-velocity:
     get:
       tags:

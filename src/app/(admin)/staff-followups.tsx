@@ -11,6 +11,7 @@ import {
 } from "lucide-react-native"
 import BackButton from "../../components/shared/BackButton"
 import RefreshButton from "../../components/shared/RefreshButton"
+import AnimatedListItem from "../../components/shared/AnimatedListItem"
 import ErrorRetry from "../../components/shared/ErrorRetry"
 import ContactMethodIcon from "../../components/shared/ContactMethodIcon"
 import OutcomeBadge, { outcomeColor } from "../../components/shared/OutcomeBadge"
@@ -93,7 +94,11 @@ function CustomersTab({ staffId }: { staffId: number }) {
     <FlatList
       data={customerList}
       keyExtractor={(item) => String(item.ledger_id)}
-      renderItem={({ item }) => <CustomerOutstandingRow item={item} />}
+      renderItem={({ item, index }) => (
+        <AnimatedListItem index={index}>
+          <CustomerOutstandingRow item={item} />
+        </AnimatedListItem>
+      )}
       ListHeaderComponent={
         <View>
           <View style={[styles.searchWrap, { borderBottomColor: colors.border }]}>
@@ -275,7 +280,11 @@ export default function StaffFollowupsScreen() {
             <FlatList
               data={followups}
               keyExtractor={(item) => item._id}
-              renderItem={({ item }) => <FollowUpListCard item={item} showStaffName />}
+              renderItem={({ item, index }) => (
+                <AnimatedListItem index={index}>
+                  <FollowUpListCard item={item} showStaffName />
+                </AnimatedListItem>
+              )}
               contentContainerStyle={{ paddingBottom: spacing[10] }}
               onEndReachedThreshold={0.3}
               onEndReached={() => { if (hasNextPage && !isFetchingNextPage) fetchNextPage() }}

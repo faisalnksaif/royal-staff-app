@@ -14,6 +14,7 @@ import { useQuery } from "@tanstack/react-query"
 import { Fingerprint, CheckCircle, XCircle, X, UserPlus, ChevronLeft } from "lucide-react-native"
 import BackButton from "../../components/shared/BackButton"
 import RefreshButton from "../../components/shared/RefreshButton"
+import AnimatedListItem from "../../components/shared/AnimatedListItem"
 import StaffAvatar from "../../components/shared/StaffAvatar"
 import moment from "moment"
 import AppText from "../../components/ui/AppText"
@@ -192,19 +193,21 @@ function FingerprintModal({
         <FlatList
           data={filtered}
           keyExtractor={(item) => String(item.id)}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => { setSelectedStaff(item); setPhase("scan") }}
-            >
-              <View style={[styles.staffRow, { borderBottomColor: colors.border as string }]}>
-                <StaffAvatar name={item.name} color={colors.accent} bgColor={colors.accentSubtle} />
-                <View style={{ flex: 1 }}>
-                  <AppText variant="bodyMedium">{toTitleCase(item.name)}</AppText>
-                  <AppText variant="caption" color="secondary">ID: {item.id}</AppText>
+          renderItem={({ item, index }) => (
+            <AnimatedListItem index={index}>
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => { setSelectedStaff(item); setPhase("scan") }}
+              >
+                <View style={[styles.staffRow, { borderBottomColor: colors.border as string }]}>
+                  <StaffAvatar name={item.name} color={colors.accent} bgColor={colors.accentSubtle} />
+                  <View style={{ flex: 1 }}>
+                    <AppText variant="bodyMedium">{toTitleCase(item.name)}</AppText>
+                    <AppText variant="caption" color="secondary">ID: {item.id}</AppText>
+                  </View>
                 </View>
-              </View>
-            </TouchableOpacity>
+              </TouchableOpacity>
+            </AnimatedListItem>
           )}
           contentContainerStyle={{ paddingBottom: spacing[10] }}
           ListEmptyComponent={
@@ -361,7 +364,11 @@ export default function AttendanceScreen() {
       <FlatList
         data={records}
         keyExtractor={(item) => String(item.staffId)}
-        renderItem={({ item }) => <AttendanceRow record={item} />}
+        renderItem={({ item, index }) => (
+          <AnimatedListItem index={index}>
+            <AttendanceRow record={item} />
+          </AnimatedListItem>
+        )}
         contentContainerStyle={{ paddingBottom: spacing[20] }}
         refreshing={isRefetching}
         onRefresh={refetch}
