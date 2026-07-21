@@ -13,6 +13,7 @@ import {
 } from "react-native"
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { Search, ChevronDown, X } from "lucide-react-native"
+import DrawerMenuButton from "../../components/shared/DrawerMenuButton"
 import AppText from "../../components/ui/AppText"
 import AppCard from "../../components/ui/AppCard"
 import { useTheme } from "../../providers/ThemeProvider"
@@ -208,6 +209,7 @@ export default function MappingsScreen() {
     <View style={[styles.screen, { backgroundColor: colors.background.primary }]}>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
+        <DrawerMenuButton />
         <View>
           <AppText variant="heading2">Customer Mapping</AppText>
           <AppText variant="caption" color="secondary">

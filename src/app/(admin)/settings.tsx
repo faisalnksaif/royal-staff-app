@@ -10,6 +10,7 @@ import useThemeStore, { type FontSize } from "../../stores/useThemeStore"
 import useAuthStore from "../../stores/useAuthStore"
 import { APP_CONFIG } from "../../constants/config"
 import { spacing } from "../../constants/theme"
+import DrawerMenuButton from "../../components/shared/DrawerMenuButton"
 
 function RowList({ children }: { children: React.ReactNode }) {
   const { colors } = useTheme()
@@ -68,6 +69,7 @@ export default function SuperAdminSettingsScreen() {
   return (
     <View style={[styles.screen, { backgroundColor: colors.background.primary }]}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
+        <DrawerMenuButton />
         <AppText variant="heading2">Settings</AppText>
       </View>
 

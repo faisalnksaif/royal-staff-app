@@ -18,6 +18,7 @@ import StaffLeaderboardRow from "../../components/shared/StaffLeaderboardRow"
 import DashboardFilterBar, { type DashboardPeriodValue } from "../../components/shared/DashboardFilterBar"
 import DashboardSkeleton from "../../components/shared/DashboardSkeleton"
 import RefreshButton from "../../components/shared/RefreshButton"
+import DrawerMenuButton from "../../components/shared/DrawerMenuButton"
 import { OUTCOME_LABELS, OUTCOME_COLORS } from "../../components/shared/OutcomeBadge"
 
 
@@ -96,7 +97,8 @@ export default function SuperAdminHome() {
       contentContainerStyle={{ paddingBottom: spacing[8] }}
     >
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <View>
+        <DrawerMenuButton />
+        <View style={{ flex: 1 }}>
           <AppText variant="heading2">Dashboard</AppText>
         </View>
         <View style={styles.headerActions}>

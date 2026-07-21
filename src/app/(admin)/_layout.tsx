@@ -1,7 +1,8 @@
 import { useState, useRef } from "react"
 import { View, Pressable, ScrollView, StyleSheet, Platform, StatusBar, Modal, Animated, TouchableWithoutFeedback } from "react-native"
 import { Stack, useRouter, usePathname } from "expo-router"
-import { MessageCircleMore, CalendarCheck, CalendarClock, ShieldCheck, Trophy, Award, Users, Settings, LogOut, UsersRound, Bell, ChevronLeft, ChevronRight, Menu } from "lucide-react-native"
+import { MessageCircleMore, CalendarCheck, CalendarClock, ShieldCheck, Trophy, Award, Users, Settings, LogOut, UsersRound, Bell, ChevronLeft, ChevronRight } from "lucide-react-native"
+import { AdminDrawerContext } from "../../contexts/adminDrawer"
 import { useQuery } from "@tanstack/react-query"
 import AppText from "../../components/ui/AppText"
 import { useTheme } from "../../providers/ThemeProvider"
@@ -288,23 +289,12 @@ export default function AdminLayout() {
 
   if (!isTablet) {
     return (
-      <View style={{ flex: 1, backgroundColor: colors.background.primary as string }}>
-        <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
-        <Stack
-          screenOptions={{
-            headerShown: true,
-            headerLeft: () => (
-              <Pressable onPress={() => setDrawerOpen(true)} hitSlop={8} style={{ paddingHorizontal: spacing[2] }}>
-                <Menu size={22} color={colors.text.primary} strokeWidth={1.75} />
-              </Pressable>
-            ),
-            headerStyle: { backgroundColor: colors.background.secondary as string },
-            headerTintColor: colors.text.primary as string,
-            headerShadowVisible: false,
-            headerTitle: "",
-          }}
-        />
-      </View>
+      <AdminDrawerContext.Provider value={{ openDrawer: () => setDrawerOpen(true) }}>
+        <View style={{ flex: 1, backgroundColor: colors.background.primary as string }}>
+          <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
+          <Stack screenOptions={{ headerShown: false, animation: "none" }} />
+        </View>
+      </AdminDrawerContext.Provider>
     )
   }
 
