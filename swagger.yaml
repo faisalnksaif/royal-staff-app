@@ -2801,6 +2801,10 @@ paths:
                             type: integer
                           total_customers:
                             type: integer
+                            description: All Sundry Debtors customers, regardless of current balance
+                          customers_with_debt:
+                            type: integer
+                            description: Sundry Debtors customers with a positive (Dr) live balance - i.e. actually owing money right now
                           total_outstanding:
                             type: number
                             description: Sum of balance (dr - cr) across all Sundry Debtors customers, live/current

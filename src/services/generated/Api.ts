@@ -50,6 +50,82 @@ export interface LedgerCustomerResponse {
   updatedAt?: string;
 }
 
+/** A single synced rowbest ledger transaction, as stored in LedgerEntry */
+export interface LedgerEntryResponse {
+  /**
+   * Rowbest transaction-line id - unique idempotency key
+   * @example 30694733
+   */
+  voucher_id?: number;
+  /**
+   * Underlying voucher id used to build edit_path
+   * @example 7684810
+   */
+  accounting_voucher_id?: number | null;
+  /** @example 688315 */
+  ledger_id?: number;
+  /**
+   * Denormalized customer name at fetch time
+   * @example "IRSHAD ACM"
+   */
+  ledger_name?: string;
+  /** @example "RV2627/R/07801" */
+  voucher_number?: string | null;
+  /** @format date-time */
+  voucher_date?: string;
+  /**
+   * Original dd-mm-yyyy string from rowbest, kept for debugging
+   * @example "11-07-2026"
+   */
+  voucher_date_raw?: string;
+  /**
+   * Same-day tiebreaker preserving rowbest's true chronological order (not always voucher_number order)
+   * @example 2
+   */
+  sequence?: number;
+  /**
+   * Receipt | Payment | Sales | Sales Return | ...
+   * @example "Sales"
+   */
+  voucher_type?: string;
+  dr_or_cr?: "Dr" | "Cr" | null;
+  amount?: number | null;
+  /** @example 171 */
+  debit?: number;
+  /** @example 0 */
+  credit?: number;
+  /** @example 24595 */
+  running_balance?: number | null;
+  running_balance_dr_cr?: "Dr" | "Cr" | null;
+  /** @example "Sales" */
+  particulars?: string | null;
+  cost_center?: string | null;
+  remarks?: string | null;
+  /** @example "UPI" */
+  payment_type?: string | null;
+  supplier_invoice_no?: string | null;
+  vehicle_no?: string | null;
+  /** @example "/admin/sales/7684810/edit?id=688315" */
+  edit_path?: string | null;
+  /** Sales-executive name as scraped from rowbest, before normalization/matching */
+  sales_executive_raw?: string | null;
+  sales_executive_normalized?: string | null;
+  /** Resolved internal Staff.id, if sales_executive_raw matched exactly one staff member */
+  staff_id?: number | null;
+  /** not_applicable means this voucher type has no sales-executive field at all (e.g. Payment vouchers) */
+  staff_match_status?: "matched" | "unmatched" | "ambiguous" | "not_applicable";
+  /** Whether the sales-executive scrape has run for this entry */
+  sales_executive_fetched?: boolean;
+  /** @format date-time */
+  sales_executive_fetched_at?: string | null;
+  /** @format date-time */
+  fetchedAt?: string;
+  /** @format date-time */
+  createdAt?: string;
+  /** @format date-time */
+  updatedAt?: string;
+}
+
 export interface UserResponse {
   /**
    * MongoDB user ID
@@ -211,6 +287,19 @@ export interface FollowUpResponse {
     /** @format date-time */
     lastReminderSentAt?: string | null;
   };
+  /** Full audit trail of every WhatsApp send logged via POST /followups/{id}/whatsapp - whatsapp above only holds the latest per type, this holds all of them. */
+  whatsappSends?: {
+    _id?: string;
+    /** @example 12 */
+    staffId?: number;
+    type?: "receipt" | "reminder";
+    /** @example "919876543210" */
+    mobile?: string;
+    /** @example 5000 */
+    amountMentioned?: number | null;
+    /** @format date-time */
+    sentAt?: string;
+  }[];
   /**
    * @format date-time
    * @example "2026-06-19T10:30:00.000Z"
@@ -224,6 +313,7 @@ export interface FollowUpResponse {
     | "promisedPartial"
     | "dispute"
     | "noResponse"
+    | "reminderSent";
   /** @example 5000 */
   promisedAmount?: number | null;
   /**
@@ -1086,21 +1176,35 @@ export class Api<SecurityDataType extends unknown> {
       }),
 
     /**
-     * @description Returns the customer record and its synced transactions, optionally filtered by date range
+     * @description Returns the customer record, its synced transactions (paginated), a debit/credit summary, retention status, payment velocity, follow-up summary, and current ownership - a full profile for one customer. retention and payment_velocity are always computed over this customer's FULL synced history, independent of from_date/to_date (those only scope the transaction list and summary debit/credit totals). Managers only.
      *
      * @tags Ledger
      * @name CustomersDetail
-     * @summary Get a customer's ledger detail
+     * @summary Get a customer's ledger detail (paginated entries + summary + retention + payment velocity + follow-up + ownership)
      * @request GET:/ledger/customers/{ledgerId}
      * @secure
      */
     customersDetail: (
       ledgerId: number,
       query?: {
+        /** @default 1 */
+        page?: number;
+        /** @default 50 */
+        limit?: number;
         /** @format date */
         from_date?: string;
         /** @format date */
         to_date?: string;
+        /**
+         * Days since last purchase to be considered "active" (for `retention`)
+         * @default 30
+         */
+        activeDays?: number;
+        /**
+         * Days since last purchase beyond which "churned" (for `retention`, must be greater than activeDays)
+         * @default 90
+         */
+        churnedDays?: number;
       },
       params: RequestParams = {},
     ) =>
@@ -1108,11 +1212,82 @@ export class Api<SecurityDataType extends unknown> {
         {
           /** @example true */
           success?: boolean;
+          pagination?: {
+            page?: number;
+            limit?: number;
+            total?: number;
+            pages?: number;
+          };
           data?: {
             /** A rowbest customer ledger, as synced into LedgerCustomer */
             customer?: LedgerCustomerResponse;
-            /** Synced transactions for this customer */
-            entries?: object[];
+            /** This page's synced transactions for this customer */
+            entries?: LedgerEntryResponse[];
+          };
+          /** Debit/credit totals computed over the full (optionally date-filtered) entry set, not just the current page. opening_balance/closing_balance are both LedgerCustomer.balance (the customer's live balance, sourced from rowbest's customer list, not derived per-entry) - since local entry sync isn't guaranteed complete (some history still lives in a legacy pre-rowbest system), these are always equal to each other and don't vary with from_date/to_date. For a live point-in-time value over an arbitrary range, use GET /ledger/customers/{ledgerId}/opening-balance instead. */
+          summary?: {
+            total_entries?: number;
+            total_debit?: number;
+            total_credit?: number;
+            /** total_debit - total_credit for this window only - NOT the account balance, since it ignores whatever the balance already was before the window started. Use closing_balance for the actual balance. */
+            net_movement?: number;
+            opening_balance?: number;
+            opening_dr_cr?: "Dr" | "Cr";
+            closing_balance?: number;
+            closing_dr_cr?: "Dr" | "Cr";
+          };
+          /** This customer's buying-recency classification - same logic as GET /ledger/retention, computed over full history regardless of from_date/to_date */
+          retention?: {
+            /** @format date-time */
+            first_purchase_date?: string | null;
+            /** @format date-time */
+            last_purchase_date?: string | null;
+            /** Count of synced Sales vouchers, all-time */
+            total_purchases?: number;
+            days_since_last_purchase?: number | null;
+            status?: "active" | "at_risk" | "churned" | "never_purchased";
+            activeDays?: number;
+            churnedDays?: number;
+          };
+          /** This customer's FIFO debt-clearance speed - same logic as GET /ledger/payment-velocity, computed over full history */
+          payment_velocity?: {
+            /** Null if this customer has never had any debt cleared */
+            avg_days_to_clear?: number | null;
+            total_debt_amount?: number;
+            total_cleared_amount?: number;
+            cleared_pct?: number;
+            /**
+             * Most recent actual Receipt voucher date - independent of the FIFO clearance calculation
+             * @format date-time
+             */
+            last_payment_date?: string | null;
+            last_payment_amount?: number | null;
+            days_since_last_payment?: number | null;
+          };
+          /** Follow-up activity for this customer (see GET /ledger/staff/{userId}/outstanding's follow_up field for the same shape) */
+          follow_up?: {
+            total?: number;
+            open?: number;
+            resolved?: number;
+            /** @format date-time */
+            last_logged_at?: string | null;
+            last_outcome?:
+              | "promisedToPay"
+              | "promisedPartial"
+              | "dispute"
+              | "noResponse"
+              | "reminderSent"
+              | null;
+            /** @format date-time */
+            next_followup_date?: string | null;
+            is_overdue?: boolean;
+            total_promised_amount?: number;
+          };
+          /** Who currently "owns" this customer, per the ownership cutoff rule (see GET /ledger/staff/{userId}/outstanding) */
+          ownership?: {
+            staffId?: number | null;
+            staffName?: string | null;
+            source?: "assigned" | "dynamic" | "unassigned";
           };
         },
         void
@@ -1206,8 +1381,24 @@ export class Api<SecurityDataType extends unknown> {
           | "all"
           | "followed_up"
           | "not_followed_up"
+          | "paid"
           | "overdue"
           | "open_followup";
+        /**
+         * `priority` (default) ranks by worst-case risk, highest first: (1) overdue follow-up - a promise was already missed, (2) churned + still owes money (Dr balance) - stopped buying and hasn't paid, the highest bad-debt risk, (3) never followed up at all + still owes money - a coverage gap, (4) at_risk (buying is slowing down) + still owes money, (5) everyone else. Within each tier, longest since last payment first (customers who have never paid sort before any finite gap), then highest outstanding_balance. "balance" is the simple outstanding_balance-descending sort with no risk weighting.
+         * @default "priority"
+         */
+        sortBy?: "priority" | "balance";
+        /**
+         * Days since last purchase to be considered "active" (for `retention_status`)
+         * @default 30
+         */
+        activeDays?: number;
+        /**
+         * Days since last purchase beyond which "churned" (for `retention_status`, must be greater than activeDays)
+         * @default 90
+         */
+        churnedDays?: number;
       },
       params: RequestParams = {},
     ) =>
@@ -1256,6 +1447,7 @@ export class Api<SecurityDataType extends unknown> {
                 | "promisedPartial"
                 | "dispute"
                 | "noResponse"
+                | "reminderSent"
                 | null;
               /** @format date-time */
               next_followup_date?: string | null;
@@ -1264,14 +1456,41 @@ export class Api<SecurityDataType extends unknown> {
               /** Sum of promisedAmount across still-open follow-ups */
               total_promised_amount?: number;
             };
+            /**
+             * Most recent synced Sales voucher date, all-time - as of the last ledger sync (~10 min lag), not live
+             * @format date-time
+             */
+            last_purchase_date?: string | null;
+            days_since_last_purchase?: number | null;
+            /** Same classification as GET /ledger/retention */
+            retention_status?:
+              | "active"
+              | "at_risk"
+              | "churned"
+              | "never_purchased";
+            /** FIFO-derived average days this customer takes to clear debt once incurred - same logic as GET /ledger/payment-velocity, as of the last ledger sync. Null if they've never cleared anything yet. */
+            avg_days_to_clear?: number | null;
+            /**
+             * Most recent actual Receipt voucher date, as of the last ledger sync - independent of avg_days_to_clear, answers "have they paid recently?"
+             * @format date-time
+             */
+            last_payment_date?: string | null;
+            last_payment_amount?: number | null;
+            days_since_last_payment?: number | null;
           }[];
           /** The filter that was applied to `data` */
           filter?:
             | "all"
             | "followed_up"
             | "not_followed_up"
+            | "paid"
             | "overdue"
             | "open_followup";
+          sortBy?: "priority" | "balance";
+          retention_thresholds?: {
+            activeDays?: number;
+            churnedDays?: number;
+          };
           totals?: {
             total_outstanding?: number;
             total_staff_sales?: number;
@@ -1288,7 +1507,7 @@ export class Api<SecurityDataType extends unknown> {
             resolved_followups?: number;
             /** resolved_followups / total_followups * 100 */
             resolution_rate_pct?: number;
-            /** @example {"promisedToPay":12,"dispute":2,"noContact":5} */
+            /** @example {"promisedToPay":12,"dispute":2,"noResponse":5} */
             by_outcome?: Record<string, number>;
             /** Sum of promisedAmount across still-open follow-ups */
             total_promised_amount?: number;
@@ -1301,6 +1520,394 @@ export class Api<SecurityDataType extends unknown> {
         void
       >({
         path: `/ledger/staff/${userId}/outstanding`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Company-wide counterpart to GET /ledger/staff/{userId}/outstanding - same follow-up filtering, retention/payment-velocity fields, and worst-case-first priority sort, but across every customer instead of one staff member's owned set (no per-staff ownership/sales-contribution breakdown). Managers only.
+     *
+     * @tags Ledger
+     * @name OutstandingList
+     * @summary Get all customers across all staff, with outstanding
+     * @request GET:/ledger/outstanding
+     * @secure
+     */
+    outstandingList: (
+      query?: {
+        /** @default 1 */
+        page?: number;
+        /** @default 50 */
+        limit?: number;
+        /** Filter by customer name */
+        search?: string;
+        /**
+         * Filter by follow-up status. `paid` means the customer has at least one follow-up resolved by a payment.
+         * @default "all"
+         */
+        filter?:
+          | "all"
+          | "followed_up"
+          | "not_followed_up"
+          | "paid"
+          | "overdue"
+          | "open_followup";
+        /**
+         * `priority` (default) ranks by worst-case risk, highest first: (1) overdue follow-up - a promise was already missed, (2) churned + still owes money (Dr balance) - stopped buying and hasn't paid, the highest bad-debt risk, (3) never followed up at all + still owes money - a coverage gap, (4) at_risk (buying is slowing down) + still owes money, (5) everyone else. Within each tier, longest since last payment first (customers who have never paid sort before any finite gap), then highest outstanding_balance. `balance` is the simple outstanding_balance-descending sort with no risk weighting.
+         * @default "priority"
+         */
+        sortBy?: "priority" | "balance";
+        /**
+         * Days since last purchase to be considered "active" (for `retention_status`)
+         * @default 30
+         */
+        activeDays?: number;
+        /**
+         * Days since last purchase beyond which "churned" (for `retention_status`, must be greater than activeDays)
+         * @default 90
+         */
+        churnedDays?: number;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          pagination?: {
+            page?: number;
+            limit?: number;
+            total?: number;
+            pages?: number;
+          };
+          data?: {
+            /** @example 868301 */
+            ledger_id?: number;
+            /** @example "FAVAS VENGARA" */
+            name?: string;
+            /** @example "9747006008" */
+            mobile?: string | null;
+            /** @example 50000 */
+            outstanding_balance?: number;
+            outstanding_dr_cr?: "Dr" | "Cr";
+            follow_up?: {
+              total?: number;
+              open?: number;
+              resolved?: number;
+              /** @format date-time */
+              last_logged_at?: string | null;
+              last_outcome?:
+                | "promisedToPay"
+                | "promisedPartial"
+                | "dispute"
+                | "noResponse"
+                | "reminderSent"
+                | null;
+              /** @format date-time */
+              next_followup_date?: string | null;
+              is_overdue?: boolean;
+              total_promised_amount?: number;
+            };
+            /**
+             * Most recent synced Sales voucher date, all-time - as of the last ledger sync (~10 min lag), not live
+             * @format date-time
+             */
+            last_purchase_date?: string | null;
+            days_since_last_purchase?: number | null;
+            /** Same classification as GET /ledger/retention */
+            retention_status?:
+              | "active"
+              | "at_risk"
+              | "churned"
+              | "never_purchased";
+            /** FIFO-derived average days this customer takes to clear debt once incurred - same logic as GET /ledger/payment-velocity, as of the last ledger sync. Null if they've never cleared anything yet. */
+            avg_days_to_clear?: number | null;
+            /**
+             * Most recent actual Receipt voucher date, as of the last ledger sync - independent of avg_days_to_clear, answers "have they paid recently?"
+             * @format date-time
+             */
+            last_payment_date?: string | null;
+            last_payment_amount?: number | null;
+            days_since_last_payment?: number | null;
+          }[];
+          filter?:
+            | "all"
+            | "followed_up"
+            | "not_followed_up"
+            | "paid"
+            | "overdue"
+            | "open_followup";
+          sortBy?: "priority" | "balance";
+          retention_thresholds?: {
+            activeDays?: number;
+            churnedDays?: number;
+          };
+          totals?: {
+            total_outstanding?: number;
+          };
+        },
+        void
+      >({
+        path: `/ledger/outstanding`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Buckets every Sundry Debtors customer by days since their last Sales voucher: `active` (<= activeDays), `at_risk` (between activeDays and churnedDays), `churned` (> churnedDays), or `never_purchased` (no Sales voucher ever synced). Based on buying behavior (Sales vouchers), independent of follow-up/collections activity. `summary` counts are always computed over the full customer set regardless of the `status` filter applied to `data`. Managers only.
+     *
+     * @tags Ledger
+     * @name RetentionList
+     * @summary Customer retention summary (active/at-risk/churned/never-purchased)
+     * @request GET:/ledger/retention
+     * @secure
+     */
+    retentionList: (
+      query?: {
+        /** @default 1 */
+        page?: number;
+        /** @default 50 */
+        limit?: number;
+        /** Filter by customer name */
+        search?: string;
+        /**
+         * Filter `data` to a single retention status
+         * @default "all"
+         */
+        status?: "all" | "active" | "at_risk" | "churned" | "never_purchased";
+        /**
+         * Days since last purchase to be considered "active"
+         * @default 30
+         */
+        activeDays?: number;
+        /**
+         * Days since last purchase beyond which a customer is "churned" (must be greater than activeDays)
+         * @default 90
+         */
+        churnedDays?: number;
+        /**
+         * Field to sort by. `last_purchase_date` and `days_since_last_purchase` both push never_purchased customers (null) to the end regardless of `order`.
+         * @default "last_purchase_date"
+         */
+        sortBy?:
+          | "last_purchase_date"
+          | "days_since_last_purchase"
+          | "total_purchases"
+          | "outstanding_balance";
+        /** @default "desc" */
+        order?: "asc" | "desc";
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          pagination?: {
+            page?: number;
+            limit?: number;
+            total?: number;
+            pages?: number;
+          };
+          data?: {
+            /** @example 698368 */
+            ledger_id?: number;
+            /** @example "AK GAS" */
+            name?: string;
+            mobile?: string | null;
+            /** @format date-time */
+            first_purchase_date?: string | null;
+            /** @format date-time */
+            last_purchase_date?: string | null;
+            /** Count of synced Sales vouchers */
+            total_purchases?: number;
+            days_since_last_purchase?: number | null;
+            status?: "active" | "at_risk" | "churned" | "never_purchased";
+            /**
+             * Current live balance, from LedgerCustomer - independent of the buying-recency status above
+             * @example 15000
+             */
+            outstanding_balance?: number;
+            outstanding_dr_cr?: "Dr" | "Cr";
+          }[];
+          filters?: {
+            activeDays?: number;
+            churnedDays?: number;
+            status?:
+              | "all"
+              | "active"
+              | "at_risk"
+              | "churned"
+              | "never_purchased";
+          };
+          sort?: {
+            sortBy?:
+              | "last_purchase_date"
+              | "days_since_last_purchase"
+              | "total_purchases"
+              | "outstanding_balance";
+            order?: "asc" | "desc";
+          };
+          /** Computed over all Sundry Debtors customers, not just the current page or status filter */
+          summary?: {
+            total_customers?: number;
+            active?: number;
+            at_risk?: number;
+            churned?: number;
+            never_purchased?: number;
+            active_pct?: number;
+            churn_pct?: number;
+          };
+        },
+        void
+      >({
+        path: `/ledger/retention`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Reconstructs total signed outstanding debt (sum of LedgerCustomer.balance, same convention as GET /dashboard/overview's total_outstanding) for each calendar day going back `days` days - with no separate snapshot/history collection. Derived from each LedgerEntry's own running_balance (rowbest's balance-as-of-that-transaction), forward- filled per customer against the requested day list, seeded by opening_balance before a customer's earliest synced entry. History only goes back as far as sync history exists for each customer - there's no daily granularity into the pre-rowbest legacy era. Today's point can lag slightly behind the live dashboard total since it depends on the last completed sync, not real-time. Managers only.
+     *
+     * @tags Ledger
+     * @name DebtHistoryList
+     * @summary Total company-wide debt for each of the last N days (for charting)
+     * @request GET:/ledger/debt-history
+     * @secure
+     */
+    debtHistoryList: (
+      query?: {
+        /**
+         * How many days of history to return, ending today
+         * @max 365
+         * @default 30
+         */
+        days?: number;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          data?: {
+            /** @example "2026-07-21" */
+            date?: string;
+            /** @example 25022177.34 */
+            total_debt?: number;
+          }[];
+        },
+        void
+      >({
+        path: `/ledger/debt-history`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description FIFO-matches each customer's debit entries (debt incurred) against their later credit entries (debt cleared) in chronological order - the standard accounting assumption when individual invoices aren't explicitly linked to specific payments, consistent with how rowbest's own running_balance is built. Ranked fastest (lowest avg_days_to_clear) first. Customers who have never had any debt cleared are excluded (avg_days_to_clear would be null). Managers only.
+     *
+     * @tags Ledger
+     * @name PaymentVelocityList
+     * @summary Customers ranked by how fast they historically clear debt
+     * @request GET:/ledger/payment-velocity
+     * @secure
+     */
+    paymentVelocityList: (
+      query?: {
+        /** @default 1 */
+        page?: number;
+        /** @default 50 */
+        limit?: number;
+        /** Filter by customer name */
+        search?: string;
+        /**
+         * Field to sort by. `days_since_last_payment` sorts by recency of the last actual Receipt - customers with no payment on record (null) always sort last regardless of `order`.
+         * @default "avg_days_to_clear"
+         */
+        sortBy?:
+          | "avg_days_to_clear"
+          | "total_debt_amount"
+          | "total_cleared_amount"
+          | "cleared_pct"
+          | "outstanding_balance"
+          | "days_since_last_payment";
+        /** @default "asc" */
+        order?: "asc" | "desc";
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          pagination?: {
+            page?: number;
+            limit?: number;
+            total?: number;
+            pages?: number;
+          };
+          data?: {
+            /** @example 846539 */
+            ledger_id?: number;
+            /** @example "KAMARUDHEEN CHINAKKAL" */
+            name?: string;
+            mobile?: string | null;
+            /**
+             * Credit-weighted average days between a debit and whatever credit(s) paid it off, as of the last ledger sync (~10 min lag)
+             * @example 0
+             */
+            avg_days_to_clear?: number;
+            /** Sum of every debit entry ever synced for this customer, plus their pre-sync opening balance if captured (see `npm run ledger:sync:opening-balances`) - covers debt carried over from a legacy pre-rowbest system that can't be synced as individual entries, so this reconciles with the live outstanding balance instead of only reflecting locally-synced history. */
+            total_debt_amount?: number;
+            /** Sum of debt actually matched against a later credit (FIFO) */
+            total_cleared_amount?: number;
+            /** total_cleared_amount / total_debt_amount * 100 - how much of their history this average is based on */
+            cleared_pct?: number;
+            /** Current live balance, from LedgerCustomer */
+            outstanding_balance?: number;
+            outstanding_dr_cr?: "Dr" | "Cr";
+            /**
+             * Most recent actual Receipt voucher date, as of the last ledger sync - independent of the FIFO clearance calculation, contextualizes avg_days_to_clear with "have they paid recently?"
+             * @format date-time
+             * @example "2026-06-26T04:00:00.000Z"
+             */
+            last_payment_date?: string | null;
+            /** @example 5000 */
+            last_payment_amount?: number | null;
+            days_since_last_payment?: number | null;
+          }[];
+          sort?: {
+            sortBy?:
+              | "avg_days_to_clear"
+              | "total_debt_amount"
+              | "total_cleared_amount"
+              | "cleared_pct"
+              | "outstanding_balance"
+              | "days_since_last_payment";
+            order?: "asc" | "desc";
+          };
+          summary?: {
+            customers_ranked?: number;
+            /** Cleared-amount-weighted average across all ranked customers */
+            company_avg_days_to_clear?: number | null;
+          };
+        },
+        void
+      >({
+        path: `/ledger/payment-velocity`,
         method: "GET",
         query: query,
         secure: true,
@@ -1367,6 +1974,129 @@ export class Api<SecurityDataType extends unknown> {
         secure: true,
         ...params,
       }),
+
+    /**
+     * @description Lightweight id+name list (sorted by name) of every staff member, for populating a "reassign to" dropdown alongside GET/PUT /ledger/mappings.
+     *
+     * @tags Ledger
+     * @name MappingsStaffOptionsList
+     * @summary List staff for the mapping-assignment dropdown (managers/superAdmin)
+     * @request GET:/ledger/mappings/staff-options
+     * @secure
+     */
+    mappingsStaffOptionsList: (params: RequestParams = {}) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            /** @example 2645 */
+            staff_id?: number;
+            /** @example "ANAS" */
+            name?: string;
+          }[];
+        },
+        void
+      >({
+        path: `/ledger/mappings/staff-options`,
+        method: "GET",
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description The manually-maintained staff-customer mapping (LedgerCustomer.assigned_staff_id) that drives ownership before the cutoff date - see GET /ledger/staff/{userId}/outstanding for how it's used.
+     *
+     * @tags Ledger
+     * @name MappingsList
+     * @summary List customer->staff assignments (managers/superAdmin)
+     * @request GET:/ledger/mappings
+     * @secure
+     */
+    mappingsList: (
+      query?: {
+        /** @default 1 */
+        page?: number;
+        /** @default 50 */
+        limit?: number;
+        /** Filter by customer name or assigned staff name */
+        search?: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          pagination?: {
+            page?: number;
+            limit?: number;
+            total?: number;
+            pages?: number;
+          };
+          data?: {
+            /** @example 688580 */
+            ledger_id?: number;
+            /** @example "C- ANEES" */
+            name?: string;
+            /** @example "Sundry Debtors" */
+            group?: string;
+            mobile?: string | null;
+            balance?: number;
+            assigned_staff_id?: number | null;
+            assigned_staff_name?: string | null;
+          }[];
+        },
+        void
+      >({
+        path: `/ledger/mappings`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @tags Ledger
+     * @name MappingsUpdate
+     * @summary Reassign a customer to a different staff member (managers/superAdmin)
+     * @request PUT:/ledger/mappings/{ledgerId}
+     * @secure
+     */
+    mappingsUpdate: (
+      ledgerId: number,
+      data: {
+        /**
+         * Staff.id (internal id) of the new assignee
+         * @example 2645
+         */
+        staffId: number;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            ledger_id?: number;
+            name?: string;
+            assigned_staff_id?: number;
+            assigned_staff_name?: string;
+          };
+        },
+        void
+      >({
+        path: `/ledger/mappings/${ledgerId}`,
+        method: "PUT",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
   };
   followUps = {
     /**
@@ -1408,6 +2138,7 @@ export class Api<SecurityDataType extends unknown> {
           | "promisedPartial"
           | "dispute"
           | "noResponse"
+          | "reminderSent";
         /** @example 5000 */
         promisedAmount?: number | null;
         /**
@@ -1489,6 +2220,7 @@ export class Api<SecurityDataType extends unknown> {
           | "promisedPartial"
           | "dispute"
           | "noResponse"
+          | "reminderSent";
         promisedAmount?: number;
         /** @format date */
         promisedDate?: string;
@@ -1575,11 +2307,49 @@ export class Api<SecurityDataType extends unknown> {
       }),
 
     /**
+     * @description For sending a reminder to a customer who doesn't have any logged follow-up yet - creates a new FollowUpResponse representing the reminder itself (contactMethod: whatsapp, outcome: reminderSent) and immediately logs the WhatsApp send against it (same mechanism as POST /followups/{id}/whatsapp), so `sentAt` is captured and it shows up in the customer's normal follow-up history and stats. customerName/mobile/outstandingAmount are resolved from LedgerCustomer, not supplied by the caller.
+     *
+     * @tags Follow-ups
+     * @name ReminderCreate
+     * @summary Send a WhatsApp reminder without an existing follow-up (managers/superAdmin)
+     * @request POST:/followups/reminder
+     * @secure
+     */
+    reminderCreate: (
+      data: {
+        /**
+         * Rowbest ledger id (LedgerCustomer.ledger_id)
+         * @example 688580
+         */
+        ledgerId: number;
+        /** @example 5000 */
+        amountMentioned?: number | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          message?: string;
+          data?: FollowUpResponse;
+        },
+        void
+      >({
+        path: `/followups/reminder`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
      * @description Company-wide follow-up list, optionally narrowed to one staff via `staffId`. Same filter convention and `summary` block as GET /followups/staff/{staffId} - the only difference is `staffId` is optional here (omit it to see every staff member's follow-ups).
      *
      * @tags Follow-ups
      * @name GetFollowUps
-     * @summary Get all follow-ups across all staff (superAdmin only)
+     * @summary Get all follow-ups across all staff (managers/superAdmin)
      * @request GET:/followups/all
      * @secure
      */
@@ -1618,6 +2388,9 @@ export class Api<SecurityDataType extends unknown> {
           | "promisedPartial"
           | "dispute"
           | "noResponse"
+          | "reminderSent";
+        /** Filter by system-detected payment status - `resolved` means a real payment has landed for that customer since the follow-up was logged (resolvedByPayment=true), `open` means it hasn't yet. Independent of `outcome`. */
+        resolutionStatus?: "resolved" | "open";
       },
       params: RequestParams = {},
     ) =>
@@ -1675,6 +2448,14 @@ export class Api<SecurityDataType extends unknown> {
         {
           success?: boolean;
           count?: number;
+          /** This customer's current live outstanding balance (not the per-follow-up snapshot in FollowUpResponse.outstandingAmount, which can go stale). Resolved via ledgerId off any of the returned follow-ups, falling back to treating customerId itself as a ledger_id. Null if no matching LedgerCustomer is found. */
+          outstanding?: {
+            /** @example 688315 */
+            ledger_id?: number;
+            /** @example 24595 */
+            outstanding_balance?: number;
+            outstanding_dr_cr?: "Dr" | "Cr";
+          } | null;
           data?: FollowUpResponse[];
         },
         any
@@ -1724,12 +2505,15 @@ export class Api<SecurityDataType extends unknown> {
         customerId?: string;
         /** Filter to a single customer by ledger_id (takes precedence over customerId if both given) */
         ledgerId?: number;
-        /** Filter to a single outcome (e.g. noContact) */
+        /** Filter to a single outcome (e.g. noResponse) */
         outcome?:
           | "promisedToPay"
           | "promisedPartial"
           | "dispute"
           | "noResponse"
+          | "reminderSent";
+        /** Filter by system-detected payment status - `resolved` means a real payment has landed for that customer since the follow-up was logged (resolvedByPayment=true), `open` means it hasn't yet. Independent of `outcome`. */
+        resolutionStatus?: "resolved" | "open";
       },
       params: RequestParams = {},
     ) =>
@@ -1752,7 +2536,7 @@ export class Api<SecurityDataType extends unknown> {
               promisedPartial?: number;
               dispute?: number;
               noResponse?: number;
-              paid?: number;
+              reminderSent?: number;
             };
             /** Whether the ledger sync has detected a real payment for this customer since the follow-up was logged */
             byResolution?: {
@@ -1810,6 +2594,9 @@ export class Api<SecurityDataType extends unknown> {
           | "promisedPartial"
           | "dispute"
           | "noResponse"
+          | "reminderSent";
+        /** Filter by system-detected payment status - `resolved` means a real payment has landed for that customer since the follow-up was logged (resolvedByPayment=true), `open` means it hasn't yet. Independent of `outcome`. */
+        resolutionStatus?: "resolved" | "open";
       },
       params: RequestParams = {},
     ) =>
@@ -1825,7 +2612,7 @@ export class Api<SecurityDataType extends unknown> {
               promisedPartial?: number;
               dispute?: number;
               noResponse?: number;
-              paid?: number;
+              reminderSent?: number;
             };
             byResolution?: {
               resolved?: number;
@@ -1876,7 +2663,7 @@ export class Api<SecurityDataType extends unknown> {
               promisedPartial?: number;
               dispute?: number;
               noResponse?: number;
-              paid?: number;
+              reminderSent?: number;
             };
             byResolution?: {
               resolved?: number;
@@ -2023,7 +2810,7 @@ export class Api<SecurityDataType extends unknown> {
      *
      * @tags Dashboard
      * @name OverviewList
-     * @summary Company-wide overview for superAdmin
+     * @summary Company-wide overview for managers/superAdmin
      * @request GET:/dashboard/overview
      * @secure
      */
@@ -2052,6 +2839,9 @@ export class Api<SecurityDataType extends unknown> {
           | "promisedPartial"
           | "dispute"
           | "noResponse"
+          | "reminderSent";
+        /** Filter the follow-up numbers by system-detected payment status - `resolved` means a real payment has landed for that customer since the follow-up was logged (resolvedByPayment=true), `open` means it hasn't yet. Independent of `outcome`. */
+        resolutionStatus?: "resolved" | "open";
       },
       params: RequestParams = {},
     ) =>
@@ -2070,7 +2860,10 @@ export class Api<SecurityDataType extends unknown> {
             };
             totals?: {
               total_staff?: number;
+              /** All Sundry Debtors customers, regardless of current balance */
               total_customers?: number;
+              /** Sundry Debtors customers with a positive (Dr) live balance - i.e. actually owing money right now */
+              customers_with_debt?: number;
               /** Sum of balance (dr - cr) across all Sundry Debtors customers, live/current */
               total_outstanding?: number;
             };
@@ -2406,7 +3199,7 @@ export class Api<SecurityDataType extends unknown> {
       }),
 
     /**
-     * @description Remove all fingerprint enrollment data for a staff member. They can re-enroll afterward. Requires owner or superAdmin role.
+     * @description Remove all fingerprint enrollment data for a staff member. They can re-enroll afterward. Requires owner, manager, or superAdmin role.
      *
      * @tags Attendance
      * @name BiometricEnrollmentDelete
@@ -2432,7 +3225,7 @@ export class Api<SecurityDataType extends unknown> {
   };
   leaves = {
     /**
-     * @description Staff requests a leave. Requires approval from superAdmin. Maximum 3 leaves per month, 12 per year.
+     * @description Staff requests a leave. Requires approval from a manager or superAdmin. Maximum 3 leaves per month, 12 per year.
      *
      * @tags Leaves
      * @name RequestCreate
@@ -2574,7 +3367,7 @@ export class Api<SecurityDataType extends unknown> {
      *
      * @tags Leaves
      * @name LeavesList
-     * @summary Get all leave requests (SUPER ADMIN ONLY)
+     * @summary Get all leave requests (MANAGERS/SUPER ADMIN)
      * @request GET:/leaves
      * @secure
      */
@@ -2621,7 +3414,7 @@ export class Api<SecurityDataType extends unknown> {
      *
      * @tags Leaves
      * @name ApproveUpdate
-     * @summary Approve leave request (SUPER ADMIN ONLY)
+     * @summary Approve leave request (MANAGERS/SUPER ADMIN)
      * @request PUT:/leaves/{leaveId}/approve
      * @secure
      */
@@ -2651,7 +3444,7 @@ export class Api<SecurityDataType extends unknown> {
      *
      * @tags Leaves
      * @name RejectUpdate
-     * @summary Reject leave request (SUPER ADMIN ONLY)
+     * @summary Reject leave request (MANAGERS/SUPER ADMIN)
      * @request PUT:/leaves/{leaveId}/reject
      * @secure
      */
@@ -2722,7 +3515,7 @@ export class Api<SecurityDataType extends unknown> {
      *
      * @tags Leaves
      * @name StatsOverviewList
-     * @summary Get leave statistics (SUPER ADMIN ONLY)
+     * @summary Get leave statistics (MANAGERS/SUPER ADMIN)
      * @request GET:/leaves/stats/overview
      * @secure
      */
@@ -2759,7 +3552,7 @@ export class Api<SecurityDataType extends unknown> {
      *
      * @tags Appearance
      * @name AppearanceUpdate
-     * @summary Update staff appearance (SUPER ADMIN ONLY)
+     * @summary Update staff appearance (MANAGERS/SUPER ADMIN)
      * @request PUT:/appearance/{staffId}
      * @secure
      */
@@ -2799,7 +3592,7 @@ export class Api<SecurityDataType extends unknown> {
      *
      * @tags Appearance
      * @name TodayList
-     * @summary Get today's appearance for all staff (SUPER ADMIN ONLY)
+     * @summary Get today's appearance for all staff (MANAGERS/SUPER ADMIN)
      * @request GET:/appearance/today
      * @secure
      */
@@ -2847,7 +3640,7 @@ export class Api<SecurityDataType extends unknown> {
      *
      * @tags Appearance
      * @name MarkBadCreate
-     * @summary Mark staff appearance as bad (SUPER ADMIN ONLY)
+     * @summary Mark staff appearance as bad (MANAGERS/SUPER ADMIN)
      * @request POST:/appearance/mark-bad/{staffId}
      * @secure
      */
@@ -2895,7 +3688,7 @@ export class Api<SecurityDataType extends unknown> {
      *
      * @tags Appearance
      * @name ResetCreate
-     * @summary Reset appearance to OK (SUPER ADMIN ONLY)
+     * @summary Reset appearance to OK (MANAGERS/SUPER ADMIN)
      * @request POST:/appearance/reset/{staffId}
      * @secure
      */
@@ -2924,7 +3717,7 @@ export class Api<SecurityDataType extends unknown> {
      *
      * @tags Appearance
      * @name HistoryDetail
-     * @summary Get appearance history (SUPER ADMIN ONLY)
+     * @summary Get appearance history (MANAGERS/SUPER ADMIN)
      * @request GET:/appearance/history/{staffId}
      * @secure
      */
@@ -2970,7 +3763,7 @@ export class Api<SecurityDataType extends unknown> {
      *
      * @tags Appearance
      * @name StatsOverviewList
-     * @summary Get appearance statistics (SUPER ADMIN ONLY)
+     * @summary Get appearance statistics (MANAGERS/SUPER ADMIN)
      * @request GET:/appearance/stats/overview
      * @secure
      */
@@ -3075,7 +3868,7 @@ export class Api<SecurityDataType extends unknown> {
      *
      * @tags Scoring
      * @name MonthlyOverviewList
-     * @summary Get all staff scores for a month with statistics (SUPER ADMIN ONLY)
+     * @summary Get all staff scores for a month with statistics (MANAGERS/SUPER ADMIN)
      * @request GET:/scores/monthly-overview
      * @secure
      */
@@ -3115,7 +3908,7 @@ export class Api<SecurityDataType extends unknown> {
      *
      * @tags Scoring
      * @name CalculateMonthlyCreate
-     * @summary Calculate monthly scores for all staff (SUPER ADMIN ONLY)
+     * @summary Calculate monthly scores for all staff (MANAGERS/SUPER ADMIN)
      * @request POST:/scores/calculate-monthly
      * @secure
      */
@@ -3170,7 +3963,7 @@ export class Api<SecurityDataType extends unknown> {
      *
      * @tags Scoring
      * @name ScoringConfigList
-     * @summary Get scoring configuration (SUPER ADMIN ONLY)
+     * @summary Get scoring configuration (MANAGERS/SUPER ADMIN)
      * @request GET:/scoring-config
      * @secure
      */
@@ -3216,7 +4009,7 @@ export class Api<SecurityDataType extends unknown> {
      *
      * @tags Scoring
      * @name ScoringConfigUpdate
-     * @summary Update scoring configuration (SUPER ADMIN ONLY)
+     * @summary Update scoring configuration (MANAGERS/SUPER ADMIN)
      * @request PUT:/scoring-config
      * @secure
      */
@@ -3394,7 +4187,7 @@ export class Api<SecurityDataType extends unknown> {
      *
      * @tags Extra Performance
      * @name PendingList
-     * @summary Get pending performances for approval (SUPER ADMIN ONLY)
+     * @summary Get pending performances for approval (MANAGERS/SUPER ADMIN)
      * @request GET:/extra-performance/pending
      * @secure
      */
@@ -3434,7 +4227,7 @@ export class Api<SecurityDataType extends unknown> {
      *
      * @tags Extra Performance
      * @name ApproveUpdate
-     * @summary Approve extra performance (SUPER ADMIN ONLY)
+     * @summary Approve extra performance (MANAGERS/SUPER ADMIN)
      * @request PUT:/extra-performance/{performanceId}/approve
      * @secure
      */
@@ -3459,7 +4252,7 @@ export class Api<SecurityDataType extends unknown> {
      *
      * @tags Extra Performance
      * @name RejectUpdate
-     * @summary Reject extra performance (SUPER ADMIN ONLY)
+     * @summary Reject extra performance (MANAGERS/SUPER ADMIN)
      * @request PUT:/extra-performance/{performanceId}/reject
      * @secure
      */

@@ -240,7 +240,7 @@ function SummaryStrip({
   return (
     <View style={[styles.strip, { borderBottomColor: colors.border }]}>
       <View style={styles.stripItem}>
-        <AppText variant="caption" color="tertiary">Customers</AppText>
+        <AppText variant="caption" color="tertiary">With Debt</AppText>
         {isLoading ? (
           <ActivityIndicator size="small" color={accent} />
         ) : (
@@ -315,7 +315,7 @@ export default function CustomersScreen() {
       <View style={isTablet ? styles.desktopContent : styles.mobileContent}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <BackButton />
-        <AppText variant="heading2" style={{ flex: 1 }}>Customers</AppText>
+        <AppText variant="heading2" style={{ flex: 1 }}>Customers With Debt</AppText>
         <RefreshButton onPress={() => refetch()} isRefreshing={isRefetching} />
       </View>
 

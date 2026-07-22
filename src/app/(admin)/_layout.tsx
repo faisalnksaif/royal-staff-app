@@ -26,7 +26,7 @@ type NavItem = {
 
 const NAV_ITEMS: NavItem[] = [
   { label: "Follow Up Dashboard", href: "/(admin)",                   icon: MessageCircleMore, matchExact: true  },
-  { label: "Customers",           href: "/(admin)/all-customers",     icon: UsersRound,        matchExact: false },
+  { label: "Customers",           href: "/(admin)/customers-with-debt",     icon: UsersRound,        matchExact: false },
   { label: "Attendance",          href: "/(admin)/attendance",        icon: CalendarCheck,     matchExact: false },
   { label: "Leaves",              href: "/(admin)/leaves",            icon: CalendarClock,     matchExact: false },
   { label: "Scores",              href: "/(admin)/scores",            icon: Trophy,            matchExact: false },

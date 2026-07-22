@@ -13,7 +13,7 @@ const PROD_API = "https://api.sulthanpages.com/project/royal/api"
 
 export const API_BASE_URL =
   process.env.EXPO_PUBLIC_API_BASE_URL ??
-  (__DEV__ ? PROD_API : PROD_API)
+  (__DEV__ ? DEV_API : PROD_API)
 
 export const FEATURE_FLAGS = {
   faceRecognition: true,

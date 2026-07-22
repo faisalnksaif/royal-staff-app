@@ -148,7 +148,8 @@ export default function SuperAdminHome() {
             {isTablet ? (
               <View style={styles.statRow}>
                 <StatTile label="Staff" value={String(overview.totals.total_staff)} color={colors.text.primary} />
-                <StatTile label="Customers" value={String(overview.totals.total_customers)} color={colors.text.primary} onPress={() => router.push("/(admin)/all-customers")} />
+                <StatTile label="Total Customers" value={String(overview.totals.total_customers)} color={colors.text.primary} />
+                <StatTile label="Customers With Debt" value={String(overview.totals.customers_with_debt ?? "—")} color={palette.error.default} onPress={() => router.push("/(admin)/customers-with-debt")} />
                 <StatTile
                   label="Outstanding"
                   value={`₹${formatAmount(overview.totals.total_outstanding)}`}
@@ -160,14 +161,17 @@ export default function SuperAdminHome() {
               <View style={styles.statGrid}>
                 <View style={styles.statRow}>
                   <StatTile label="Staff" value={String(overview.totals.total_staff)} color={colors.text.primary} />
-                  <StatTile label="Customers" value={String(overview.totals.total_customers)} color={colors.text.primary} onPress={() => router.push("/(admin)/all-customers")} />
+                  <StatTile label="Total Customers" value={String(overview.totals.total_customers)} color={colors.text.primary} />
                 </View>
-                <StatTile
-                  label="Outstanding"
-                  value={`₹${formatAmount(overview.totals.total_outstanding)}`}
-                  color={palette.error.default}
-                  onPress={() => router.push("/(admin)/debt-history")}
-                />
+                <View style={styles.statRow}>
+                  <StatTile label="Customers With Debt" value={String(overview.totals.customers_with_debt ?? "—")} color={palette.error.default} onPress={() => router.push("/(admin)/customers-with-debt")} />
+                  <StatTile
+                    label="Outstanding"
+                    value={`₹${formatAmount(overview.totals.total_outstanding)}`}
+                    color={palette.error.default}
+                    onPress={() => router.push("/(admin)/debt-history")}
+                  />
+                </View>
               </View>
             )}
 

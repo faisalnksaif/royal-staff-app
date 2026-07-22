@@ -328,7 +328,7 @@ export default function AllCustomersScreen() {
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <BackButton />
         <View style={{ flex: 1 }}>
-          <AppText variant="heading3">All Customers</AppText>
+          <AppText variant="heading3">Customers With Debt</AppText>
           {mainTab === "outstanding" && !outLoading && (
             <AppText variant="caption" color="secondary">{total} total</AppText>
           )}

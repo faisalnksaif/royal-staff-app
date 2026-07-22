@@ -155,7 +155,7 @@ export default function HomeScreen() {
         <View style={styles.gridRow}>
           <FeatureCard
             icon={<Users size={24} color={colors.accent} strokeWidth={1.6} />}
-            label="Customers"
+            label="Customers with Debt"
             subtitle={
               summary.isLoading
                 ? ""
