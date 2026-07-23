@@ -2391,6 +2391,17 @@ export class Api<SecurityDataType extends unknown> {
           | "reminderSent";
         /** Filter by system-detected payment status - `resolved` means a real payment has landed for that customer since the follow-up was logged (resolvedByPayment=true), `open` means it hasn't yet. Independent of `outcome`. */
         resolutionStatus?: "resolved" | "open";
+        /**
+         * Field to sort by. promisedAmount/amountRecovered/ outstandingAmount all push follow-ups with no value for that field (e.g. amountRecovered on one that's still open) to the end regardless of `order`.
+         * @default "loggedAt"
+         */
+        sortBy?:
+          | "loggedAt"
+          | "promisedAmount"
+          | "amountRecovered"
+          | "outstandingAmount";
+        /** @default "desc" */
+        order?: "asc" | "desc";
       },
       params: RequestParams = {},
     ) =>
@@ -2404,6 +2415,12 @@ export class Api<SecurityDataType extends unknown> {
             pages?: number;
           };
           data?: FollowUpResponse[];
+          sortBy?:
+            | "loggedAt"
+            | "promisedAmount"
+            | "amountRecovered"
+            | "outstandingAmount";
+          order?: "asc" | "desc";
           /** Same shape as GET /followups/staff/{staffId}'s summary, computed over the filtered set (all staff, or just staffId if given) */
           summary?: {
             totalFollowUps?: number;
@@ -2892,6 +2909,8 @@ export class Api<SecurityDataType extends unknown> {
               user_id?: number;
               staff_name?: string;
               customers_owned?: number;
+              /** Owned customers with a positive (Dr) live balance - i.e. actually owing money right now */
+              customers_with_debt?: number;
               total_outstanding?: number;
               totalFollowUps?: number;
               byOutcome?: Record<string, number>;

@@ -351,7 +351,7 @@ export default function CustomersScreen() {
         keyExtractor={(item) => String(item.ledger_id)}
         renderItem={({ item, index }) => (
           <AnimatedListItem index={index}>
-            <CustomerOutstandingRow item={item} />
+            <CustomerOutstandingRow item={item} index={index} />
           </AnimatedListItem>
         )}
         ListHeaderComponent={<FilterChips active={activeFilter} onChange={setActiveFilter} sortBy={sortBy} onSortChange={setSortBy} />}

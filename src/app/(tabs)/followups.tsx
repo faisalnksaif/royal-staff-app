@@ -242,7 +242,7 @@ export default function FollowUpsScreen() {
             keyExtractor={(item) => item._id}
             renderItem={({ item, index }) => (
               <AnimatedListItem index={index}>
-                <FollowUpListCard item={item} />
+                <FollowUpListCard item={item} index={index} />
               </AnimatedListItem>
             )}
             contentContainerStyle={styles.list}

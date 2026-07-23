@@ -12,9 +12,10 @@ import type { LedgerCustomerOutstanding } from "../../types"
 
 interface Props {
   item: LedgerCustomerOutstanding
+  index?: number
 }
 
-export default function CustomerOutstandingRow({ item }: Props) {
+export default function CustomerOutstandingRow({ item, index }: Props) {
   const router = useRouter()
   const { colors } = useTheme()
   const fu = item.follow_up
@@ -63,6 +64,11 @@ export default function CustomerOutstandingRow({ item }: Props) {
       <View style={[styles.card, { borderBottomColor: colors.border as string }]}>
         {/* Name row + balance + chevron */}
         <View style={styles.headerRow}>
+          {index != null && (
+            <View style={[styles.avatar, { backgroundColor: colors.background.secondary as string, borderColor: colors.border as string }]}>
+              <AppText variant="caption" style={{ fontSize: 10, color: colors.text.tertiary as string }}>{index + 1}</AppText>
+            </View>
+          )}
           <AppText variant="bodyMedium" numberOfLines={1} style={{ flex: 1 }}>{toTitleCase(item.name)}</AppText>
           {isSettled && (
             <View style={[styles.pill, { backgroundColor: palette.success.default + "22" }]}>
@@ -207,5 +213,13 @@ const styles = StyleSheet.create({
   progressFill: {
     height: "100%",
     borderRadius: 2,
+  },
+  avatar: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
 })

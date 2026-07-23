@@ -442,6 +442,7 @@ export interface DashboardStaffLeaderboardEntry {
   user_id: number
   staff_name: string
   customers_owned: number
+  customers_with_debt?: number
   total_outstanding: number
   totalFollowUps: number
   byOutcome: FollowupsSummary["byOutcome"]
@@ -461,6 +462,7 @@ export interface DashboardOverviewData {
   totals: {
     total_staff: number
     total_customers: number
+    customers_with_debt?: number
     total_outstanding: number
   }
   followups: {

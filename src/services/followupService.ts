@@ -13,6 +13,9 @@ export interface StaffFollowupsParams {
   outcome?: string
 }
 
+export type FollowupSortBy = "loggedAt" | "promisedAmount" | "amountRecovered" | "outstandingAmount"
+export type FollowupOrder = "asc" | "desc"
+
 export interface AllFollowUpsParams {
   staffId?: number
   page?: number
@@ -25,6 +28,8 @@ export interface AllFollowUpsParams {
   resolutionStatus?: string
   customerId?: string
   ledgerId?: number
+  sortBy?: FollowupSortBy
+  order?: FollowupOrder
 }
 
 async function getStaffFollowups(
@@ -48,7 +53,7 @@ async function getStaffFollowups(
 }
 
 async function getAllFollowups(params: AllFollowUpsParams = {}): Promise<AllFollowUpsResponse> {
-  const { staffId, page = 1, limit = 50, period, startDate, endDate, dateField, outcome, resolutionStatus, customerId, ledgerId } = params
+  const { staffId, page = 1, limit = 50, period, startDate, endDate, dateField, outcome, resolutionStatus, customerId, ledgerId, sortBy, order } = params
   const qs = new URLSearchParams({ page: String(page), limit: String(limit) })
   if (staffId != null) qs.set("staffId", String(staffId))
   if (period) qs.set("period", period)
@@ -59,6 +64,8 @@ async function getAllFollowups(params: AllFollowUpsParams = {}): Promise<AllFoll
   if (resolutionStatus) qs.set("resolutionStatus", resolutionStatus)
   if (customerId) qs.set("customerId", customerId)
   if (ledgerId != null) qs.set("ledgerId", String(ledgerId))
+  if (sortBy && sortBy !== "loggedAt") qs.set("sortBy", sortBy)
+  if (order && order !== "desc") qs.set("order", order)
   const { data } = await api.http.request<AllFollowUpsResponse>({
     path: `/followups/all?${qs.toString()}`,
     method: "GET",

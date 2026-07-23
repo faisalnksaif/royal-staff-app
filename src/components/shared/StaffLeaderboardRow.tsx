@@ -10,6 +10,7 @@ export interface StaffLeaderboardEntry {
   staff_id: number
   staff_name: string
   customers_owned: number
+  customers_with_debt?: number
   total_outstanding: number
   totalFollowUps?: number
   totalPromisedAmount: number
@@ -35,6 +36,9 @@ export default function StaffLeaderboardRow({
         <AppText variant="bodyMedium">{entry.staff_name}</AppText>
         <View style={styles.subRow}>
           <AppText variant="caption" color="tertiary">{entry.customers_owned} customers</AppText>
+          {(entry.customers_with_debt ?? 0) > 0 && (
+            <AppText variant="caption" style={{ color: palette.error.default }}> · {entry.customers_with_debt} with debt</AppText>
+          )}
           {(entry.totalFollowUps ?? 0) > 0 && (
             <AppText variant="caption" color="tertiary"> · {entry.totalFollowUps} follow-ups</AppText>
           )}

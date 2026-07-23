@@ -511,7 +511,7 @@ export default function CustomerDetailScreen() {
       <View style={isTablet ? styles.desktopContent : styles.mobileContent}>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <Pressable onPress={() => router.back()} style={styles.backBtn} hitSlop={8}>
+        <Pressable onPress={() => router.canGoBack() ? router.back() : router.replace("/(tabs)/customers")} style={styles.backBtn} hitSlop={8}>
           <ChevronLeft size={24} color={colors.text.primary} strokeWidth={1.75} />
         </Pressable>
         <View style={styles.headerInfo}>

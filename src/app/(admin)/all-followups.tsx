@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { View, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity } from "react-native"
+import { View, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, ScrollView } from "react-native"
 import { useRouter } from "expo-router"
 import {
   MessageCircle,
@@ -22,7 +22,7 @@ import { spacing, colors as palette } from "../../constants/theme"
 import { useAllFollowups } from "../../hooks/useAllFollowups"
 import { toAPIDate, formatDate, toTitleCase } from "../../utils/helpers"
 import moment from "moment"
-import type { FollowupDateField } from "../../services/followupService"
+import type { FollowupDateField, FollowupSortBy, FollowupOrder } from "../../services/followupService"
 import type { FollowUp, ContactMethod, FollowUpOutcome } from "../../types"
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -47,6 +47,8 @@ export default function AllFollowupsScreen() {
   const [dateField, setDateField] = useState<FollowupDateField>("loggedAt")
   const [outcome, setOutcome] = useState<FollowUpOutcome | "all">("all")
   const [resolutionStatus, setResolutionStatus] = useState<ResolutionStatus | "all">("all")
+  const [sortBy, setSortBy] = useState<FollowupSortBy>("loggedAt")
+  const [order, setOrder] = useState<FollowupOrder>("desc")
 
   const isCustom = period === "custom"
 
@@ -58,6 +60,8 @@ export default function AllFollowupsScreen() {
     dateField,
     outcome: outcome === "all" ? undefined : outcome,
     resolutionStatus: resolutionStatus === "all" ? undefined : resolutionStatus,
+    sortBy,
+    order,
   })
 
   const followups = data?.pages.flatMap((p) => p.data) ?? []
@@ -94,6 +98,34 @@ export default function AllFollowupsScreen() {
         />
       </View>
 
+      {/* Sort controls */}
+      <View style={[styles.sortRow, { borderBottomColor: colors.border }]}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sortChips}>
+          {([
+            { key: "loggedAt",        label: "Date" },
+            { key: "promisedAmount",  label: "Promised ₹" },
+            { key: "amountRecovered", label: "Recovered ₹" },
+            { key: "outstandingAmount", label: "Outstanding ₹" },
+          ] as { key: FollowupSortBy; label: string }[]).map(({ key, label }) => {
+            const active = sortBy === key
+            return (
+              <TouchableOpacity
+                key={key}
+                onPress={() => {
+                  if (active) setOrder(o => o === "desc" ? "asc" : "desc")
+                  else { setSortBy(key); setOrder("desc") }
+                }}
+                style={[styles.sortChip, { borderColor: active ? colors.accent : colors.border, backgroundColor: active ? (colors.accent as string) + "18" : "transparent" }]}
+              >
+                <AppText variant="caption" style={{ color: active ? colors.accent : colors.text.secondary }}>
+                  {label}{active ? (order === "desc" ? " ↓" : " ↑") : ""}
+                </AppText>
+              </TouchableOpacity>
+            )
+          })}
+        </ScrollView>
+      </View>
+
       {summary && summary.totalFollowUps > 0 && (
         <FollowupSummaryStrip summary={summary} bordered />
       )}
@@ -108,7 +140,7 @@ export default function AllFollowupsScreen() {
           keyExtractor={(item) => item._id}
           renderItem={({ item, index }) => (
             <AnimatedListItem index={index}>
-              <FollowUpListCard item={item} showStaffName />
+              <FollowUpListCard item={item} index={index} showStaffName />
             </AnimatedListItem>
           )}
           contentContainerStyle={{ paddingBottom: spacing[10] }}
@@ -144,6 +176,9 @@ const styles = StyleSheet.create({
     gap: spacing[2],
   },
   section: { paddingHorizontal: spacing[4], paddingTop: spacing[4], paddingBottom: spacing[2] },
+  sortRow: { borderBottomWidth: StyleSheet.hairlineWidth },
+  sortChips: { flexDirection: "row", gap: spacing[2], paddingHorizontal: spacing[4], paddingVertical: spacing[2] },
+  sortChip: { paddingHorizontal: spacing[3], paddingVertical: spacing[1], borderRadius: 99, borderWidth: 1 },
   row: {
     paddingHorizontal: spacing[5],
     paddingVertical: spacing[4],

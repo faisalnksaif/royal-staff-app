@@ -2129,6 +2129,23 @@ paths:
           schema:
             type: string
             enum: [resolved, open]
+        - name: sortBy
+          in: query
+          description: >
+            Field to sort by. promisedAmount/amountRecovered/
+            outstandingAmount all push follow-ups with no value for that
+            field (e.g. amountRecovered on one that's still open) to the
+            end regardless of `order`.
+          schema:
+            type: string
+            enum: [loggedAt, promisedAmount, amountRecovered, outstandingAmount]
+            default: loggedAt
+        - name: order
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
       responses:
         '200':
           description: Paginated follow-ups across all (or one) staff, with a summary block
@@ -2154,6 +2171,12 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/FollowUpResponse'
+                  sortBy:
+                    type: string
+                    enum: [loggedAt, promisedAmount, amountRecovered, outstandingAmount]
+                  order:
+                    type: string
+                    enum: [asc, desc]
                   summary:
                     type: object
                     description: Same shape as GET /followups/staff/{staffId}'s summary, computed over the filtered set (all staff, or just staffId if given)
@@ -2857,6 +2880,9 @@ paths:
                               type: string
                             customers_owned:
                               type: integer
+                            customers_with_debt:
+                              type: integer
+                              description: Owned customers with a positive (Dr) live balance - i.e. actually owing money right now
                             total_outstanding:
                               type: number
                             totalFollowUps:

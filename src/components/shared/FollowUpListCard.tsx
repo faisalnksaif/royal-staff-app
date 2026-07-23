@@ -72,10 +72,11 @@ export function buildFollowUpEvents(item: FollowUp): TimelineEvent[] {
 
 interface Props {
   item: FollowUp
+  index?: number
   showStaffName?: boolean
 }
 
-export default function FollowUpListCard({ item, showStaffName }: Props) {
+export default function FollowUpListCard({ item, index, showStaffName }: Props) {
   const { colors } = useTheme()
   const router = useRouter()
   const color = outcomeColor(item.outcome)
@@ -99,6 +100,11 @@ export default function FollowUpListCard({ item, showStaffName }: Props) {
     <TouchableOpacity onPress={goToCustomer} activeOpacity={0.75} disabled={!item.ledgerId && !item.customerId}>
       <View style={[styles.row, { borderBottomColor: colors.border as string }]}>
         <View style={styles.rowHeader}>
+          {index != null && (
+            <View style={[styles.avatar, { backgroundColor: colors.background.secondary as string, borderColor: colors.border as string }]}>
+              <AppText variant="caption" style={{ fontSize: 10, color: colors.text.tertiary as string }}>{index + 1}</AppText>
+            </View>
+          )}
           <ContactMethodIcon method={item.contactMethod} color={colors.text.tertiary as string} />
           <View style={{ flex: 1 }}>
             <AppText variant="bodyMedium" numberOfLines={1}>{toTitleCase(item.customerName)}</AppText>
@@ -138,4 +144,12 @@ const styles = StyleSheet.create({
     gap: spacing[2],
   },
   remark: { fontStyle: "italic" },
+  avatar: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 })

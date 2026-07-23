@@ -114,7 +114,7 @@ function RetentionSummaryStrip({
   )
 }
 
-function RetentionRow({ customer }: { customer: RetentionCustomer }) {
+function RetentionRow({ customer, index }: { customer: RetentionCustomer; index?: number }) {
   const { colors } = useTheme()
   const router = useRouter()
   const color = RETENTION_COLOR[customer.status]
@@ -139,6 +139,11 @@ function RetentionRow({ customer }: { customer: RetentionCustomer }) {
       <View style={[styles.retentionRow, { borderBottomColor: colors.border as string }]}>
         <View style={styles.retentionRowMain}>
           <View style={styles.customerNameRow}>
+            {index != null && (
+              <View style={[styles.numAvatar, { backgroundColor: colors.background.secondary as string, borderColor: colors.border as string }]}>
+                <AppText variant="caption" style={{ fontSize: 10, color: colors.text.tertiary as string }}>{index + 1}</AppText>
+              </View>
+            )}
             <AppText variant="body" numberOfLines={1} style={{ flex: 1 }}>{toTitleCase(customer.name)}</AppText>
             <View style={[styles.pill, { backgroundColor: color + "18" }]}>
               <AppText variant="caption" numberOfLines={1} style={{ color, fontSize: 10 }}>{RETENTION_STATUS_LABEL[customer.status]}</AppText>
@@ -206,7 +211,7 @@ function VelocitySummaryStrip({ summary }: { summary: PaymentVelocityResponse["s
   )
 }
 
-function VelocityRow({ customer, companyAvg }: { customer: PaymentVelocityCustomer; companyAvg: number | null }) {
+function VelocityRow({ customer, companyAvg, index }: { customer: PaymentVelocityCustomer; companyAvg: number | null; index?: number }) {
   const { colors } = useTheme()
   const router = useRouter()
   const color = velocityColor(customer.avg_days_to_clear, companyAvg)
@@ -229,6 +234,11 @@ function VelocityRow({ customer, companyAvg }: { customer: PaymentVelocityCustom
     >
       <View style={[styles.retentionRow, { borderBottomColor: colors.border as string }]}>
         <View style={styles.velRowInner}>
+          {index != null && (
+            <View style={[styles.numAvatar, { backgroundColor: colors.background.secondary as string, borderColor: colors.border as string }]}>
+              <AppText variant="caption" style={{ fontSize: 10, color: colors.text.tertiary as string }}>{index + 1}</AppText>
+            </View>
+          )}
           <View style={{ flex: 1, gap: 3 }}>
             <AppText variant="body" numberOfLines={1}>{toTitleCase(customer.name)}</AppText>
             <View style={styles.fuRow}>
@@ -427,7 +437,7 @@ export default function AllCustomersScreen() {
               keyExtractor={(item) => String(item.ledger_id)}
               renderItem={({ item, index }) => (
                 <AnimatedListItem index={index}>
-                  <CustomerOutstandingRow item={item} />
+                  <CustomerOutstandingRow item={item} index={index} />
                 </AnimatedListItem>
               )}
               contentContainerStyle={{ paddingBottom: spacing[12] }}
@@ -507,7 +517,7 @@ export default function AllCustomersScreen() {
               keyExtractor={(item) => String(item.ledger_id)}
               renderItem={({ item, index }) => (
                 <AnimatedListItem index={index}>
-                  <VelocityRow customer={item} companyAvg={velSummary?.company_avg_days_to_clear ?? null} />
+                  <VelocityRow customer={item} companyAvg={velSummary?.company_avg_days_to_clear ?? null} index={index} />
                 </AnimatedListItem>
               )}
               contentContainerStyle={{ paddingBottom: spacing[12] }}
@@ -605,7 +615,7 @@ export default function AllCustomersScreen() {
               keyExtractor={(item) => String(item.ledger_id)}
               renderItem={({ item, index }) => (
                 <AnimatedListItem index={index}>
-                  <RetentionRow customer={item} />
+                  <RetentionRow customer={item} index={index} />
                 </AnimatedListItem>
               )}
               contentContainerStyle={{ paddingBottom: spacing[12] }}
@@ -690,6 +700,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[3],
+  },
+  numAvatar: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
   sortDivider: { width: StyleSheet.hairlineWidth, marginVertical: spacing[2] },
 })
