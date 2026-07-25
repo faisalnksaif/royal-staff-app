@@ -739,6 +739,12 @@ paths:
           schema:
             type: integer
             default: 90
+        - name: newDays
+          in: query
+          description: A customer is flagged `is_new` if first synced from rowbest (LedgerCustomer.createdAt) within this many days
+          schema:
+            type: integer
+            default: 7
       responses:
         '200':
           description: Paginated customers owned by this staff, with outstanding and sales-contribution totals
@@ -857,6 +863,13 @@ paths:
                         days_since_last_payment:
                           type: integer
                           nullable: true
+                        is_new:
+                          type: boolean
+                          description: First synced from rowbest within the last `newDays` days
+                        created_at:
+                          type: string
+                          format: date-time
+                          description: When this customer was first synced from rowbest
                   filter:
                     type: string
                     enum: [all, followed_up, not_followed_up, paid, overdue, open_followup]
@@ -871,6 +884,8 @@ paths:
                         type: integer
                       churnedDays:
                         type: integer
+                  newDays:
+                    type: integer
                   totals:
                     type: object
                     properties:
@@ -991,6 +1006,12 @@ paths:
           schema:
             type: integer
             default: 90
+        - name: newDays
+          in: query
+          description: A customer is flagged `is_new` if first synced from rowbest (LedgerCustomer.createdAt) within this many days
+          schema:
+            type: integer
+            default: 7
       responses:
         '200':
           description: Paginated customers with outstanding and follow-up summary
@@ -1086,6 +1107,13 @@ paths:
                         days_since_last_payment:
                           type: integer
                           nullable: true
+                        is_new:
+                          type: boolean
+                          description: First synced from rowbest within the last `newDays` days
+                        created_at:
+                          type: string
+                          format: date-time
+                          description: When this customer was first synced from rowbest
                   filter:
                     type: string
                     enum: [all, followed_up, not_followed_up, paid, overdue, open_followup]
@@ -1099,6 +1127,8 @@ paths:
                         type: integer
                       churnedDays:
                         type: integer
+                  newDays:
+                    type: integer
                   totals:
                     type: object
                     properties:
@@ -1175,6 +1205,12 @@ paths:
             type: string
             enum: [asc, desc]
             default: desc
+        - name: newDays
+          in: query
+          description: A customer is flagged `is_new` if first synced from rowbest (LedgerCustomer.createdAt) within this many days
+          schema:
+            type: integer
+            default: 7
       responses:
         '200':
           description: Paginated customer retention data with a company-wide summary
@@ -1235,6 +1271,13 @@ paths:
                         outstanding_dr_cr:
                           type: string
                           enum: [Dr, Cr]
+                        is_new:
+                          type: boolean
+                          description: First synced from rowbest within the last `newDays` days
+                        created_at:
+                          type: string
+                          format: date-time
+                          description: When this customer was first synced from rowbest
                   filters:
                     type: object
                     properties:
@@ -1245,6 +1288,8 @@ paths:
                       status:
                         type: string
                         enum: [all, active, at_risk, churned, never_purchased]
+                      newDays:
+                        type: integer
                   sort:
                     type: object
                     properties:
@@ -1568,10 +1613,16 @@ paths:
         - Ledger
       summary: List customer->staff assignments (managers/superAdmin)
       description: >
-        The manually-maintained staff-customer mapping
-        (LedgerCustomer.assigned_staff_id) that drives ownership before the
-        cutoff date - see GET /ledger/staff/{userId}/outstanding for how
-        it's used.
+        Only customers with balance > 0 (see GET /ledger/outstanding for
+        the same convention). `ownership_source` reflects the actual
+        resolved owner - `assigned` (from the manually-maintained mapping,
+        LedgerCustomer.assigned_staff_id) before the ownership cutoff date,
+        or after it `dynamic` (derived from the customer's most recent
+        matched Sales voucher) falling back to `assigned` if there's no
+        dynamic signal yet, or `unassigned` if neither exists - see
+        GET /ledger/staff/{userId}/outstanding for the same rule. Combine
+        with `is_new` to find brand-new customers that still need a staff
+        assignment.
       security:
         - BearerAuth: []
       parameters:
@@ -1590,6 +1641,32 @@ paths:
           description: Filter by customer name or assigned staff name
           schema:
             type: string
+        - name: newDays
+          in: query
+          description: A customer is flagged `is_new` if first synced from rowbest (LedgerCustomer.createdAt) within this many days
+          schema:
+            type: integer
+            default: 7
+        - name: ownership
+          in: query
+          description: Filter `data` to a single resolved ownership_source
+          schema:
+            type: string
+            enum: [all, assigned, dynamic, unassigned]
+            default: all
+        - name: sortBy
+          in: query
+          description: '`created_at` (default) surfaces the newest customers first with the default `order=desc` - i.e. "sort by new customers".'
+          schema:
+            type: string
+            enum: [created_at, balance, name]
+            default: created_at
+        - name: order
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
       responses:
         '200':
           description: Paginated customer-staff mappings
@@ -1637,6 +1714,29 @@ paths:
                         assigned_staff_name:
                           type: string
                           nullable: true
+                        ownership_source:
+                          type: string
+                          enum: [assigned, dynamic, unassigned]
+                        is_new:
+                          type: boolean
+                          description: First synced from rowbest within the last `newDays` days
+                        created_at:
+                          type: string
+                          format: date-time
+                          description: When this customer was first synced from rowbest
+                  newDays:
+                    type: integer
+                  ownership:
+                    type: string
+                    enum: [all, assigned, dynamic, unassigned]
+                  sortBy:
+                    type: string
+                    enum: [created_at, balance, name]
+                  order:
+                    type: string
+                    enum: [asc, desc]
+        '400':
+          description: newDays must be a positive number, or invalid ownership/sortBy/order value
         '403':
           description: Forbidden - managers/superAdmin only
 

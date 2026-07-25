@@ -1399,6 +1399,11 @@ export class Api<SecurityDataType extends unknown> {
          * @default 90
          */
         churnedDays?: number;
+        /**
+         * A customer is flagged `is_new` if first synced from rowbest (LedgerCustomer.createdAt) within this many days
+         * @default 7
+         */
+        newDays?: number;
       },
       params: RequestParams = {},
     ) =>
@@ -1477,6 +1482,13 @@ export class Api<SecurityDataType extends unknown> {
             last_payment_date?: string | null;
             last_payment_amount?: number | null;
             days_since_last_payment?: number | null;
+            /** First synced from rowbest within the last `newDays` days */
+            is_new?: boolean;
+            /**
+             * When this customer was first synced from rowbest
+             * @format date-time
+             */
+            created_at?: string;
           }[];
           /** The filter that was applied to `data` */
           filter?:
@@ -1491,6 +1503,7 @@ export class Api<SecurityDataType extends unknown> {
             activeDays?: number;
             churnedDays?: number;
           };
+          newDays?: number;
           totals?: {
             total_outstanding?: number;
             total_staff_sales?: number;
@@ -1570,6 +1583,11 @@ export class Api<SecurityDataType extends unknown> {
          * @default 90
          */
         churnedDays?: number;
+        /**
+         * A customer is flagged `is_new` if first synced from rowbest (LedgerCustomer.createdAt) within this many days
+         * @default 7
+         */
+        newDays?: number;
       },
       params: RequestParams = {},
     ) =>
@@ -1632,6 +1650,13 @@ export class Api<SecurityDataType extends unknown> {
             last_payment_date?: string | null;
             last_payment_amount?: number | null;
             days_since_last_payment?: number | null;
+            /** First synced from rowbest within the last `newDays` days */
+            is_new?: boolean;
+            /**
+             * When this customer was first synced from rowbest
+             * @format date-time
+             */
+            created_at?: string;
           }[];
           filter?:
             | "all"
@@ -1645,6 +1670,7 @@ export class Api<SecurityDataType extends unknown> {
             activeDays?: number;
             churnedDays?: number;
           };
+          newDays?: number;
           totals?: {
             total_outstanding?: number;
           };
@@ -1702,6 +1728,11 @@ export class Api<SecurityDataType extends unknown> {
           | "outstanding_balance";
         /** @default "desc" */
         order?: "asc" | "desc";
+        /**
+         * A customer is flagged `is_new` if first synced from rowbest (LedgerCustomer.createdAt) within this many days
+         * @default 7
+         */
+        newDays?: number;
       },
       params: RequestParams = {},
     ) =>
@@ -1735,6 +1766,13 @@ export class Api<SecurityDataType extends unknown> {
              */
             outstanding_balance?: number;
             outstanding_dr_cr?: "Dr" | "Cr";
+            /** First synced from rowbest within the last `newDays` days */
+            is_new?: boolean;
+            /**
+             * When this customer was first synced from rowbest
+             * @format date-time
+             */
+            created_at?: string;
           }[];
           filters?: {
             activeDays?: number;
@@ -1745,6 +1783,7 @@ export class Api<SecurityDataType extends unknown> {
               | "at_risk"
               | "churned"
               | "never_purchased";
+            newDays?: number;
           };
           sort?: {
             sortBy?:
@@ -2005,7 +2044,7 @@ export class Api<SecurityDataType extends unknown> {
       }),
 
     /**
-     * @description The manually-maintained staff-customer mapping (LedgerCustomer.assigned_staff_id) that drives ownership before the cutoff date - see GET /ledger/staff/{userId}/outstanding for how it's used.
+     * @description Only customers with balance > 0 (see GET /ledger/outstanding for the same convention). `ownership_source` reflects the actual resolved owner - `assigned` (from the manually-maintained mapping, LedgerCustomer.assigned_staff_id) before the ownership cutoff date, or after it `dynamic` (derived from the customer's most recent matched Sales voucher) falling back to `assigned` if there's no dynamic signal yet, or `unassigned` if neither exists - see GET /ledger/staff/{userId}/outstanding for the same rule. Combine with `is_new` to find brand-new customers that still need a staff assignment.
      *
      * @tags Ledger
      * @name MappingsList
@@ -2021,6 +2060,23 @@ export class Api<SecurityDataType extends unknown> {
         limit?: number;
         /** Filter by customer name or assigned staff name */
         search?: string;
+        /**
+         * A customer is flagged `is_new` if first synced from rowbest (LedgerCustomer.createdAt) within this many days
+         * @default 7
+         */
+        newDays?: number;
+        /**
+         * Filter `data` to a single resolved ownership_source
+         * @default "all"
+         */
+        ownership?: "all" | "assigned" | "dynamic" | "unassigned";
+        /**
+         * `created_at` (default) surfaces the newest customers first with the default `order=desc` - i.e. "sort by new customers".
+         * @default "created_at"
+         */
+        sortBy?: "created_at" | "balance" | "name";
+        /** @default "desc" */
+        order?: "asc" | "desc";
       },
       params: RequestParams = {},
     ) =>
@@ -2045,7 +2101,19 @@ export class Api<SecurityDataType extends unknown> {
             balance?: number;
             assigned_staff_id?: number | null;
             assigned_staff_name?: string | null;
+            ownership_source?: "assigned" | "dynamic" | "unassigned";
+            /** First synced from rowbest within the last `newDays` days */
+            is_new?: boolean;
+            /**
+             * When this customer was first synced from rowbest
+             * @format date-time
+             */
+            created_at?: string;
           }[];
+          newDays?: number;
+          ownership?: "all" | "assigned" | "dynamic" | "unassigned";
+          sortBy?: "created_at" | "balance" | "name";
+          order?: "asc" | "desc";
         },
         void
       >({

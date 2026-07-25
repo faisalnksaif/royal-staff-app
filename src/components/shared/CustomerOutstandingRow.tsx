@@ -70,6 +70,11 @@ export default function CustomerOutstandingRow({ item, index }: Props) {
             </View>
           )}
           <AppText variant="bodyMedium" numberOfLines={1} style={{ flex: 1 }}>{toTitleCase(item.name)}</AppText>
+          {item.is_new && (
+            <View style={[styles.pill, { backgroundColor: palette.info.default + "22" }]}>
+              <AppText variant="caption" style={{ color: palette.info.default, fontSize: 10 }}>New</AppText>
+            </View>
+          )}
           {isSettled && (
             <View style={[styles.pill, { backgroundColor: palette.success.default + "22" }]}>
               <AppText variant="caption" style={{ color: palette.success.default, fontSize: 10 }}>Settled</AppText>

@@ -104,7 +104,24 @@ function MappingRow({
   return (
     <View style={[styles.row, { borderBottomColor: colors.border }]}>
       <View style={styles.customerCol}>
-        <AppText variant="bodyMedium" numberOfLines={1}>{item.name}</AppText>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          <AppText variant="bodyMedium" numberOfLines={1} style={{ flexShrink: 1 }}>{item.name}</AppText>
+          {item.is_new && (
+            <View style={[styles.badge, { backgroundColor: palette.info.default + "22" }]}>
+              <AppText variant="caption" style={{ color: palette.info.default, fontSize: 9 }}>New</AppText>
+            </View>
+          )}
+          {item.ownership_source === "unassigned" && (
+            <View style={[styles.badge, { backgroundColor: palette.error.default + "22" }]}>
+              <AppText variant="caption" style={{ color: palette.error.default, fontSize: 9 }}>Unassigned</AppText>
+            </View>
+          )}
+          {item.ownership_source === "dynamic" && (
+            <View style={[styles.badge, { backgroundColor: palette.warning.default + "22" }]}>
+              <AppText variant="caption" style={{ color: palette.warning.default, fontSize: 9 }}>Dynamic</AppText>
+            </View>
+          )}
+        </View>
         {item.mobile && <AppText variant="caption" color="tertiary">{item.mobile}</AppText>}
       </View>
       <AppText variant="caption" style={[styles.balanceCol, { color: palette.error.default }]}>
@@ -133,6 +150,9 @@ export default function MappingsScreen() {
   const [search, setSearch] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [ownership, setOwnership] = useState<"all" | "assigned" | "dynamic" | "unassigned">("all")
+  const [sortBy, setSortBy] = useState<"created_at" | "balance" | "name">("created_at")
+  const [order, setOrder] = useState<"asc" | "desc">("desc")
 
   const [pickerVisible, setPickerVisible] = useState(false)
   const [pickerLedgerId, setPickerLedgerId] = useState<number | null>(null)
@@ -147,9 +167,9 @@ export default function MappingsScreen() {
     hasNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery({
-    queryKey: ["mappings", debouncedSearch],
+    queryKey: ["mappings", debouncedSearch, ownership, sortBy, order],
     queryFn: ({ pageParam }) =>
-      mappingService.getMappings({ page: pageParam, limit: PAGE_SIZE, search: debouncedSearch || undefined }),
+      mappingService.getMappings({ page: pageParam, limit: PAGE_SIZE, search: debouncedSearch || undefined, ownership, sortBy, order }),
     initialPageParam: 1,
     getNextPageParam: (lastPage) =>
       lastPage.pagination.page < lastPage.pagination.pages ? lastPage.pagination.page + 1 : undefined,
@@ -238,6 +258,39 @@ export default function MappingsScreen() {
         </View>
       </View>
 
+      {/* Filters */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+        {(["all", "assigned", "dynamic", "unassigned"] as const).map((v) => {
+          const active = ownership === v
+          return (
+            <TouchableOpacity key={v} onPress={() => setOwnership(v)}
+              style={[styles.chip, { borderColor: active ? colors.accent : colors.border, backgroundColor: active ? (colors.accent as string) + "18" : "transparent" }]}>
+              <AppText variant="caption" style={{ color: active ? colors.accent : colors.text.secondary }}>
+                {v === "all" ? "All" : v.charAt(0).toUpperCase() + v.slice(1)}
+              </AppText>
+            </TouchableOpacity>
+          )
+        })}
+        <View style={[styles.chip, { borderColor: colors.border, backgroundColor: "transparent", marginLeft: 8 }]}>
+          <AppText variant="caption" color="tertiary">Sort:</AppText>
+        </View>
+        {(["created_at", "balance", "name"] as const).map((v) => {
+          const active = sortBy === v
+          return (
+            <TouchableOpacity key={v} onPress={() => {
+              if (active) setOrder(o => o === "desc" ? "asc" : "desc")
+              else { setSortBy(v); setOrder("desc") }
+            }}
+              style={[styles.chip, { borderColor: active ? colors.accent : colors.border, backgroundColor: active ? (colors.accent as string) + "18" : "transparent" }]}>
+              <AppText variant="caption" style={{ color: active ? colors.accent : colors.text.secondary }}>
+                {v === "created_at" ? "Newest" : v.charAt(0).toUpperCase() + v.slice(1)}
+                {active ? (order === "desc" ? " ↓" : " ↑") : ""}
+              </AppText>
+            </TouchableOpacity>
+          )
+        })}
+      </ScrollView>
+
       {/* Table header */}
       <View style={[styles.tableHeader, { borderBottomColor: colors.border, backgroundColor: colors.background.secondary }]}>
         <AppText variant="caption" color="tertiary" style={styles.customerCol}>CUSTOMER</AppText>
@@ -295,6 +348,9 @@ export default function MappingsScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
+  filterRow: { flexDirection: "row", gap: spacing[2], paddingHorizontal: spacing[4], paddingVertical: spacing[2], alignItems: "center" },
+  chip: { paddingHorizontal: spacing[3], paddingVertical: 4, borderRadius: 99, borderWidth: 1 },
+  badge: { paddingHorizontal: 5, paddingVertical: 2, borderRadius: 99 },
   header: {
     paddingHorizontal: spacing[5],
     paddingTop: spacing[12],

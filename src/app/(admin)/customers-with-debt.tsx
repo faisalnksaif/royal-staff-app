@@ -145,6 +145,11 @@ function RetentionRow({ customer, index }: { customer: RetentionCustomer; index?
               </View>
             )}
             <AppText variant="body" numberOfLines={1} style={{ flex: 1 }}>{toTitleCase(customer.name)}</AppText>
+            {customer.is_new && (
+              <View style={[styles.pill, { backgroundColor: palette.info.default + "22" }]}>
+                <AppText variant="caption" style={{ color: palette.info.default, fontSize: 10 }}>New</AppText>
+              </View>
+            )}
             <View style={[styles.pill, { backgroundColor: color + "18" }]}>
               <AppText variant="caption" numberOfLines={1} style={{ color, fontSize: 10 }}>{RETENTION_STATUS_LABEL[customer.status]}</AppText>
             </View>
@@ -240,7 +245,14 @@ function VelocityRow({ customer, companyAvg, index }: { customer: PaymentVelocit
             </View>
           )}
           <View style={{ flex: 1, gap: 3 }}>
-            <AppText variant="body" numberOfLines={1}>{toTitleCase(customer.name)}</AppText>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: spacing[2] }}>
+              <AppText variant="body" numberOfLines={1} style={{ flex: 1 }}>{toTitleCase(customer.name)}</AppText>
+              {customer.is_new && (
+                <View style={[styles.pill, { backgroundColor: palette.info.default + "22" }]}>
+                  <AppText variant="caption" style={{ color: palette.info.default, fontSize: 10 }}>New</AppText>
+                </View>
+              )}
+            </View>
             <View style={styles.fuRow}>
               <AppText variant="caption" color="secondary" style={{ fontSize: 12 }}>
                 Clears in <AppText variant="caption" style={{ color, fontSize: 12 }}>{customer.avg_days_to_clear.toFixed(1)}d</AppText> avg

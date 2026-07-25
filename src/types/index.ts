@@ -144,6 +144,8 @@ export interface LedgerCustomerOutstanding {
   last_payment_date: string | null
   last_payment_amount: number | null
   days_since_last_payment: number | null
+  is_new?: boolean
+  created_at?: string
 }
 
 export interface LedgerFollowUpInsights {
@@ -653,6 +655,8 @@ export interface PaymentVelocityCustomer {
   last_payment_date: string | null
   last_payment_amount: number | null
   days_since_last_payment: number | null
+  is_new?: boolean
+  created_at?: string
 }
 
 export interface PaymentVelocityResponse {
@@ -691,6 +695,8 @@ export interface RetentionCustomer {
   last_purchase_date: string | null
   outstanding_balance: number
   outstanding_dr_cr: "Dr" | "Cr"
+  is_new?: boolean
+  created_at?: string
 }
 
 export interface RetentionResponse {
