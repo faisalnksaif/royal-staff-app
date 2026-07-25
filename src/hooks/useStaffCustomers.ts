@@ -4,7 +4,7 @@ import type { LedgerOutstandingResponse, LedgerOutstandingFilter } from "../type
 
 export function useStaffCustomers(
   userId: number | string | null | undefined,
-  params: { limit?: number; search?: string; filter?: LedgerOutstandingFilter; sortBy?: "priority" | "balance" } = {}
+  params: { limit?: number; search?: string; filter?: LedgerOutstandingFilter; sortBy?: "priority" | "balance" | "newest" } = {}
 ) {
   const { limit = 20, search, filter = "all", sortBy } = params
 

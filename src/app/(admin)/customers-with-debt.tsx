@@ -306,7 +306,7 @@ export default function AllCustomersScreen() {
   const [outSearch, setOutSearch] = useState("")
   const outSearchDebounced = useDebounce(outSearch, 400)
   const [outFilter, setOutFilter] = useState<LedgerOutstandingFilter>("all")
-  const [outSort, setOutSort] = useState<"priority" | "balance">("priority")
+  const [outSort, setOutSort] = useState<"priority" | "balance" | "newest">("priority")
 
   // retention state
   const [retSearch, setRetSearch] = useState("")
@@ -420,7 +420,8 @@ export default function AllCustomersScreen() {
               {([
                 { value: "priority", label: "Priority ↑" },
                 { value: "balance",  label: "Balance ↑" },
-              ] as { value: "priority" | "balance"; label: string }[]).map(({ value, label }) => {
+                { value: "newest",   label: "New Customer" },
+              ] as { value: "priority" | "balance" | "newest"; label: string }[]).map(({ value, label }) => {
                 const isActive = outSort === value
                 return (
                   <TouchableOpacity
@@ -588,6 +589,7 @@ export default function AllCustomersScreen() {
                   { value: "outstanding_balance",      label: "Balance" },
                   { value: "total_purchases",          label: "Purchases" },
                   { value: "last_purchase_date",       label: "Purchase Date" },
+                  { value: "created_at",               label: "New Customer" },
                 ] as { value: RetentionSortBy; label: string }[]
               ).map(({ value, label }) => {
                 const isActive = retSortBy === value

@@ -45,8 +45,8 @@ function FilterChips({
 }: {
   active: LedgerOutstandingFilter
   onChange: (f: LedgerOutstandingFilter) => void
-  sortBy: "priority" | "balance"
-  onSortChange: (s: "priority" | "balance") => void
+  sortBy: "priority" | "balance" | "newest"
+  onSortChange: (s: "priority" | "balance" | "newest") => void
 }) {
   const { colors } = useTheme()
   return (
@@ -78,9 +78,9 @@ function FilterChips({
         )
       })}
       <View style={[styles.sortDivider, { backgroundColor: colors.border }]} />
-      {(["priority", "balance"] as const).map((value) => {
+      {(["priority", "balance", "newest"] as const).map((value) => {
         const isActive = sortBy === value
-        const label = value === "priority" ? "Priority ↑" : "Balance ↑"
+        const label = value === "priority" ? "Priority ↑" : value === "balance" ? "Balance ↑" : "New Customer"
         return (
           <TouchableOpacity
             key={value}
@@ -295,7 +295,7 @@ export default function CustomersScreen() {
   const [searchInput, setSearchInput] = useState("")
   const debouncedSearch = useDebounce(searchInput, 400)
   const [activeFilter, setActiveFilter] = useState<LedgerOutstandingFilter>("all")
-  const [sortBy, setSortBy] = useState<"priority" | "balance">("priority")
+  const [sortBy, setSortBy] = useState<"priority" | "balance" | "newest">("priority")
 
   const { data, isLoading, isFetchingNextPage, hasNextPage, fetchNextPage, refetch, isRefetching } =
     useStaffCustomers(user?.user_id, { limit: PAGE_SIZE, search: debouncedSearch || undefined, filter: activeFilter, sortBy })

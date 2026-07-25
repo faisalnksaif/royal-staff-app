@@ -168,7 +168,7 @@ export interface LedgerOutstandingResponse {
   data: LedgerCustomerOutstanding[]
   totals: { total_outstanding: number; total_staff_sales: number }
   follow_up_insights: LedgerFollowUpInsights
-  sortBy?: "priority" | "balance"
+  sortBy?: "priority" | "balance" | "newest"
   retention_thresholds?: { activeDays: number; churnedDays: number }
 }
 
@@ -180,7 +180,7 @@ export interface LedgerOutstandingParams {
   limit?: number
   search?: string
   filter?: LedgerOutstandingFilter
-  sortBy?: "priority" | "balance"
+  sortBy?: "priority" | "balance" | "newest"
   activeDays?: number
   churnedDays?: number
 }
@@ -719,7 +719,7 @@ export interface RetentionResponse {
   }
 }
 
-export type RetentionSortBy = "last_purchase_date" | "days_since_last_purchase" | "total_purchases" | "outstanding_balance"
+export type RetentionSortBy = "last_purchase_date" | "days_since_last_purchase" | "total_purchases" | "outstanding_balance" | "created_at"
 
 export interface RetentionParams {
   page?: number

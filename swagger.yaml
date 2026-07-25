@@ -723,9 +723,11 @@ paths:
             first (customers who have never paid sort before any finite
             gap), then highest outstanding_balance. "balance" is the simple
             outstanding_balance-descending sort with no risk weighting.
+            "newest" sorts by created_at descending (most recently synced
+            first).
           schema:
             type: string
-            enum: [priority, balance]
+            enum: [priority, balance, newest]
             default: priority
         - name: activeDays
           in: query
@@ -876,7 +878,7 @@ paths:
                     description: The filter that was applied to `data`
                   sortBy:
                     type: string
-                    enum: [priority, balance]
+                    enum: [priority, balance, newest]
                   retention_thresholds:
                     type: object
                     properties:
@@ -990,9 +992,11 @@ paths:
             first (customers who have never paid sort before any finite
             gap), then highest outstanding_balance. `balance` is the simple
             outstanding_balance-descending sort with no risk weighting.
+            `newest` sorts by created_at descending (most recently synced
+            first).
           schema:
             type: string
-            enum: [priority, balance]
+            enum: [priority, balance, newest]
             default: priority
         - name: activeDays
           in: query
@@ -1119,7 +1123,7 @@ paths:
                     enum: [all, followed_up, not_followed_up, paid, overdue, open_followup]
                   sortBy:
                     type: string
-                    enum: [priority, balance]
+                    enum: [priority, balance, newest]
                   retention_thresholds:
                     type: object
                     properties:
@@ -1194,10 +1198,12 @@ paths:
           description: >
             Field to sort by. `last_purchase_date` and
             `days_since_last_purchase` both push never_purchased customers
-            (null) to the end regardless of `order`.
+            (null) to the end regardless of `order`. `created_at` sorts by
+            when the customer was first synced from rowbest - "sort by
+            newest customer".
           schema:
             type: string
-            enum: [last_purchase_date, days_since_last_purchase, total_purchases, outstanding_balance]
+            enum: [last_purchase_date, days_since_last_purchase, total_purchases, outstanding_balance, created_at]
             default: last_purchase_date
         - name: order
           in: query
@@ -1295,7 +1301,7 @@ paths:
                     properties:
                       sortBy:
                         type: string
-                        enum: [last_purchase_date, days_since_last_purchase, total_purchases, outstanding_balance]
+                        enum: [last_purchase_date, days_since_last_purchase, total_purchases, outstanding_balance, created_at]
                       order:
                         type: string
                         enum: [asc, desc]
