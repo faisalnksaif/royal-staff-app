@@ -25,6 +25,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   web: {
     favicon: "./assets/favicon.png",
+    name: "RoyalPulse",
+    shortName: "RoyalPulse",
+    description: "Staff monitoring and follow-up management",
+    themeColor: "#000000",
+    backgroundColor: "#000000",
+    lang: "en",
   },
   updates: {
     url: "https://u.expo.dev/b25217cd-b963-4c83-9e11-650f8bdf097f",
