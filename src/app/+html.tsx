@@ -18,7 +18,10 @@ export default function Root({ children }: { children: React.ReactNode }) {
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="RoyalPulse" />
-        <link rel="apple-touch-icon" href={`${BASE}/icons/icon-192.png`} />
+        {/* iOS uses apple-touch-icon — 180px is the preferred size for modern iPhones */}
+        <link rel="apple-touch-icon" sizes="180x180" href={`${BASE}/icons/icon-180.png`} />
+        <link rel="apple-touch-icon" sizes="192x192" href={`${BASE}/icons/icon-192.png`} />
+        <link rel="icon" type="image/png" sizes="192x192" href={`${BASE}/icons/icon-192.png`} />
 
         <script
           dangerouslySetInnerHTML={{
