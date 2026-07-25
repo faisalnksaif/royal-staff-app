@@ -259,37 +259,39 @@ export default function MappingsScreen() {
       </View>
 
       {/* Filters */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
-        {(["all", "assigned", "dynamic", "unassigned"] as const).map((v) => {
-          const active = ownership === v
-          return (
-            <TouchableOpacity key={v} onPress={() => setOwnership(v)}
-              style={[styles.chip, { borderColor: active ? colors.accent : colors.border, backgroundColor: active ? (colors.accent as string) + "18" : "transparent" }]}>
-              <AppText variant="caption" style={{ color: active ? colors.accent : colors.text.secondary }}>
-                {v === "all" ? "All" : v.charAt(0).toUpperCase() + v.slice(1)}
-              </AppText>
-            </TouchableOpacity>
-          )
-        })}
-        <View style={[styles.chip, { borderColor: colors.border, backgroundColor: "transparent", marginLeft: 8 }]}>
-          <AppText variant="caption" color="tertiary">Sort:</AppText>
-        </View>
-        {(["created_at", "balance", "name"] as const).map((v) => {
-          const active = sortBy === v
-          return (
-            <TouchableOpacity key={v} onPress={() => {
-              if (active) setOrder(o => o === "desc" ? "asc" : "desc")
-              else { setSortBy(v); setOrder("desc") }
-            }}
-              style={[styles.chip, { borderColor: active ? colors.accent : colors.border, backgroundColor: active ? (colors.accent as string) + "18" : "transparent" }]}>
-              <AppText variant="caption" style={{ color: active ? colors.accent : colors.text.secondary }}>
-                {v === "created_at" ? "Newest" : v.charAt(0).toUpperCase() + v.slice(1)}
-                {active ? (order === "desc" ? " ↓" : " ↑") : ""}
-              </AppText>
-            </TouchableOpacity>
-          )
-        })}
-      </ScrollView>
+      <View style={[styles.filterWrap, { borderBottomColor: colors.border as string }]}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+          {(["all", "assigned", "dynamic", "unassigned"] as const).map((v) => {
+            const active = ownership === v
+            return (
+              <TouchableOpacity key={v} onPress={() => setOwnership(v)}
+                style={[styles.chip, { borderColor: active ? colors.accent as string : colors.border as string, backgroundColor: active ? (colors.accent as string) + "18" : "transparent" }]}>
+                <AppText variant="caption" style={{ color: active ? colors.accent as string : colors.text.secondary as string }}>
+                  {v === "all" ? "All" : v.charAt(0).toUpperCase() + v.slice(1)}
+                </AppText>
+              </TouchableOpacity>
+            )
+          })}
+          <View style={[styles.chip, { borderColor: "transparent", marginLeft: spacing[2] }]}>
+            <AppText variant="caption" color="tertiary">Sort:</AppText>
+          </View>
+          {(["created_at", "balance", "name"] as const).map((v) => {
+            const active = sortBy === v
+            return (
+              <TouchableOpacity key={v} onPress={() => {
+                if (active) setOrder(o => o === "desc" ? "asc" : "desc")
+                else { setSortBy(v); setOrder("desc") }
+              }}
+                style={[styles.chip, { borderColor: active ? colors.accent as string : colors.border as string, backgroundColor: active ? (colors.accent as string) + "18" : "transparent" }]}>
+                <AppText variant="caption" style={{ color: active ? colors.accent as string : colors.text.secondary as string }}>
+                  {v === "created_at" ? "Newest" : v.charAt(0).toUpperCase() + v.slice(1)}
+                  {active ? (order === "desc" ? " ↓" : " ↑") : ""}
+                </AppText>
+              </TouchableOpacity>
+            )
+          })}
+        </ScrollView>
+      </View>
 
       {/* Table header */}
       <View style={[styles.tableHeader, { borderBottomColor: colors.border, backgroundColor: colors.background.secondary }]}>
@@ -348,6 +350,7 @@ export default function MappingsScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
+  filterWrap: { borderBottomWidth: StyleSheet.hairlineWidth },
   filterRow: { flexDirection: "row", gap: spacing[2], paddingHorizontal: spacing[4], paddingVertical: spacing[2], alignItems: "center" },
   chip: { paddingHorizontal: spacing[3], paddingVertical: 4, borderRadius: 99, borderWidth: 1 },
   badge: { paddingHorizontal: 5, paddingVertical: 2, borderRadius: 99 },
