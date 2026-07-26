@@ -306,6 +306,7 @@ export default function AllCustomersScreen() {
   const [outSearch, setOutSearch] = useState("")
   const outSearchDebounced = useDebounce(outSearch, 400)
   const [outFilter, setOutFilter] = useState<LedgerOutstandingFilter>("all")
+  const [outRetentionStatus, setOutRetentionStatus] = useState<RetentionStatus | "all">("all")
   const [outSort, setOutSort] = useState<"priority" | "balance" | "newest">("priority")
 
   // retention state
@@ -316,7 +317,7 @@ export default function AllCustomersScreen() {
   const [retOrder, setRetOrder] = useState<SortOrder>("asc")
 
   const { data: outData, isLoading: outLoading, isError: outError, refetch, hasNextPage: outHasNext, isFetchingNextPage: outFetching, fetchNextPage: outFetchNext } =
-    useAllCustomers({ limit: 50, search: outSearchDebounced || undefined, filter: outFilter, sortBy: outSort, enabled: mainTab === "outstanding" })
+    useAllCustomers({ limit: 50, search: outSearchDebounced || undefined, filter: outFilter, retentionStatus: outRetentionStatus, sortBy: outSort, enabled: mainTab === "outstanding" })
 
   const { data: retData, isLoading: retLoading, isError: retError, refetch: retRefetch, hasNextPage: retHasNext, isFetchingNextPage: retFetching, fetchNextPage: retFetchNext } =
     useRetention({ status: retFilter, search: retSearchDebounced || undefined, sortBy: retSortBy, order: retOrder, enabled: mainTab === "retention" })
@@ -418,6 +419,29 @@ export default function AllCustomersScreen() {
               })}
               <View style={[styles.sortDivider, { backgroundColor: colors.border }]} />
               {([
+                { value: "all",             label: "All" },
+                { value: "active",          label: "Active" },
+                { value: "at_risk",         label: "At Risk" },
+                { value: "churned",         label: "Churned" },
+                { value: "never_purchased", label: "Never Purchased" },
+              ] as { value: RetentionStatus | "all"; label: string }[]).map(({ value, label }) => {
+                const isActive = outRetentionStatus === value
+                return (
+                  <TouchableOpacity
+                    key={`ret-${value}`}
+                    activeOpacity={0.7}
+                    onPress={() => setOutRetentionStatus(value)}
+                    style={[styles.filterChip, {
+                      backgroundColor: isActive ? colors.accent + "22" : colors.background.secondary,
+                      borderColor: isActive ? colors.accent : colors.border,
+                    }]}
+                  >
+                    <AppText variant="caption" style={{ color: isActive ? colors.accent : colors.text.secondary }}>{label}</AppText>
+                  </TouchableOpacity>
+                )
+              })}
+              <View style={[styles.sortDivider, { backgroundColor: colors.border }]} />
+              {([
                 { value: "priority", label: "Priority ↑" },
                 { value: "balance",  label: "Balance ↑" },
                 { value: "newest",   label: "New Customer" },
@@ -439,6 +463,7 @@ export default function AllCustomersScreen() {
               })}
             </ScrollView>
           </View>
+
           {outLoading ? (
             <ActivityIndicator size="large" color={colors.accent} style={styles.center} />
           ) : outError ? (

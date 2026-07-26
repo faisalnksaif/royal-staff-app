@@ -11,6 +11,25 @@ export interface CustomerMapping {
   ownership_source?: "assigned" | "dynamic" | "unassigned"
   is_new?: boolean
   created_at?: string
+  on_hold?: boolean
+  hold_reason?: string | null
+  held_by_staff_name?: string | null
+  held_at?: string | null
+}
+
+export interface HoldCustomerPayload {
+  hold: boolean
+  reason?: string
+}
+
+export interface HoldCustomerResult {
+  ledger_id: number
+  name: string
+  on_hold: boolean
+  hold_reason: string | null
+  held_by_staff_id: number | null
+  held_by_staff_name: string | null
+  held_at: string | null
 }
 
 export interface StaffOption {
@@ -36,6 +55,7 @@ async function getMappings(params: {
   limit?: number
   search?: string
   ownership?: "all" | "assigned" | "dynamic" | "unassigned"
+  hold?: "all" | "held" | "not_held"
   sortBy?: "created_at" | "balance" | "name"
   order?: "asc" | "desc"
   newDays?: number
@@ -45,6 +65,7 @@ async function getMappings(params: {
   if (params.limit) qs.set("limit", String(params.limit))
   if (params.search) qs.set("search", params.search)
   if (params.ownership && params.ownership !== "all") qs.set("ownership", params.ownership)
+  if (params.hold && params.hold !== "all") qs.set("hold", params.hold)
   if (params.sortBy && params.sortBy !== "created_at") qs.set("sortBy", params.sortBy)
   if (params.order && params.order !== "desc") qs.set("order", params.order)
   if (params.newDays != null && params.newDays !== 7) qs.set("newDays", String(params.newDays))
@@ -78,4 +99,15 @@ async function reassign(ledgerId: number, staffId: number): Promise<CustomerMapp
   return data.data
 }
 
-export const mappingService = { getMappings, getStaffOptions, reassign }
+async function holdCustomer(ledgerId: number, payload: HoldCustomerPayload): Promise<HoldCustomerResult> {
+  const { data } = await api.http.request<{ success: boolean; data: HoldCustomerResult }>({
+    path: `/ledger/customers/${ledgerId}/hold`,
+    method: "PUT",
+    body: payload,
+    secure: true,
+    format: "json",
+  })
+  return data.data
+}
+
+export const mappingService = { getMappings, getStaffOptions, reassign, holdCustomer }

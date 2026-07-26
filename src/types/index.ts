@@ -146,6 +146,8 @@ export interface LedgerCustomerOutstanding {
   days_since_last_payment: number | null
   is_new?: boolean
   created_at?: string
+  on_hold?: boolean
+  hold_reason?: string | null
 }
 
 export interface LedgerFollowUpInsights {
@@ -180,6 +182,7 @@ export interface LedgerOutstandingParams {
   limit?: number
   search?: string
   filter?: LedgerOutstandingFilter
+  retentionStatus?: RetentionStatus | "all"
   sortBy?: "priority" | "balance" | "newest"
   activeDays?: number
   churnedDays?: number
@@ -697,6 +700,10 @@ export interface RetentionCustomer {
   outstanding_dr_cr: "Dr" | "Cr"
   is_new?: boolean
   created_at?: string
+  on_hold?: boolean
+  hold_reason?: string | null
+  held_by_staff_name?: string | null
+  held_at?: string | null
 }
 
 export interface RetentionResponse {

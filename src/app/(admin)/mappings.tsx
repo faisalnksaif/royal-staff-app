@@ -1,5 +1,5 @@
 import { formatAmount } from "../../utils/helpers"
-import { useState, useRef, useMemo } from "react"
+import { useState, useRef, useMemo, useEffect } from "react"
 import {
   View,
   FlatList,
@@ -12,13 +12,106 @@ import {
   ScrollView,
 } from "react-native"
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { Search, ChevronDown, X } from "lucide-react-native"
+import { Search, ChevronDown, X, Ban } from "lucide-react-native"
 import DrawerMenuButton from "../../components/shared/DrawerMenuButton"
 import AppText from "../../components/ui/AppText"
 import AppCard from "../../components/ui/AppCard"
 import { useTheme } from "../../providers/ThemeProvider"
 import { spacing, radii, colors as palette } from "../../constants/theme"
+import { useRouter } from "expo-router"
 import { mappingService, type CustomerMapping, type StaffOption } from "../../services/mappingService"
+
+// ─── Hold modal ───────────────────────────────────────────────────────────────
+
+function HoldModal({
+  visible,
+  item,
+  onConfirm,
+  onClose,
+}: {
+  visible: boolean
+  item: CustomerMapping | null
+  onConfirm: (ledgerId: number, hold: boolean, reason: string) => void
+  onClose: () => void
+}) {
+  const { colors } = useTheme()
+  const [reason, setReason] = useState("")
+  const isHeld = item?.on_hold ?? false
+
+  useEffect(() => {
+    if (visible) setReason("")
+  }, [visible, item?.ledger_id])
+
+  function handleSubmit() {
+    if (!item) return
+    if (!isHeld && !reason.trim()) return
+    onConfirm(item.ledger_id, !isHeld, reason.trim())
+  }
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.modalOverlay} onPress={onClose}>
+        <Pressable style={[styles.modalBox, { backgroundColor: colors.background.primary, borderColor: colors.border, padding: spacing[5] }]}>
+          <AppText variant="heading3" style={{ marginBottom: spacing[1] }}>
+            {isHeld ? "Unhold Customer" : "Hold Customer"}
+          </AppText>
+          <AppText variant="caption" color="secondary" style={{ marginBottom: spacing[4] }}>
+            {item?.name}
+          </AppText>
+
+          {isHeld ? (
+            <>
+              {item?.hold_reason ? (
+                <View style={[styles.holdReasonBox, { backgroundColor: colors.background.secondary, borderColor: colors.border }]}>
+                  <AppText variant="caption" color="tertiary">Current reason</AppText>
+                  <AppText variant="body" style={{ marginTop: 2 }}>{item.hold_reason}</AppText>
+                </View>
+              ) : null}
+              <AppText variant="caption" color="secondary" style={{ marginTop: spacing[3], marginBottom: spacing[4] }}>
+                This will make the customer visible to staff again.
+              </AppText>
+            </>
+          ) : (
+            <>
+              <TextInput
+                style={[styles.reasonInput, { color: colors.text.primary, borderColor: colors.border, backgroundColor: colors.background.secondary }]}
+                placeholder="Reason for hold (required)"
+                placeholderTextColor={colors.text.tertiary as string}
+                value={reason}
+                onChangeText={setReason}
+                multiline
+                numberOfLines={3}
+              />
+            </>
+          )}
+
+          <View style={{ flexDirection: "row", gap: spacing[3], marginTop: spacing[2] }}>
+            <TouchableOpacity
+              style={[styles.modalBtn, { borderColor: colors.border, flex: 1 }]}
+              onPress={onClose}
+            >
+              <AppText variant="bodyMedium" color="secondary">Cancel</AppText>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modalBtn, {
+                flex: 1,
+                backgroundColor: isHeld ? palette.success.default : palette.error.default,
+                borderColor: "transparent",
+                opacity: (!isHeld && !reason.trim()) ? 0.4 : 1,
+              }]}
+              onPress={handleSubmit}
+              disabled={!isHeld && !reason.trim()}
+            >
+              <AppText variant="bodyMedium" style={{ color: "#fff" }}>
+                {isHeld ? "Unhold" : "Hold"}
+              </AppText>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  )
+}
 
 const PAGE_SIZE = 50
 
@@ -95,18 +188,44 @@ function MappingRow({
   item,
   staff,
   onReassign,
+  onHold,
 }: {
   item: CustomerMapping
   staff: StaffOption[]
   onReassign: (ledgerId: number, current: number | null) => void
+  onHold: (item: CustomerMapping) => void
 }) {
   const { colors } = useTheme()
+  const router = useRouter()
+
+  function navigateToCustomer() {
+    router.push({
+      pathname: "/customer/[name]",
+      params: {
+        name: item.name,
+        totalBalance: String(item.balance),
+        drCr: "Dr",
+        customerId: String(item.ledger_id),
+        mobile: item.mobile ?? "",
+      },
+    })
+  }
+
   return (
-    <View style={[styles.row, { borderBottomColor: colors.border }]}>
+    <TouchableOpacity
+      style={[styles.row, { borderBottomColor: colors.border, opacity: item.on_hold ? 0.7 : 1 }]}
+      onPress={navigateToCustomer}
+      activeOpacity={0.7}
+    >
       <View style={styles.customerCol}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
           <AppText variant="bodyMedium" numberOfLines={1} style={{ flexShrink: 1 }}>{item.name}</AppText>
-          {item.is_new && (
+          {item.on_hold && (
+            <View style={[styles.badge, { backgroundColor: palette.error.default + "22" }]}>
+              <AppText variant="caption" style={{ color: palette.error.default, fontSize: 9 }}>On Hold</AppText>
+            </View>
+          )}
+          {item.is_new && !item.on_hold && (
             <View style={[styles.badge, { backgroundColor: palette.info.default + "22" }]}>
               <AppText variant="caption" style={{ color: palette.info.default, fontSize: 9 }}>New</AppText>
             </View>
@@ -123,6 +242,11 @@ function MappingRow({
           )}
         </View>
         {item.mobile && <AppText variant="caption" color="tertiary">{item.mobile}</AppText>}
+        {item.on_hold && item.hold_reason && (
+          <AppText variant="caption" color="tertiary" numberOfLines={1} style={{ marginTop: 1 }}>
+            {item.hold_reason}
+          </AppText>
+        )}
       </View>
       <AppText variant="caption" style={[styles.balanceCol, { color: palette.error.default }]}>
         ₹{formatAmount(item.balance)}
@@ -137,7 +261,14 @@ function MappingRow({
         </AppText>
         <ChevronDown size={12} color={colors.text.tertiary} strokeWidth={1.75} />
       </TouchableOpacity>
-    </View>
+      <TouchableOpacity
+        onPress={() => onHold(item)}
+        hitSlop={8}
+        style={styles.holdBtn}
+      >
+        <Ban size={16} color={item.on_hold ? palette.error.default : colors.text.tertiary as string} strokeWidth={1.75} />
+      </TouchableOpacity>
+    </TouchableOpacity>
   )
 }
 
@@ -151,12 +282,15 @@ export default function MappingsScreen() {
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [ownership, setOwnership] = useState<"all" | "assigned" | "dynamic" | "unassigned">("all")
+  const [holdFilter, setHoldFilter] = useState<"all" | "held" | "not_held">("all")
   const [sortBy, setSortBy] = useState<"created_at" | "balance" | "name">("created_at")
   const [order, setOrder] = useState<"asc" | "desc">("desc")
 
   const [pickerVisible, setPickerVisible] = useState(false)
   const [pickerLedgerId, setPickerLedgerId] = useState<number | null>(null)
   const [pickerCurrentStaffId, setPickerCurrentStaffId] = useState<number | null>(null)
+
+  const [holdModalItem, setHoldModalItem] = useState<CustomerMapping | null>(null)
 
   const {
     data,
@@ -167,9 +301,9 @@ export default function MappingsScreen() {
     hasNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery({
-    queryKey: ["mappings", debouncedSearch, ownership, sortBy, order],
+    queryKey: ["mappings", debouncedSearch, ownership, holdFilter, sortBy, order],
     queryFn: ({ pageParam }) =>
-      mappingService.getMappings({ page: pageParam, limit: PAGE_SIZE, search: debouncedSearch || undefined, ownership, sortBy, order }),
+      mappingService.getMappings({ page: pageParam, limit: PAGE_SIZE, search: debouncedSearch || undefined, ownership, hold: holdFilter, sortBy, order }),
     initialPageParam: 1,
     getNextPageParam: (lastPage) =>
       lastPage.pagination.page < lastPage.pagination.pages ? lastPage.pagination.page + 1 : undefined,
@@ -207,6 +341,32 @@ export default function MappingsScreen() {
       setPickerVisible(false)
     },
   })
+
+  const { mutate: holdCustomer, isPending: isHolding } = useMutation({
+    mutationFn: ({ ledgerId, hold, reason }: { ledgerId: number; hold: boolean; reason: string }) =>
+      mappingService.holdCustomer(ledgerId, { hold, reason: hold ? reason : undefined }),
+    onSuccess: (result) => {
+      qc.setQueryData<typeof data>(["mappings", debouncedSearch, ownership, holdFilter, sortBy, order], (old) => {
+        if (!old) return old
+        return {
+          ...old,
+          pages: old.pages.map((page) => ({
+            ...page,
+            data: page.data.map((m) =>
+              m.ledger_id === result.ledger_id
+                ? { ...m, on_hold: result.on_hold, hold_reason: result.hold_reason, held_by_staff_name: result.held_by_staff_name, held_at: result.held_at }
+                : m
+            ),
+          })),
+        }
+      })
+      setHoldModalItem(null)
+    },
+  })
+
+  function handleHoldConfirm(ledgerId: number, hold: boolean, reason: string) {
+    holdCustomer({ ledgerId, hold, reason })
+  }
 
   function handleSearchChange(text: string) {
     setSearch(text)
@@ -273,6 +433,27 @@ export default function MappingsScreen() {
             )
           })}
           <View style={[styles.chip, { borderColor: "transparent", marginLeft: spacing[2] }]}>
+            <AppText variant="caption" color="tertiary">Hold:</AppText>
+          </View>
+          {([
+            { value: "all", label: "All" },
+            { value: "held", label: "On Hold" },
+            { value: "not_held", label: "Active" },
+          ] as const).map(({ value, label }) => {
+            const active = holdFilter === value
+            return (
+              <TouchableOpacity key={value} onPress={() => setHoldFilter(value)}
+                style={[styles.chip, {
+                  borderColor: active ? (value === "held" ? palette.error.default : colors.accent as string) : colors.border as string,
+                  backgroundColor: active ? (value === "held" ? palette.error.default + "18" : (colors.accent as string) + "18") : "transparent",
+                }]}>
+                <AppText variant="caption" style={{ color: active ? (value === "held" ? palette.error.default : colors.accent as string) : colors.text.secondary as string }}>
+                  {label}
+                </AppText>
+              </TouchableOpacity>
+            )
+          })}
+          <View style={[styles.chip, { borderColor: "transparent", marginLeft: spacing[2] }]}>
             <AppText variant="caption" color="tertiary">Sort:</AppText>
           </View>
           {(["created_at", "balance", "name"] as const).map((v) => {
@@ -317,7 +498,7 @@ export default function MappingsScreen() {
           data={items}
           keyExtractor={(item) => String(item.ledger_id)}
           renderItem={({ item }) => (
-            <MappingRow item={item} staff={staff} onReassign={openPicker} />
+            <MappingRow item={item} staff={staff} onReassign={openPicker} onHold={setHoldModalItem} />
           )}
           onEndReached={() => { if (hasNextPage && !isFetchingNextPage) fetchNextPage() }}
           onEndReachedThreshold={0.3}
@@ -343,6 +524,14 @@ export default function MappingsScreen() {
         current={pickerCurrentStaffId}
         onSelect={handleSelect}
         onClose={() => setPickerVisible(false)}
+      />
+
+      {/* Hold modal */}
+      <HoldModal
+        visible={holdModalItem !== null}
+        item={holdModalItem}
+        onConfirm={handleHoldConfirm}
+        onClose={() => setHoldModalItem(null)}
       />
     </View>
   )
@@ -449,5 +638,34 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[3],
+  },
+  holdBtn: {
+    marginLeft: spacing[2],
+    padding: spacing[1],
+  },
+  reasonInput: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+    fontSize: 14,
+    fontFamily: "Geist_400Regular",
+    minHeight: 72,
+    textAlignVertical: "top",
+    marginBottom: spacing[2],
+    ...({ outlineStyle: "none" } as object),
+  },
+  holdReasonBox: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+  },
+  modalBtn: {
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3],
+    borderRadius: radii.md,
+    borderWidth: 1,
+    alignItems: "center",
   },
 })

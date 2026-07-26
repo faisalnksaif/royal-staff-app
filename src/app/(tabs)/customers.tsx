@@ -15,7 +15,7 @@ import { spacing, colors as palette } from "../../constants/theme"
 import useAuthStore from "../../stores/useAuthStore"
 import { useStaffCustomers } from "../../hooks/useStaffCustomers"
 import { formatAmount } from "../../utils/helpers"
-import type { LedgerFollowUpInsights, FollowUpOutcome, LedgerOutstandingFilter } from "../../types"
+import type { LedgerFollowUpInsights, FollowUpOutcome, LedgerOutstandingFilter, RetentionStatus } from "../../types"
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true)
@@ -37,67 +37,106 @@ const FILTERS: { value: LedgerOutstandingFilter; label: string }[] = [
   { value: "paid",            label: "Paid" },
 ]
 
+const RETENTION_STATUS_FILTERS: { value: RetentionStatus | "all"; label: string }[] = [
+  { value: "all",             label: "All" },
+  { value: "active",          label: "Active" },
+  { value: "at_risk",         label: "At Risk" },
+  { value: "churned",         label: "Churned" },
+  { value: "never_purchased", label: "Never Purchased" },
+]
+
 function FilterChips({
   active,
   onChange,
+  retentionStatus,
+  onRetentionStatusChange,
   sortBy,
   onSortChange,
 }: {
   active: LedgerOutstandingFilter
   onChange: (f: LedgerOutstandingFilter) => void
+  retentionStatus: RetentionStatus | "all"
+  onRetentionStatusChange: (s: RetentionStatus | "all") => void
   sortBy: "priority" | "balance" | "newest"
   onSortChange: (s: "priority" | "balance" | "newest") => void
 }) {
   const { colors } = useTheme()
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.filterRow}
-      style={[styles.filterWrap, { borderBottomColor: colors.border }]}
-    >
-      {FILTERS.map(({ value, label }) => {
-        const isActive = active === value
-        return (
-          <TouchableOpacity
-            key={value}
-            activeOpacity={0.7}
-            onPress={() => onChange(value)}
-            style={[
-              styles.filterChip,
-              {
-                backgroundColor: isActive ? colors.accent : colors.background.secondary,
+    <>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filterRow}
+        style={[styles.filterWrap, { borderBottomColor: colors.border }]}
+      >
+        {FILTERS.map(({ value, label }) => {
+          const isActive = active === value
+          return (
+            <TouchableOpacity
+              key={value}
+              activeOpacity={0.7}
+              onPress={() => onChange(value)}
+              style={[
+                styles.filterChip,
+                {
+                  backgroundColor: isActive ? colors.accent : colors.background.secondary,
+                  borderColor: isActive ? colors.accent : colors.border,
+                },
+              ]}
+            >
+              <AppText variant="caption" style={{ color: isActive ? "#fff" : colors.text.secondary }}>
+                {label}
+              </AppText>
+            </TouchableOpacity>
+          )
+        })}
+        <View style={[styles.sortDivider, { backgroundColor: colors.border }]} />
+        {(["priority", "balance", "newest"] as const).map((value) => {
+          const isActive = sortBy === value
+          const label = value === "priority" ? "Priority ↑" : value === "balance" ? "Balance ↑" : "New Customer"
+          return (
+            <TouchableOpacity
+              key={value}
+              activeOpacity={0.7}
+              onPress={() => onSortChange(value)}
+              style={[styles.filterChip, {
+                backgroundColor: isActive ? colors.text.primary + "18" : colors.background.secondary,
+                borderColor: isActive ? colors.text.primary : colors.border,
+              }]}
+            >
+              <AppText variant="caption" style={{ color: isActive ? colors.text.primary : colors.text.tertiary }}>
+                {label}
+              </AppText>
+            </TouchableOpacity>
+          )
+        })}
+      </ScrollView>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filterRow}
+        style={[styles.filterWrap, { borderBottomColor: colors.border }]}
+      >
+        {RETENTION_STATUS_FILTERS.map(({ value, label }) => {
+          const isActive = retentionStatus === value
+          return (
+            <TouchableOpacity
+              key={value}
+              activeOpacity={0.7}
+              onPress={() => onRetentionStatusChange(value)}
+              style={[styles.filterChip, {
+                backgroundColor: isActive ? colors.accent + "22" : colors.background.secondary,
                 borderColor: isActive ? colors.accent : colors.border,
-              },
-            ]}
-          >
-            <AppText variant="caption" style={{ color: isActive ? "#fff" : colors.text.secondary }}>
-              {label}
-            </AppText>
-          </TouchableOpacity>
-        )
-      })}
-      <View style={[styles.sortDivider, { backgroundColor: colors.border }]} />
-      {(["priority", "balance", "newest"] as const).map((value) => {
-        const isActive = sortBy === value
-        const label = value === "priority" ? "Priority ↑" : value === "balance" ? "Balance ↑" : "New Customer"
-        return (
-          <TouchableOpacity
-            key={value}
-            activeOpacity={0.7}
-            onPress={() => onSortChange(value)}
-            style={[styles.filterChip, {
-              backgroundColor: isActive ? colors.text.primary + "18" : colors.background.secondary,
-              borderColor: isActive ? colors.text.primary : colors.border,
-            }]}
-          >
-            <AppText variant="caption" style={{ color: isActive ? colors.text.primary : colors.text.tertiary }}>
-              {label}
-            </AppText>
-          </TouchableOpacity>
-        )
-      })}
-    </ScrollView>
+              }]}
+            >
+              <AppText variant="caption" style={{ color: isActive ? colors.accent : colors.text.secondary }}>
+                {label}
+              </AppText>
+            </TouchableOpacity>
+          )
+        })}
+      </ScrollView>
+    </>
   )
 }
 
@@ -295,10 +334,11 @@ export default function CustomersScreen() {
   const [searchInput, setSearchInput] = useState("")
   const debouncedSearch = useDebounce(searchInput, 400)
   const [activeFilter, setActiveFilter] = useState<LedgerOutstandingFilter>("all")
+  const [retentionStatus, setRetentionStatus] = useState<RetentionStatus | "all">("all")
   const [sortBy, setSortBy] = useState<"priority" | "balance" | "newest">("priority")
 
   const { data, isLoading, isFetchingNextPage, hasNextPage, fetchNextPage, refetch, isRefetching } =
-    useStaffCustomers(user?.user_id, { limit: PAGE_SIZE, search: debouncedSearch || undefined, filter: activeFilter, sortBy })
+    useStaffCustomers(user?.user_id, { limit: PAGE_SIZE, search: debouncedSearch || undefined, filter: activeFilter, retentionStatus, sortBy })
 
   const customerList = data?.pages.flatMap((p) => p.data) ?? []
 
@@ -354,7 +394,7 @@ export default function CustomersScreen() {
             <CustomerOutstandingRow item={item} index={index} />
           </AnimatedListItem>
         )}
-        ListHeaderComponent={<FilterChips active={activeFilter} onChange={setActiveFilter} sortBy={sortBy} onSortChange={setSortBy} />}
+        ListHeaderComponent={<FilterChips active={activeFilter} onChange={setActiveFilter} retentionStatus={retentionStatus} onRetentionStatusChange={setRetentionStatus} sortBy={sortBy} onSortChange={setSortBy} />}
         contentContainerStyle={styles.list}
         onEndReachedThreshold={0.3}
         onEndReached={() => { if (hasNextPage && !isFetchingNextPage) fetchNextPage() }}

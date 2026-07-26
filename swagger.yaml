@@ -570,6 +570,7 @@ paths:
                         nullable: true
                       is_overdue:
                         type: boolean
+                        description: An open (unpaid) follow-up whose promisedDate has passed, or whose nextFollowUpDate has passed
                       total_promised_amount:
                         type: number
                   ownership:
@@ -597,7 +598,12 @@ paths:
       tags:
         - Ledger
       summary: Get opening/closing balance for a date range
-      description: Computed live against rowbest (not from locally-synced data) for accuracy over arbitrary date ranges
+      description: >
+        Computed live against rowbest (not from locally-synced data) for
+        accuracy over arbitrary date ranges. If this customer is on hold
+        (see PUT /ledger/customers/{ledgerId}/hold), staff get a 404 - the
+        same as a nonexistent ledgerId - managers/superAdmin are
+        unaffected.
       security:
         - BearerAuth: []
       parameters:
@@ -623,6 +629,91 @@ paths:
           description: Opening and closing balance for the period
         '400':
           description: from_date and to_date are required
+        '404':
+          description: Ledger customer not found (also returned to staff for a customer that's on hold)
+
+  /ledger/customers/{ledgerId}/hold:
+    put:
+      tags:
+        - Ledger
+      summary: Hold or unhold a customer (managers/superAdmin)
+      description: >
+        A held customer is hidden from staff entirely - not just
+        /ledger/staff/{userId}/outstanding's list, but direct lookups
+        (GET /ledger/customers/{ledgerId}/opening-balance,
+        GET /followups/customer/{customerId} both 404) and follow-up
+        creation (POST /followups 400s). Held customers are also excluded
+        from every staff-attributed total (dashboard leaderboard,
+        /ledger/staff/{userId}/outstanding's totals/follow_up_insights),
+        regardless of viewer - a held customer isn't any staff member's
+        responsibility. Managers/superAdmin retain full visibility
+        everywhere, including in the lists above and in
+        GET /ledger/mappings. Company-wide totals (e.g.
+        /dashboard/overview's totals.total_outstanding,
+        GET /ledger/outstanding) are unaffected - a held customer still
+        owes real money, they're just not being actively chased.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ledgerId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - hold
+              properties:
+                hold:
+                  type: boolean
+                reason:
+                  type: string
+                  description: Required (non-empty) when hold is true. Ignored/cleared when hold is false.
+                  example: Dispute over last invoice - do not contact until resolved
+      responses:
+        '200':
+          description: Hold status updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      ledger_id:
+                        type: integer
+                      name:
+                        type: string
+                      on_hold:
+                        type: boolean
+                      hold_reason:
+                        type: string
+                        nullable: true
+                      held_by_staff_id:
+                        type: integer
+                        nullable: true
+                        description: The user_id (not internal Staff.id) of whoever set the hold - same convention as FollowUp.staffId
+                      held_by_staff_name:
+                        type: string
+                        nullable: true
+                      held_at:
+                        type: string
+                        format: date-time
+                        nullable: true
+        '400':
+          description: hold (boolean) is required, or reason is missing when hold is true
+        '403':
+          description: Forbidden - managers/superAdmin only
+        '404':
+          description: Ledger customer not found
 
   /ledger/staff/{userId}:
     get:
@@ -674,7 +765,11 @@ paths:
         Each customer includes its live outstanding balance and a breakdown
         of which staff have historically sold to them (no single "owner" is
         forced on the sales-contribution side). Staff can only access their
-        own, managers can access any.
+        own, managers can access any. Customers on hold (see
+        PUT /ledger/customers/{ledgerId}/hold) never appear in `data` for a
+        staff viewer (managers still see them, with `on_hold`/`hold_reason`
+        populated) and are always excluded from `totals` and
+        `follow_up_insights`, regardless of viewer.
       security:
         - BearerAuth: []
       parameters:
@@ -747,6 +842,13 @@ paths:
           schema:
             type: integer
             default: 7
+        - name: retention_status
+          in: query
+          description: Filter `data` to a single retention_status (same buying-recency classification as GET /ledger/retention)
+          schema:
+            type: string
+            enum: [all, active, at_risk, churned, never_purchased]
+            default: all
       responses:
         '200':
           description: Paginated customers owned by this staff, with outstanding and sales-contribution totals
@@ -834,7 +936,7 @@ paths:
                               nullable: true
                             is_overdue:
                               type: boolean
-                              description: Has an open follow-up whose nextFollowUpDate has passed
+                              description: An open (unpaid) follow-up whose promisedDate has passed, or whose nextFollowUpDate has passed
                             total_promised_amount:
                               type: number
                               description: Sum of promisedAmount across still-open follow-ups
@@ -872,10 +974,19 @@ paths:
                           type: string
                           format: date-time
                           description: When this customer was first synced from rowbest
+                        on_hold:
+                          type: boolean
+                          description: Only ever true here for a manager/superAdmin viewer - held customers are absent from `data` entirely for staff
+                        hold_reason:
+                          type: string
+                          nullable: true
                   filter:
                     type: string
                     enum: [all, followed_up, not_followed_up, paid, overdue, open_followup]
                     description: The filter that was applied to `data`
+                  retention_status:
+                    type: string
+                    enum: [all, active, at_risk, churned, never_purchased]
                   sortBy:
                     type: string
                     enum: [priority, balance, newest]
@@ -910,7 +1021,7 @@ paths:
                         description: Owned customers with zero follow-up records ever - a coverage gap
                       customers_overdue_followup:
                         type: integer
-                        description: Owned customers with an open follow-up whose next-followup date has passed
+                        description: Owned customers with an open follow-up whose promisedDate (or nextFollowUpDate) has passed
                       total_followups:
                         type: integer
                       open_followups:
@@ -936,7 +1047,7 @@ paths:
                         nullable: true
                         description: Average days between a follow-up being logged and being resolved by payment
         '400':
-          description: Invalid filter/sortBy value, or activeDays/churnedDays out of order
+          description: Invalid filter/sortBy/retention_status value, or activeDays/churnedDays out of order
         '403':
           description: Forbidden - staff can only access their own customers
         '404':
@@ -1016,6 +1127,13 @@ paths:
           schema:
             type: integer
             default: 7
+        - name: retention_status
+          in: query
+          description: Filter `data` to a single retention_status (same buying-recency classification as GET /ledger/retention)
+          schema:
+            type: string
+            enum: [all, active, at_risk, churned, never_purchased]
+            default: all
       responses:
         '200':
           description: Paginated customers with outstanding and follow-up summary
@@ -1082,6 +1200,7 @@ paths:
                               nullable: true
                             is_overdue:
                               type: boolean
+                              description: An open (unpaid) follow-up whose promisedDate has passed, or whose nextFollowUpDate has passed
                             total_promised_amount:
                               type: number
                         last_purchase_date:
@@ -1121,6 +1240,9 @@ paths:
                   filter:
                     type: string
                     enum: [all, followed_up, not_followed_up, paid, overdue, open_followup]
+                  retention_status:
+                    type: string
+                    enum: [all, active, at_risk, churned, never_purchased]
                   sortBy:
                     type: string
                     enum: [priority, balance, newest]
@@ -1139,7 +1261,7 @@ paths:
                       total_outstanding:
                         type: number
         '400':
-          description: Invalid filter/sortBy value, or activeDays/churnedDays out of order
+          description: Invalid filter/sortBy/retention_status value, or activeDays/churnedDays out of order
         '403':
           description: Forbidden - managers only
 
@@ -1660,6 +1782,13 @@ paths:
             type: string
             enum: [all, assigned, dynamic, unassigned]
             default: all
+        - name: hold
+          in: query
+          description: Filter `data` by hold status - see PUT /ledger/customers/{ledgerId}/hold
+          schema:
+            type: string
+            enum: [all, held, not_held]
+            default: all
         - name: sortBy
           in: query
           description: '`created_at` (default) surfaces the newest customers first with the default `order=desc` - i.e. "sort by new customers".'
@@ -1730,11 +1859,26 @@ paths:
                           type: string
                           format: date-time
                           description: When this customer was first synced from rowbest
+                        on_hold:
+                          type: boolean
+                        hold_reason:
+                          type: string
+                          nullable: true
+                        held_by_staff_name:
+                          type: string
+                          nullable: true
+                        held_at:
+                          type: string
+                          format: date-time
+                          nullable: true
                   newDays:
                     type: integer
                   ownership:
                     type: string
                     enum: [all, assigned, dynamic, unassigned]
+                  hold:
+                    type: string
+                    enum: [all, held, not_held]
                   sortBy:
                     type: string
                     enum: [created_at, balance, name]
@@ -1914,7 +2058,9 @@ paths:
                   data:
                     $ref: '#/components/schemas/FollowUpResponse'
         '400':
-          description: Bad request - validation error
+          description: >
+            Bad request - validation error, or (staff only) the resolved
+            customer is on hold (see PUT /ledger/customers/{ledgerId}/hold)
           content:
             application/json:
               schema:
@@ -2316,6 +2462,10 @@ paths:
       tags:
         - Follow-ups
       summary: Get follow-ups by customer
+      description: >
+        If this customer is on hold (see PUT /ledger/customers/{ledgerId}/hold),
+        staff get a 404 - full invisibility, same as a nonexistent
+        customer - managers/superAdmin are unaffected.
       security:
         - BearerAuth: []
       parameters:
@@ -2366,6 +2516,8 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/FollowUpResponse'
+        '404':
+          description: Returned to staff when the resolved customer is on hold
 
   /followups/staff/{staffId}:
     get:
@@ -4815,6 +4967,23 @@ components:
           type: string
           nullable: true
           example: ANSARKA
+        on_hold:
+          type: boolean
+          nullable: true
+          description: See PUT /ledger/customers/{ledgerId}/hold - held customers are hidden from staff entirely
+        hold_reason:
+          type: string
+          nullable: true
+        held_by_staff_id:
+          type: integer
+          nullable: true
+        held_by_staff_name:
+          type: string
+          nullable: true
+        held_at:
+          type: string
+          format: date-time
+          nullable: true
         fetchedAt:
           type: string
           format: date-time

@@ -30,7 +30,7 @@ import { useAllFollowups } from "../../hooks/useAllFollowups"
 import { useStaffCustomers } from "../../hooks/useStaffCustomers"
 import { toAPIDate, formatDate, toTitleCase } from "../../utils/helpers"
 import moment from "moment"
-import type { FollowupDateField } from "../../services/followupService"
+import type { FollowupDateField, FollowupSortBy, FollowupOrder } from "../../services/followupService"
 import type { FollowUp, ContactMethod, FollowUpOutcome, LedgerOutstandingFilter } from "../../types"
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -198,6 +198,8 @@ export default function StaffFollowupsScreen() {
     isOutcome(params.outcome) ? params.outcome : "all"
   )
   const [resolutionStatus, setResolutionStatus] = useState<ResolutionStatus | "all">("all")
+  const [sortBy, setSortBy] = useState<FollowupSortBy>("loggedAt")
+  const [order, setOrder] = useState<FollowupOrder>("desc")
 
   const isCustom = period === "custom"
 
@@ -210,6 +212,8 @@ export default function StaffFollowupsScreen() {
     dateField,
     outcome: outcome === "all" ? undefined : outcome,
     resolutionStatus: resolutionStatus === "all" ? undefined : resolutionStatus,
+    sortBy,
+    order,
   })
 
   const followups = data?.pages.flatMap((p) => p.data) ?? []
@@ -266,6 +270,33 @@ export default function StaffFollowupsScreen() {
               resolutionStatus={resolutionStatus}
               onResolutionStatusChange={setResolutionStatus}
             />
+          </View>
+
+          <View style={[styles.sortRow, { borderBottomColor: colors.border }]}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sortChips}>
+              {([
+                { key: "loggedAt",          label: "Date" },
+                { key: "promisedAmount",    label: "Promised ₹" },
+                { key: "amountRecovered",   label: "Recovered ₹" },
+                { key: "outstandingAmount", label: "Outstanding ₹" },
+              ] as { key: FollowupSortBy; label: string }[]).map(({ key, label }) => {
+                const active = sortBy === key
+                return (
+                  <TouchableOpacity
+                    key={key}
+                    onPress={() => {
+                      if (active) setOrder(o => o === "desc" ? "asc" : "desc")
+                      else { setSortBy(key); setOrder("desc") }
+                    }}
+                    style={[styles.sortChip, { borderColor: active ? colors.accent : colors.border, backgroundColor: active ? (colors.accent as string) + "18" : "transparent" }]}
+                  >
+                    <AppText variant="caption" style={{ color: active ? colors.accent : colors.text.secondary }}>
+                      {label}{active ? (order === "desc" ? " ↓" : " ↑") : ""}
+                    </AppText>
+                  </TouchableOpacity>
+                )
+              })}
+            </ScrollView>
           </View>
 
           {summary && summary.totalFollowUps > 0 && (
@@ -334,6 +365,9 @@ const styles = StyleSheet.create({
   tabDivider: { height: StyleSheet.hairlineWidth },
   // ─── follow-ups tab ───────────────────────────────────────────────────────────
   section: { paddingHorizontal: spacing[4], paddingTop: spacing[4], paddingBottom: spacing[2] },
+  sortRow: { borderBottomWidth: StyleSheet.hairlineWidth },
+  sortChips: { flexDirection: "row", paddingHorizontal: spacing[4], paddingVertical: spacing[2], gap: spacing[2] },
+  sortChip: { paddingHorizontal: spacing[3], paddingVertical: spacing[1] + 2, borderRadius: 20, borderWidth: 1 },
   list: { padding: spacing[4], paddingBottom: spacing[10] },
   // ─── follow-up card ───────────────────────────────────────────────────────────
   row: {

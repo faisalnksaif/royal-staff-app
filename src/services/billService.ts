@@ -15,10 +15,11 @@ async function getStaffOutstanding(
   userId: number | string,
   params: LedgerOutstandingParams = {}
 ): Promise<LedgerOutstandingResponse> {
-  const { page = 1, limit = 50, search, filter, sortBy, activeDays, churnedDays } = params
+  const { page = 1, limit = 50, search, filter, retentionStatus, sortBy, activeDays, churnedDays } = params
   const query = new URLSearchParams({ page: String(page), limit: String(limit) })
   if (search) query.set("search", search)
   if (filter && filter !== "all") query.set("filter", filter)
+  if (retentionStatus && retentionStatus !== "all") query.set("retention_status", retentionStatus)
   if (sortBy) query.set("sortBy", sortBy)
   if (activeDays != null) query.set("activeDays", String(activeDays))
   if (churnedDays != null) query.set("churnedDays", String(churnedDays))
@@ -35,10 +36,11 @@ async function getStaffOutstanding(
 async function getAllCustomers(
   params: LedgerOutstandingParams = {}
 ): Promise<LedgerOutstandingResponse> {
-  const { page = 1, limit = 50, search, filter, sortBy, activeDays, churnedDays } = params
+  const { page = 1, limit = 50, search, filter, retentionStatus, sortBy, activeDays, churnedDays } = params
   const query = new URLSearchParams({ page: String(page), limit: String(limit) })
   if (search) query.set("search", search)
   if (filter && filter !== "all") query.set("filter", filter)
+  if (retentionStatus && retentionStatus !== "all") query.set("retention_status", retentionStatus)
   if (sortBy) query.set("sortBy", sortBy)
   if (activeDays != null) query.set("activeDays", String(activeDays))
   if (churnedDays != null) query.set("churnedDays", String(churnedDays))
