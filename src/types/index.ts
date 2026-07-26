@@ -9,7 +9,7 @@ export interface User {
   updatedAt: string
 }
 
-export type UserRole = "superAdmin" | "manager" | "staff"
+export type UserRole = "superAdmin" | "manager" | "staff" | "hr"
 
 export type AttendanceStatus = "present" | "late" | "absent"
 
@@ -224,6 +224,10 @@ export interface CustomerLedgerResponse {
       ledger_id: number
       name: string
       balance: number
+      on_hold?: boolean | null
+      hold_reason?: string | null
+      held_by_staff_name?: string | null
+      held_at?: string | null
     }
     entries: LedgerEntry[]
   }
@@ -364,6 +368,7 @@ export interface AttendanceSession {
   checkIn: string
   checkOut: string | null
   workHours: number | null
+  autoClosed?: boolean
 }
 
 export interface AttendanceScanResponse {
@@ -423,6 +428,47 @@ export interface AttendanceSummaryResponse {
   averageWorkHours: number;
   averageBreakTime: number;
   attendanceRate: number;
+}
+
+export interface AttendanceDashboardResponse {
+  success: boolean;
+  data: {
+    period: { start: string; end: string; days: number };
+    totalStaff: number;
+    summary: {
+      totalPresent: number;
+      totalLate: number;
+      totalAbsent: number;
+      totalOnLeave: number;
+      overallAttendanceRate: number;
+    };
+    trend: Array<{
+      date: string;
+      present: number;
+      late: number;
+      absent: number;
+      onLeave: number;
+      attendanceRate: number;
+    }>;
+    staffBreakdown: Array<{
+      staffId: number;
+      staffName: string;
+      presentDays: number;
+      lateDays: number;
+      absentDays: number;
+      onLeaveDays: number;
+      totalWorkHours: number;
+      totalOvertimeHours: number;
+      missedCheckoutDays: number;
+      attendanceRate: number;
+    }>;
+    flags: {
+      chronicallyLate: Array<{ staffId: number; staffName: string; lateDays: number }>;
+      excessiveOvertime: Array<{ staffId: number; staffName: string; totalOvertimeHours: number }>;
+      frequentAbsentees: Array<{ staffId: number; staffName: string; absentDays: number }>;
+      missedCheckouts: Array<{ staffId: number; staffName: string; missedCheckoutDays: number }>;
+    };
+  };
 }
 
 export interface FollowupsSummary {

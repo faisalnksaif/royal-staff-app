@@ -9,7 +9,7 @@ import {
   Modal,
 } from "react-native"
 import { useRouter } from "expo-router"
-import { Camera as CameraIcon, CheckCircle, XCircle, X, UserPlus } from "lucide-react-native"
+import { Camera as CameraIcon, CheckCircle, XCircle, X, UserPlus, BarChart3 } from "lucide-react-native"
 import BackButton from "../../components/shared/BackButton"
 import RefreshButton from "../../components/shared/RefreshButton"
 import AnimatedListItem from "../../components/shared/AnimatedListItem"
@@ -22,10 +22,9 @@ import { useTheme } from "../../providers/ThemeProvider"
 import { useTablet } from "../../hooks/useTablet"
 import { spacing, colors as palette, radii } from "../../constants/theme"
 import { useAttendance } from "../../hooks/useAttendance"
-import { useAttendanceSummary } from "../../hooks/useAttendanceSummary"
 import { useRole } from "../../hooks/useRole"
 import { attendanceService } from "../../services/attendanceService"
-import type { AttendanceRecord, AttendanceScanResponse, AttendanceSummaryResponse } from "../../types"
+import type { AttendanceRecord, AttendanceScanResponse } from "../../types"
 
 // ─── helpers ─────────────────────────────────────────────────────────────
 
@@ -73,91 +72,13 @@ function SummaryBar({
   )
 }
 
-// ─── ExtendedSummary ─────────────────────────────────────────────────────────────
-
-function ExtendedSummary({ summary, isLoading }: { summary?: AttendanceSummaryResponse; isLoading: boolean }) {
-  const { colors } = useTheme()
-  if (isLoading) {
-    return (
-      <View style={{ padding: spacing[4] }}>
-        <ActivityIndicator color={colors.accent} size="small" />
-      </View>
-    )
-  }
-  if (!summary) {
-    return null
-  }
-
-  // Format numbers
-  const formatNumber = (value: number | undefined) => {
-    if (value === undefined) return '-'
-    return value.toString()
-  }
-  const formatHours = (value: number | undefined) => {
-    if (value === undefined) return '-'
-    return `${value.toFixed(1)}h`
-  }
-  const formatRate = (value: number | undefined) => {
-    if (value === undefined) return '-'
-    return `${(value * 100).toFixed(1)}%`
-  }
-
-  return (
-    <View style={styles.extendedSummaryContainer}>
-      <View style={styles.extendedSummaryRow}>
-        <View style={styles.extendedSummaryItem}>
-          <AppText variant="heading3">{formatNumber(summary.totalStaff)}</AppText>
-          <AppText variant="caption" color="tertiary">Total Staff</AppText>
-        </View>
-        <View style={styles.extendedSummaryItem}>
-          <AppText variant="heading3">{formatNumber(summary.presentCount)}</AppText>
-          <AppText variant="caption" color="tertiary">Present</AppText>
-        </View>
-        <View style={styles.extendedSummaryItem}>
-          <AppText variant="heading3">{formatNumber(summary.absentCount)}</AppText>
-          <AppText variant="caption" color="tertiary">Absent</AppText>
-        </View>
-        <View style={styles.extendedSummaryItem}>
-          <AppText variant="heading3">{formatNumber(summary.lateCount)}</AppText>
-          <AppText variant="caption" color="tertiary">Late</AppText>
-        </View>
-        <View style={styles.extendedSummaryItem}>
-          <AppText variant="heading3">{formatNumber(summary.onLeaveCount)}</AppText>
-          <AppText variant="caption" color="tertiary">On Leave</AppText>
-        </View>
-      </View>
-      <View style={styles.extendedSummaryRow}>
-        <View style={styles.extendedSummaryItem}>
-          <AppText variant="heading3">{formatHours(summary.totalWorkHours)}</AppText>
-          <AppText variant="caption" color="tertiary">Total Work Hrs</AppText>
-        </View>
-        <View style={styles.extendedSummaryItem}>
-          <AppText variant="heading3">{formatHours(summary.totalBreakTime)}</AppText>
-          <AppText variant="caption" color="tertiary">Total Break</AppText>
-        </View>
-        <View style={styles.extendedSummaryItem}>
-          <AppText variant="heading3">{formatHours(summary.averageWorkHours)}</AppText>
-          <AppText variant="caption" color="tertiary">Avg Work Hrs</AppText>
-        </View>
-        <View style={styles.extendedSummaryItem}>
-          <AppText variant="heading3">{formatHours(summary.averageBreakTime)}</AppText>
-          <AppText variant="caption" color="tertiary">Avg Break</AppText>
-        </View>
-        <View style={styles.extendedSummaryItem}>
-          <AppText variant="heading3">{formatRate(summary.attendanceRate)}</AppText>
-          <AppText variant="caption" color="tertiary">Attendance Rate</AppText>
-        </View>
-      </View>
-    </View>
-  )
-}
-
 // ─── AttendanceRow ────────────────────────────────────────────────────────────
 
 function AttendanceRow({ record }: { record: AttendanceRecord }) {
   const { colors } = useTheme()
   const color = statusColor(record.status)
   const firstSession = record.sessions?.[0]
+  const hasAutoClosed = record.sessions?.some((s) => s.autoClosed)
 
   return (
     <View style={[styles.row, { borderBottomColor: colors.border as string }]}>
@@ -182,6 +103,11 @@ function AttendanceRow({ record }: { record: AttendanceRecord }) {
             {record.sessionCount > 1 && (
               <AppText variant="caption" color="tertiary">
                 {"  ·  "}{record.sessionCount} sessions
+              </AppText>
+            )}
+            {hasAutoClosed && (
+              <AppText variant="caption" style={{ color: palette.error.default }}>
+                {"  ·  "}Missed checkout
               </AppText>
             )}
           </View>
@@ -316,16 +242,15 @@ export default function AttendanceScreen() {
   const router = useRouter()
   const [modalOpen, setModalOpen] = useState(false)
   const today = moment().format("YYYY-MM-DD")
-  const { isAdmin } = useRole()
+  const { canViewAttendance } = useRole()
 
-  // Redirect if not admin or manager
-  if (!isAdmin) {
+  // Redirect if not admin, manager, or HR
+  if (!canViewAttendance) {
     router.replace("/(admin)")
     return null
   }
 
   const { data, isLoading, refetch, isRefetching } = useAttendance(today)
-  const { data: summaryData, isLoading: summaryLoading } = useAttendanceSummary(today)
 
   const summary = data?.summary ?? { present: 0, late: 0, absent: 0 }
   const records = data?.data ?? []
@@ -341,6 +266,13 @@ export default function AttendanceScreen() {
         </View>
         <RefreshButton onPress={() => refetch()} isRefreshing={isRefetching} />
         <Pressable
+          onPress={() => router.push("/(admin)/attendance-dashboard")}
+          style={styles.enrollBtn}
+          hitSlop={8}
+        >
+          <BarChart3 size={22} color={colors.accent} strokeWidth={1.75} />
+        </Pressable>
+        <Pressable
           onPress={() => router.push("/(admin)/enroll")}
           style={styles.enrollBtn}
           hitSlop={8}
@@ -352,14 +284,10 @@ export default function AttendanceScreen() {
       {/* Summary */}
       <View style={{ marginVertical: spacing[4] }}>
         <SummaryBar
-          present={summaryData?.presentCount ?? summary.present}
-          late={summaryData?.lateCount ?? summary.late}
-          absent={summaryData?.absentCount ?? summary.absent}
-          isLoading={isLoading || summaryLoading}
-        />
-        <ExtendedSummary
-          summary={summaryData}
-          isLoading={summaryLoading}
+          present={summary.present}
+          late={summary.late}
+          absent={summary.absent}
+          isLoading={isLoading}
         />
       </View>
 
@@ -376,7 +304,7 @@ export default function AttendanceScreen() {
         refreshing={isRefetching}
         onRefresh={refetch}
         ListEmptyComponent={
-          (isLoading || summaryLoading) ? (
+          isLoading ? (
             <ActivityIndicator size="large" color={colors.accent} style={styles.center} />
           ) : (
             <View style={styles.center}>
@@ -440,22 +368,6 @@ const styles = StyleSheet.create({
   summaryRow: { flexDirection: "row", alignItems: "center" },
   summaryItem: { alignItems: "center", gap: spacing[1], paddingHorizontal: spacing[4] },
   summaryDivider: { width: StyleSheet.hairlineWidth, height: 32 },
-
-  // Extended Summary Styles
-  extendedSummaryContainer: {
-    marginVertical: spacing[2],
-  },
-  extendedSummaryRow: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    flexWrap: "wrap",
-  },
-  extendedSummaryItem: {
-    alignItems: "center",
-    marginVertical: spacing[1],
-    paddingHorizontal: spacing[2],
-    minWidth: 80,
-  },
 
   center: {
     alignItems: "center",

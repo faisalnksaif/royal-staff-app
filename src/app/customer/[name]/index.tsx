@@ -25,6 +25,7 @@ import {
   TrendingUp,
   TrendingDown,
   BellRing,
+  Lock,
 } from "lucide-react-native"
 import { Linking } from "react-native"
 import AppText from "../../../components/ui/AppText"
@@ -484,6 +485,8 @@ export default function CustomerDetailScreen() {
   const profileVelocity = ledgerData?.pages[0]?.payment_velocity ?? null
   const profileFollowUp = ledgerData?.pages[0]?.follow_up ?? null
   const profileOwnership = ledgerData?.pages[0]?.ownership ?? null
+  const ledgerCustomer = ledgerData?.pages[0]?.data.customer ?? null
+  const isHeld = !!ledgerCustomer?.on_hold
 
   const calculatedOpening = useMemo(() => {
     if (!ledgerSummary) return null
@@ -564,6 +567,24 @@ export default function CustomerDetailScreen() {
           ) : null}
         </View>
       </View>
+
+      {/* Held banner */}
+      {isHeld && (
+        <View style={[styles.heldBanner, { borderBottomColor: colors.border }]}>
+          <Lock size={14} color={palette.error.default} strokeWidth={2} />
+          <View style={{ flex: 1 }}>
+            <AppText variant="caption" style={{ color: palette.error.default }}>
+              On hold{ledgerCustomer?.held_by_staff_name ? ` · by ${toTitleCase(ledgerCustomer.held_by_staff_name)}` : ""}
+              {ledgerCustomer?.held_at ? ` · ${formatDate(ledgerCustomer.held_at)}` : ""}
+            </AppText>
+            {ledgerCustomer?.hold_reason && (
+              <AppText variant="caption" color="tertiary" numberOfLines={2} style={{ fontStyle: "italic" }}>
+                {ledgerCustomer.hold_reason}
+              </AppText>
+            )}
+          </View>
+        </View>
+      )}
 
       {/* Tabs */}
       <View>
@@ -947,6 +968,15 @@ const styles = StyleSheet.create({
     gap: spacing[2],
   },
   backBtn: { padding: spacing[2] },
+  heldBanner: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing[2],
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3],
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    backgroundColor: palette.error.default + "10",
+  },
   headerInfo: { flex: 1, gap: spacing[1] },
   nameRow: { flexDirection: "row", alignItems: "center", gap: spacing[2] },
   mobileRow: { flexDirection: "row", alignItems: "center", gap: spacing[3] },

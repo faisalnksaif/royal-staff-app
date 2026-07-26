@@ -42,6 +42,13 @@ export interface LedgerCustomerResponse {
   assigned_staff_id?: number | null;
   /** @example "ANSARKA" */
   assigned_staff_name?: string | null;
+  /** See PUT /ledger/customers/{ledgerId}/hold - held customers are hidden from staff entirely */
+  on_hold?: boolean | null;
+  hold_reason?: string | null;
+  held_by_staff_id?: number | null;
+  held_by_staff_name?: string | null;
+  /** @format date-time */
+  held_at?: string | null;
   /** @format date-time */
   fetchedAt?: string;
   /** @format date-time */
@@ -142,7 +149,7 @@ export interface UserResponse {
   /** @example 3027 */
   user_id?: number | null;
   /** @example "staff" */
-  role: "staff" | "manager" | "superAdmin";
+  role: "staff" | "manager" | "superAdmin" | "hr";
   /** @example true */
   isActive: boolean;
 }
@@ -165,6 +172,16 @@ export interface StaffResponse {
   sales_target?: number | null;
   /** @example null */
   collection_target?: number | null;
+  /**
+   * Whether the staff member has at least one enrolled face photo
+   * @example false
+   */
+  hasPhoto?: boolean;
+  /**
+   * Number of enrolled reference photos
+   * @example 0
+   */
+  photoCount?: number;
   /**
    * @format date-time
    * @example "2026-06-19T18:00:00.000Z"
@@ -1280,6 +1297,7 @@ export class Api<SecurityDataType extends unknown> {
               | null;
             /** @format date-time */
             next_followup_date?: string | null;
+            /** An open (unpaid) follow-up whose promisedDate has passed, or whose nextFollowUpDate has passed */
             is_overdue?: boolean;
             total_promised_amount?: number;
           };
@@ -1301,7 +1319,7 @@ export class Api<SecurityDataType extends unknown> {
       }),
 
     /**
-     * @description Computed live against rowbest (not from locally-synced data) for accuracy over arbitrary date ranges
+     * @description Computed live against rowbest (not from locally-synced data) for accuracy over arbitrary date ranges. If this customer is on hold (see PUT /ledger/customers/{ledgerId}/hold), staff get a 404 - the same as a nonexistent ledgerId - managers/superAdmin are unaffected.
      *
      * @tags Ledger
      * @name CustomersOpeningBalanceList
@@ -1324,6 +1342,53 @@ export class Api<SecurityDataType extends unknown> {
         method: "GET",
         query: query,
         secure: true,
+        ...params,
+      }),
+
+    /**
+     * @description A held customer is hidden from staff entirely - not just /ledger/staff/{userId}/outstanding's list, but direct lookups (GET /ledger/customers/{ledgerId}/opening-balance, GET /followups/customer/{customerId} both 404) and follow-up creation (POST /followups 400s). Held customers are also excluded from every staff-attributed total (dashboard leaderboard, /ledger/staff/{userId}/outstanding's totals/follow_up_insights), regardless of viewer - a held customer isn't any staff member's responsibility. Managers/superAdmin retain full visibility everywhere, including in the lists above and in GET /ledger/mappings. Company-wide totals (e.g. /dashboard/overview's totals.total_outstanding, GET /ledger/outstanding) are unaffected - a held customer still owes real money, they're just not being actively chased.
+     *
+     * @tags Ledger
+     * @name CustomersHoldUpdate
+     * @summary Hold or unhold a customer (managers/superAdmin)
+     * @request PUT:/ledger/customers/{ledgerId}/hold
+     * @secure
+     */
+    customersHoldUpdate: (
+      ledgerId: number,
+      data: {
+        hold: boolean;
+        /**
+         * Required (non-empty) when hold is true. Ignored/cleared when hold is false.
+         * @example "Dispute over last invoice - do not contact until resolved"
+         */
+        reason?: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            ledger_id?: number;
+            name?: string;
+            on_hold?: boolean;
+            hold_reason?: string | null;
+            /** The user_id (not internal Staff.id) of whoever set the hold - same convention as FollowUp.staffId */
+            held_by_staff_id?: number | null;
+            held_by_staff_name?: string | null;
+            /** @format date-time */
+            held_at?: string | null;
+          };
+        },
+        void
+      >({
+        path: `/ledger/customers/${ledgerId}/hold`,
+        method: "PUT",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
         ...params,
       }),
 
@@ -1356,7 +1421,7 @@ export class Api<SecurityDataType extends unknown> {
       }),
 
     /**
-     * @description Returns customers currently assigned to this staff (per the ownership cutoff rule in Settings key `ledger_ownership_cutoff_date` - before the cutoff, ownership comes from the manually-maintained staff-customer mapping spreadsheet; after it, ownership is derived dynamically from each customer's most recent matched Sales voucher). Each customer includes its live outstanding balance and a breakdown of which staff have historically sold to them (no single "owner" is forced on the sales-contribution side). Staff can only access their own, managers can access any.
+     * @description Returns customers currently assigned to this staff (per the ownership cutoff rule in Settings key `ledger_ownership_cutoff_date` - before the cutoff, ownership comes from the manually-maintained staff-customer mapping spreadsheet; after it, ownership is derived dynamically from each customer's most recent matched Sales voucher). Each customer includes its live outstanding balance and a breakdown of which staff have historically sold to them (no single "owner" is forced on the sales-contribution side). Staff can only access their own, managers can access any. Customers on hold (see PUT /ledger/customers/{ledgerId}/hold) never appear in `data` for a staff viewer (managers still see them, with `on_hold`/`hold_reason` populated) and are always excluded from `totals` and `follow_up_insights`, regardless of viewer.
      *
      * @tags Ledger
      * @name StaffOutstandingList
@@ -1385,10 +1450,10 @@ export class Api<SecurityDataType extends unknown> {
           | "overdue"
           | "open_followup";
         /**
-         * `priority` (default) ranks by worst-case risk, highest first: (1) overdue follow-up - a promise was already missed, (2) churned + still owes money (Dr balance) - stopped buying and hasn't paid, the highest bad-debt risk, (3) never followed up at all + still owes money - a coverage gap, (4) at_risk (buying is slowing down) + still owes money, (5) everyone else. Within each tier, longest since last payment first (customers who have never paid sort before any finite gap), then highest outstanding_balance. "balance" is the simple outstanding_balance-descending sort with no risk weighting.
+         * `priority` (default) ranks by worst-case risk, highest first: (1) overdue follow-up - a promise was already missed, (2) churned + still owes money (Dr balance) - stopped buying and hasn't paid, the highest bad-debt risk, (3) never followed up at all + still owes money - a coverage gap, (4) at_risk (buying is slowing down) + still owes money, (5) everyone else. Within each tier, longest since last payment first (customers who have never paid sort before any finite gap), then highest outstanding_balance. "balance" is the simple outstanding_balance-descending sort with no risk weighting. "newest" sorts by created_at descending (most recently synced first).
          * @default "priority"
          */
-        sortBy?: "priority" | "balance";
+        sortBy?: "priority" | "balance" | "newest";
         /**
          * Days since last purchase to be considered "active" (for `retention_status`)
          * @default 30
@@ -1404,6 +1469,16 @@ export class Api<SecurityDataType extends unknown> {
          * @default 7
          */
         newDays?: number;
+        /**
+         * Filter `data` to a single retention_status (same buying-recency classification as GET /ledger/retention)
+         * @default "all"
+         */
+        retention_status?:
+          | "all"
+          | "active"
+          | "at_risk"
+          | "churned"
+          | "never_purchased";
       },
       params: RequestParams = {},
     ) =>
@@ -1456,7 +1531,7 @@ export class Api<SecurityDataType extends unknown> {
                 | null;
               /** @format date-time */
               next_followup_date?: string | null;
-              /** Has an open follow-up whose nextFollowUpDate has passed */
+              /** An open (unpaid) follow-up whose promisedDate has passed, or whose nextFollowUpDate has passed */
               is_overdue?: boolean;
               /** Sum of promisedAmount across still-open follow-ups */
               total_promised_amount?: number;
@@ -1489,6 +1564,9 @@ export class Api<SecurityDataType extends unknown> {
              * @format date-time
              */
             created_at?: string;
+            /** Only ever true here for a manager/superAdmin viewer - held customers are absent from `data` entirely for staff */
+            on_hold?: boolean;
+            hold_reason?: string | null;
           }[];
           /** The filter that was applied to `data` */
           filter?:
@@ -1498,7 +1576,13 @@ export class Api<SecurityDataType extends unknown> {
             | "paid"
             | "overdue"
             | "open_followup";
-          sortBy?: "priority" | "balance";
+          retention_status?:
+            | "all"
+            | "active"
+            | "at_risk"
+            | "churned"
+            | "never_purchased";
+          sortBy?: "priority" | "balance" | "newest";
           retention_thresholds?: {
             activeDays?: number;
             churnedDays?: number;
@@ -1513,7 +1597,7 @@ export class Api<SecurityDataType extends unknown> {
             customers_total?: number;
             /** Owned customers with zero follow-up records ever - a coverage gap */
             customers_never_followed_up?: number;
-            /** Owned customers with an open follow-up whose next-followup date has passed */
+            /** Owned customers with an open follow-up whose promisedDate (or nextFollowUpDate) has passed */
             customers_overdue_followup?: number;
             total_followups?: number;
             open_followups?: number;
@@ -1569,10 +1653,10 @@ export class Api<SecurityDataType extends unknown> {
           | "overdue"
           | "open_followup";
         /**
-         * `priority` (default) ranks by worst-case risk, highest first: (1) overdue follow-up - a promise was already missed, (2) churned + still owes money (Dr balance) - stopped buying and hasn't paid, the highest bad-debt risk, (3) never followed up at all + still owes money - a coverage gap, (4) at_risk (buying is slowing down) + still owes money, (5) everyone else. Within each tier, longest since last payment first (customers who have never paid sort before any finite gap), then highest outstanding_balance. `balance` is the simple outstanding_balance-descending sort with no risk weighting.
+         * `priority` (default) ranks by worst-case risk, highest first: (1) overdue follow-up - a promise was already missed, (2) churned + still owes money (Dr balance) - stopped buying and hasn't paid, the highest bad-debt risk, (3) never followed up at all + still owes money - a coverage gap, (4) at_risk (buying is slowing down) + still owes money, (5) everyone else. Within each tier, longest since last payment first (customers who have never paid sort before any finite gap), then highest outstanding_balance. `balance` is the simple outstanding_balance-descending sort with no risk weighting. `newest` sorts by created_at descending (most recently synced first).
          * @default "priority"
          */
-        sortBy?: "priority" | "balance";
+        sortBy?: "priority" | "balance" | "newest";
         /**
          * Days since last purchase to be considered "active" (for `retention_status`)
          * @default 30
@@ -1588,6 +1672,16 @@ export class Api<SecurityDataType extends unknown> {
          * @default 7
          */
         newDays?: number;
+        /**
+         * Filter `data` to a single retention_status (same buying-recency classification as GET /ledger/retention)
+         * @default "all"
+         */
+        retention_status?:
+          | "all"
+          | "active"
+          | "at_risk"
+          | "churned"
+          | "never_purchased";
       },
       params: RequestParams = {},
     ) =>
@@ -1626,6 +1720,7 @@ export class Api<SecurityDataType extends unknown> {
                 | null;
               /** @format date-time */
               next_followup_date?: string | null;
+              /** An open (unpaid) follow-up whose promisedDate has passed, or whose nextFollowUpDate has passed */
               is_overdue?: boolean;
               total_promised_amount?: number;
             };
@@ -1657,6 +1752,9 @@ export class Api<SecurityDataType extends unknown> {
              * @format date-time
              */
             created_at?: string;
+            /** Manager-set hold flag - see PUT /ledger/customers/{ledgerId}/hold. Held customers are still included here (this endpoint is managers-only), unlike GET /ledger/staff/{userId}/outstanding which hides them from staff viewers. */
+            on_hold?: boolean;
+            hold_reason?: string | null;
           }[];
           filter?:
             | "all"
@@ -1665,7 +1763,13 @@ export class Api<SecurityDataType extends unknown> {
             | "paid"
             | "overdue"
             | "open_followup";
-          sortBy?: "priority" | "balance";
+          retention_status?:
+            | "all"
+            | "active"
+            | "at_risk"
+            | "churned"
+            | "never_purchased";
+          sortBy?: "priority" | "balance" | "newest";
           retention_thresholds?: {
             activeDays?: number;
             churnedDays?: number;
@@ -1718,14 +1822,15 @@ export class Api<SecurityDataType extends unknown> {
          */
         churnedDays?: number;
         /**
-         * Field to sort by. `last_purchase_date` and `days_since_last_purchase` both push never_purchased customers (null) to the end regardless of `order`.
+         * Field to sort by. `last_purchase_date` and `days_since_last_purchase` both push never_purchased customers (null) to the end regardless of `order`. `created_at` sorts by when the customer was first synced from rowbest - "sort by newest customer".
          * @default "last_purchase_date"
          */
         sortBy?:
           | "last_purchase_date"
           | "days_since_last_purchase"
           | "total_purchases"
-          | "outstanding_balance";
+          | "outstanding_balance"
+          | "created_at";
         /** @default "desc" */
         order?: "asc" | "desc";
         /**
@@ -1790,7 +1895,8 @@ export class Api<SecurityDataType extends unknown> {
               | "last_purchase_date"
               | "days_since_last_purchase"
               | "total_purchases"
-              | "outstanding_balance";
+              | "outstanding_balance"
+              | "created_at";
             order?: "asc" | "desc";
           };
           /** Computed over all Sundry Debtors customers, not just the current page or status filter */
@@ -2071,6 +2177,11 @@ export class Api<SecurityDataType extends unknown> {
          */
         ownership?: "all" | "assigned" | "dynamic" | "unassigned";
         /**
+         * Filter `data` by hold status - see PUT /ledger/customers/{ledgerId}/hold
+         * @default "all"
+         */
+        hold?: "all" | "held" | "not_held";
+        /**
          * `created_at` (default) surfaces the newest customers first with the default `order=desc` - i.e. "sort by new customers".
          * @default "created_at"
          */
@@ -2109,9 +2220,15 @@ export class Api<SecurityDataType extends unknown> {
              * @format date-time
              */
             created_at?: string;
+            on_hold?: boolean;
+            hold_reason?: string | null;
+            held_by_staff_name?: string | null;
+            /** @format date-time */
+            held_at?: string | null;
           }[];
           newDays?: number;
           ownership?: "all" | "assigned" | "dynamic" | "unassigned";
+          hold?: "all" | "held" | "not_held";
           sortBy?: "created_at" | "balance" | "name";
           order?: "asc" | "desc";
         },
@@ -2207,7 +2324,10 @@ export class Api<SecurityDataType extends unknown> {
           | "dispute"
           | "noResponse"
           | "reminderSent";
-        /** @example 5000 */
+        /**
+         * Ignored/overridden when outcome is promisedToPay - the server always sets it to the customer's current live outstanding balance in that case (promisedToPay means the full amount by definition; use promisedPartial for a custom figure)
+         * @example 5000
+         */
         promisedAmount?: number | null;
         /**
          * @format date
@@ -2289,6 +2409,7 @@ export class Api<SecurityDataType extends unknown> {
           | "dispute"
           | "noResponse"
           | "reminderSent";
+        /** Ignored/overridden if the resulting outcome (this update's, or the existing one if outcome isn't being changed) is promisedToPay - see POST /followups */
         promisedAmount?: number;
         /** @format date */
         promisedDate?: string;
@@ -2513,7 +2634,7 @@ export class Api<SecurityDataType extends unknown> {
       }),
 
     /**
-     * No description
+     * @description If this customer is on hold (see PUT /ledger/customers/{ledgerId}/hold), staff get a 404 - full invisibility, same as a nonexistent customer - managers/superAdmin are unaffected.
      *
      * @tags Follow-ups
      * @name CustomerDetail
@@ -2543,7 +2664,7 @@ export class Api<SecurityDataType extends unknown> {
           } | null;
           data?: FollowUpResponse[];
         },
-        any
+        void
       >({
         path: `/followups/customer/${customerId}`,
         method: "GET",
@@ -3004,30 +3125,24 @@ export class Api<SecurityDataType extends unknown> {
   };
   attendance = {
     /**
-     * @description Scan staff member's fingerprint for attendance marking. Public endpoint (no auth required). Toggle between check-in and check-out automatically. Supports multiple sessions per day.
+     * @description Public endpoint (no auth required) - camera-first, no staff pre-selected. Runs face recognition against all enrolled staff (open-set search) to identify the closest match, then automatically toggles check-in/check-out based on that staff member's existing sessions for the day. Duplicate/too-soon scans are rejected server-side using the existing fraud-prevention gap (MIN_GAP_FOR_CHECKOUT / MIN_GAP_FOR_NEW_SESSION) - in that case the response has matched: true but success: false with an error message, and no action/attendance fields.
      *
      * @tags Attendance
      * @name ScanCreate
-     * @summary Scan fingerprint for attendance (check-in/check-out)
+     * @summary Scan a face photo for attendance (check-in/check-out)
      * @request POST:/attendance/scan
      * @secure
      */
     scanCreate: (
       data: {
         /**
-         * Staff ID to identify the employee
-         * @example 2645
+         * JPEG/PNG/WEBP photo captured from the device camera (max 5MB by default)
+         * @format binary
          */
-        staffId: number;
+        photo: File;
         /**
-         * Base64 encoded fingerprint template from device sensor
-         * @format byte
-         * @example "QmFzZTY0RW5jb2RlZEZpbmdlcnByaW50VGVtcGxhdGU="
-         */
-        fingerprintTemplate: Blob;
-        /**
+         * ISO timestamp of the scan
          * @format date-time
-         * @example "2026-06-29T09:30:45.123Z"
          */
         timestamp: string;
       },
@@ -3035,31 +3150,26 @@ export class Api<SecurityDataType extends unknown> {
     ) =>
       this.http.request<
         {
-          /** @example true */
           success?: boolean;
-          /** @example true */
           matched?: boolean;
           staff?: {
-            /** @example 2645 */
             id?: number;
-            /** @example "ANAS" */
             name?: string;
           };
-          /**
-           * Fingerprint match confidence (0-1), 0.90+ required
-           * @example 0.95
-           */
+          /** 0-1 similarity score, shown as a rounded percentage in the UI */
           confidence?: number;
-          /** @example "checkIn" */
+          /** Present when matched is false */
+          reason?: "no_match" | "low_confidence" | "no_face_detected";
+          /** Present when success is false (no-match, no-face, or a matched-but-rejected scan e.g. duplicate/too-soon) */
+          error?: string;
+          /** Present when matched is true and the scan was accepted */
           action?: "checkIn" | "checkOut";
+          /** Present when matched is true and the scan was accepted - that staff member's updated day summary */
           attendance?: {
             id?: string;
             staffId?: number;
-            /** @example "2026-06-29" */
             date?: string;
-            /** @example 1 */
             sessionCount?: number;
-            /** Multiple sessions for breaks and meals */
             sessions?: {
               sessionNumber?: number;
               /** @format date-time */
@@ -3067,12 +3177,15 @@ export class Api<SecurityDataType extends unknown> {
               /** @format date-time */
               checkOut?: string | null;
               workHours?: number | null;
+              /** True if checkout was never scanned and the session was force-closed by the nightly stale-session cleanup job */
+              autoClosed?: boolean;
             }[];
-            /** @example 2.5 */
-            totalWorkHours?: number;
-            /** @example 0.5 */
-            totalBreakTime?: number;
-            status?: "present" | "absent" | "late";
+            totalWorkHours?: number | null;
+            totalBreakTime?: number | null;
+            overtimeHours?: number | null;
+            status?: "present" | "late" | "absent";
+            isOnLeave?: boolean;
+            leaveType?: string | null;
           };
         },
         void
@@ -3081,17 +3194,17 @@ export class Api<SecurityDataType extends unknown> {
         method: "POST",
         body: data,
         secure: true,
-        type: ContentType.Json,
+        type: ContentType.FormData,
         format: "json",
         ...params,
       }),
 
     /**
-     * @description Register a staff member's fingerprint for attendance recognition. Requires 3 scans minimum for optimal accuracy. Progressive enrollment (call this endpoint 3 times).
+     * @description Uploads one face photo, extracts its descriptor, and appends it to that staff member's enrolled reference set (up to MAX_ENROLLMENT_PHOTOS, oldest dropped beyond that). A staff member becomes scan-eligible once MIN_ENROLLMENT_PHOTOS is reached (default 1). Requires owner, manager, or superAdmin role.
      *
      * @tags Attendance
      * @name EnrollCreate
-     * @summary Enroll staff member's fingerprint
+     * @summary Enroll (or add) a staff member's reference photo
      * @request POST:/attendance/enroll/{staffId}
      * @secure
      */
@@ -3099,29 +3212,19 @@ export class Api<SecurityDataType extends unknown> {
       staffId: number,
       data: {
         /**
-         * Base64 encoded fingerprint template from device sensor
-         * @format byte
-         * @example "QmFzZTY0RW5jb2RlZEZpbmdlcnByaW50VGVtcGxhdGU="
+         * JPEG/PNG/WEBP photo with a single clear, well-lit face (max 5MB by default)
+         * @format binary
          */
-        fingerprintTemplate: Blob;
+        photo: File;
       },
       params: RequestParams = {},
     ) =>
       this.http.request<
         {
-          /** @example true */
           success?: boolean;
-          /** @example "Fingerprint enrolled successfully" */
           message?: string;
-          /**
-           * Current enrollment count (1, 2, or 3)
-           * @example 1
-           */
-          enrollmentCount?: number;
-          /**
-           * true when enrollmentCount reaches 3
-           * @example false
-           */
+          staffId?: number;
+          photoCount?: number;
           readyForAttendance?: boolean;
         },
         void
@@ -3130,7 +3233,30 @@ export class Api<SecurityDataType extends unknown> {
         method: "POST",
         body: data,
         secure: true,
-        type: ContentType.Json,
+        type: ContentType.FormData,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Removes all enrolled reference photos/descriptors for a staff member. They can re-enroll afterward. Requires owner, manager, or superAdmin role.
+     *
+     * @tags Attendance
+     * @name EnrollDelete
+     * @summary Delete a staff member's enrolled photo(s)
+     * @request DELETE:/attendance/enroll/{staffId}
+     * @secure
+     */
+    enrollDelete: (staffId: number, params: RequestParams = {}) =>
+      this.http.request<
+        {
+          success?: boolean;
+        },
+        void
+      >({
+        path: `/attendance/enroll/${staffId}`,
+        method: "DELETE",
+        secure: true,
         format: "json",
         ...params,
       }),
@@ -3178,12 +3304,235 @@ export class Api<SecurityDataType extends unknown> {
             sessions?: object[];
             totalWorkHours?: number | null;
             totalBreakTime?: number | null;
+            overtimeHours?: number | null;
             status?: "present" | "absent" | "late";
+            isOnLeave?: boolean;
+            leaveType?: string | null;
           }[];
         },
         void
       >({
         path: `/attendance`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Retrieve aggregated attendance statistics for a specific date for dashboard view. Includes counts of present/absent/late/on leave staff, total and average work hours, break time, and attendance rate. Accessible only to managers, HR, and super admins.
+     *
+     * @tags Attendance
+     * @name SummaryDetail
+     * @summary Get attendance summary for dashboard
+     * @request GET:/attendance/summary/{date}
+     * @secure
+     */
+    summaryDetail: (date: string, params: RequestParams = {}) =>
+      this.http.request<
+        {
+          success?: boolean;
+          /** @example "2026-06-29" */
+          date?: string;
+          /** @example 50 */
+          totalStaff?: number;
+          /** @example 45 */
+          presentCount?: number;
+          /** @example 3 */
+          absentCount?: number;
+          /** @example 2 */
+          lateCount?: number;
+          /** @example 0 */
+          onLeaveCount?: number;
+          /**
+           * @format float
+           * @example 360.5
+           */
+          totalWorkHours?: number;
+          /**
+           * @format float
+           * @example 45
+           */
+          totalBreakTime?: number;
+          /**
+           * @format float
+           * @example 8
+           */
+          averageWorkHours?: number;
+          /**
+           * @format float
+           * @example 1
+           */
+          averageBreakTime?: number;
+          /**
+           * @format float
+           * @example 94
+           */
+          attendanceRate?: number;
+        },
+        void
+      >({
+        path: `/attendance/summary/${date}`,
+        method: "GET",
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Retrieve a comprehensive attendance dashboard for a date range - daily trend, per-staff breakdown, leave overlay, and late/overtime/absence flags. Approved leaves within the range are cross-referenced so staff on leave aren't counted as absent. Accessible only to managers, HR, and super admins.
+     *
+     * @tags Attendance
+     * @name DashboardList
+     * @summary Get full attendance dashboard for a date range
+     * @request GET:/attendance/dashboard
+     * @secure
+     */
+    dashboardList: (
+      query: {
+        /**
+         * @format date
+         * @example "2026-06-01"
+         */
+        startDate: string;
+        /**
+         * @format date
+         * @example "2026-06-30"
+         */
+        endDate: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            period?: {
+              /** @example "2026-06-01" */
+              start?: string;
+              /** @example "2026-06-30" */
+              end?: string;
+              /** @example 30 */
+              days?: number;
+            };
+            /** @example 50 */
+            totalStaff?: number;
+            summary?: {
+              /** @example 1200 */
+              totalPresent?: number;
+              /** @example 80 */
+              totalLate?: number;
+              /** @example 150 */
+              totalAbsent?: number;
+              /** @example 70 */
+              totalOnLeave?: number;
+              /**
+               * @format float
+               * @example 92.5
+               */
+              overallAttendanceRate?: number;
+            };
+            /** Daily attendance counts and rate across the range */
+            trend?: {
+              /** @example "2026-06-01" */
+              date?: string;
+              /** @example 45 */
+              present?: number;
+              /** @example 2 */
+              late?: number;
+              /** @example 1 */
+              absent?: number;
+              /** @example 2 */
+              onLeave?: number;
+              /**
+               * @format float
+               * @example 94
+               */
+              attendanceRate?: number;
+            }[];
+            /** Per-staff totals over the range, sorted by attendance rate ascending */
+            staffBreakdown?: {
+              /** @example 12 */
+              staffId?: number;
+              /** @example "Jane Doe" */
+              staffName?: string;
+              /** @example 22 */
+              presentDays?: number;
+              /** @example 3 */
+              lateDays?: number;
+              /** @example 2 */
+              absentDays?: number;
+              /** @example 3 */
+              onLeaveDays?: number;
+              /**
+               * @format float
+               * @example 176.5
+               */
+              totalWorkHours?: number;
+              /**
+               * @format float
+               * @example 4.5
+               */
+              totalOvertimeHours?: number;
+              /**
+               * Days where a session was auto-closed by the stale-session cleanup job due to a missing checkout
+               * @example 1
+               */
+              missedCheckoutDays?: number;
+              /**
+               * @format float
+               * @example 83.33
+               */
+              attendanceRate?: number;
+            }[];
+            /** Staff flagged for attention within the range */
+            flags?: {
+              /** Staff with 3 or more late days in the range */
+              chronicallyLate?: {
+                /** @example 12 */
+                staffId?: number;
+                /** @example "Jane Doe" */
+                staffName?: string;
+                /** @example 4 */
+                lateDays?: number;
+              }[];
+              /** Staff with 10 or more total overtime hours in the range */
+              excessiveOvertime?: {
+                /** @example 12 */
+                staffId?: number;
+                /** @example "Jane Doe" */
+                staffName?: string;
+                /**
+                 * @format float
+                 * @example 12.5
+                 */
+                totalOvertimeHours?: number;
+              }[];
+              /** Staff with 3 or more absent days in the range */
+              frequentAbsentees?: {
+                /** @example 12 */
+                staffId?: number;
+                /** @example "Jane Doe" */
+                staffName?: string;
+                /** @example 5 */
+                absentDays?: number;
+              }[];
+              /** Staff with 2 or more days where a session was auto-closed due to a missing checkout */
+              missedCheckouts?: {
+                /** @example 12 */
+                staffId?: number;
+                /** @example "Jane Doe" */
+                staffName?: string;
+                /** @example 2 */
+                missedCheckoutDays?: number;
+              }[];
+            };
+          };
+        },
+        void
+      >({
+        path: `/attendance/dashboard`,
         method: "GET",
         query: query,
         secure: true,
@@ -3248,63 +3597,6 @@ export class Api<SecurityDataType extends unknown> {
         path: `/attendance/my-history`,
         method: "GET",
         query: query,
-        secure: true,
-        format: "json",
-        ...params,
-      }),
-
-    /**
-     * @description Check if staff member has completed fingerprint enrollment and is ready for attendance scanning.
-     *
-     * @tags Attendance
-     * @name BiometricStatusDetail
-     * @summary Get biometric fingerprint enrollment status
-     * @request GET:/attendance/biometric-status/{staffId}
-     * @secure
-     */
-    biometricStatusDetail: (staffId: number, params: RequestParams = {}) =>
-      this.http.request<
-        {
-          success?: boolean;
-          staffId?: number;
-          name?: string;
-          enrolled?: boolean;
-          /** Number of fingerprints enrolled (0-3) */
-          enrollmentCount?: number;
-          /** true when enrollmentCount >= 3 */
-          readyForAttendance?: boolean;
-          /** @format date-time */
-          enrolledAt?: string | null;
-        },
-        any
-      >({
-        path: `/attendance/biometric-status/${staffId}`,
-        method: "GET",
-        secure: true,
-        format: "json",
-        ...params,
-      }),
-
-    /**
-     * @description Remove all fingerprint enrollment data for a staff member. They can re-enroll afterward. Requires owner, manager, or superAdmin role.
-     *
-     * @tags Attendance
-     * @name BiometricEnrollmentDelete
-     * @summary Delete fingerprint enrollment (reset)
-     * @request DELETE:/attendance/biometric-enrollment/{staffId}
-     * @secure
-     */
-    biometricEnrollmentDelete: (staffId: number, params: RequestParams = {}) =>
-      this.http.request<
-        {
-          success?: boolean;
-          /** @example "Biometric enrollment cleared" */
-          message?: string;
-        },
-        void
-      >({
-        path: `/attendance/biometric-enrollment/${staffId}`,
-        method: "DELETE",
         secure: true,
         format: "json",
         ...params,

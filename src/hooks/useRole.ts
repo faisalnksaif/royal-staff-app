@@ -6,7 +6,9 @@ export function useRole() {
     role,
     isSuperAdmin: role === "superAdmin",
     isManager: role === "manager",
+    isHR: role === "hr",
     isAdmin: role === "superAdmin" || role === "manager",
     isStaff: role === "staff",
+    canViewAttendance: role === "superAdmin" || role === "manager" || role === "hr",
   }
 }

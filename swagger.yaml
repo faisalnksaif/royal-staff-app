@@ -1237,6 +1237,12 @@ paths:
                           type: string
                           format: date-time
                           description: When this customer was first synced from rowbest
+                        on_hold:
+                          type: boolean
+                          description: Manager-set hold flag - see PUT /ledger/customers/{ledgerId}/hold. Held customers are still included here (this endpoint is managers-only), unlike GET /ledger/staff/{userId}/outstanding which hides them from staff viewers.
+                        hold_reason:
+                          type: string
+                          nullable: true
                   filter:
                     type: string
                     enum: [all, followed_up, not_followed_up, paid, overdue, open_followup]
@@ -3261,6 +3267,9 @@ paths:
                             workHours:
                               type: number
                               nullable: true
+                            autoClosed:
+                              type: boolean
+                              description: True if checkout was never scanned and the session was force-closed by the nightly stale-session cleanup job
                       totalWorkHours:
                         type: number
                         nullable: true
@@ -3457,7 +3466,7 @@ paths:
       tags:
         - Attendance
       summary: Get attendance summary for dashboard
-      description: Retrieve aggregated attendance statistics for a specific date for dashboard view. Includes counts of present/absent/late/on leave staff, total and average work hours, break time, and attendance rate. Accessible only to managers and super admins.
+      description: Retrieve aggregated attendance statistics for a specific date for dashboard view. Includes counts of present/absent/late/on leave staff, total and average work hours, break time, and attendance rate. Accessible only to managers, HR, and super admins.
       security:
         - BearerAuth: []
       parameters:
@@ -3519,7 +3528,217 @@ paths:
         '400':
           description: Missing or invalid date parameter
         '403':
-          description: Forbidden - insufficient permissions (manager/superAdmin required)
+          description: Forbidden - insufficient permissions (manager/HR/superAdmin required)
+        '500':
+          description: Internal server error
+
+  /attendance/dashboard:
+    get:
+      tags:
+        - Attendance
+      summary: Get full attendance dashboard for a date range
+      description: |
+        Retrieve a comprehensive attendance dashboard for a date range - daily trend, per-staff breakdown, leave overlay, and late/overtime/absence flags.
+        Approved leaves within the range are cross-referenced so staff on leave aren't counted as absent.
+        Accessible only to managers, HR, and super admins.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: startDate
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+            example: 2026-06-01
+        - name: endDate
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+            example: 2026-06-30
+      responses:
+        '200':
+          description: Attendance dashboard data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      period:
+                        type: object
+                        properties:
+                          start:
+                            type: string
+                            example: 2026-06-01
+                          end:
+                            type: string
+                            example: 2026-06-30
+                          days:
+                            type: integer
+                            example: 30
+                      totalStaff:
+                        type: integer
+                        example: 50
+                      summary:
+                        type: object
+                        properties:
+                          totalPresent:
+                            type: integer
+                            example: 1200
+                          totalLate:
+                            type: integer
+                            example: 80
+                          totalAbsent:
+                            type: integer
+                            example: 150
+                          totalOnLeave:
+                            type: integer
+                            example: 70
+                          overallAttendanceRate:
+                            type: number
+                            format: float
+                            example: 92.5
+                      trend:
+                        type: array
+                        description: Daily attendance counts and rate across the range
+                        items:
+                          type: object
+                          properties:
+                            date:
+                              type: string
+                              example: 2026-06-01
+                            present:
+                              type: integer
+                              example: 45
+                            late:
+                              type: integer
+                              example: 2
+                            absent:
+                              type: integer
+                              example: 1
+                            onLeave:
+                              type: integer
+                              example: 2
+                            attendanceRate:
+                              type: number
+                              format: float
+                              example: 94.0
+                      staffBreakdown:
+                        type: array
+                        description: Per-staff totals over the range, sorted by attendance rate ascending
+                        items:
+                          type: object
+                          properties:
+                            staffId:
+                              type: integer
+                              example: 12
+                            staffName:
+                              type: string
+                              example: Jane Doe
+                            presentDays:
+                              type: integer
+                              example: 22
+                            lateDays:
+                              type: integer
+                              example: 3
+                            absentDays:
+                              type: integer
+                              example: 2
+                            onLeaveDays:
+                              type: integer
+                              example: 3
+                            totalWorkHours:
+                              type: number
+                              format: float
+                              example: 176.5
+                            totalOvertimeHours:
+                              type: number
+                              format: float
+                              example: 4.5
+                            missedCheckoutDays:
+                              type: integer
+                              description: Days where a session was auto-closed by the stale-session cleanup job due to a missing checkout
+                              example: 1
+                            attendanceRate:
+                              type: number
+                              format: float
+                              example: 83.33
+                      flags:
+                        type: object
+                        description: Staff flagged for attention within the range
+                        properties:
+                          chronicallyLate:
+                            type: array
+                            description: Staff with 3 or more late days in the range
+                            items:
+                              type: object
+                              properties:
+                                staffId:
+                                  type: integer
+                                  example: 12
+                                staffName:
+                                  type: string
+                                  example: Jane Doe
+                                lateDays:
+                                  type: integer
+                                  example: 4
+                          excessiveOvertime:
+                            type: array
+                            description: Staff with 10 or more total overtime hours in the range
+                            items:
+                              type: object
+                              properties:
+                                staffId:
+                                  type: integer
+                                  example: 12
+                                staffName:
+                                  type: string
+                                  example: Jane Doe
+                                totalOvertimeHours:
+                                  type: number
+                                  format: float
+                                  example: 12.5
+                          frequentAbsentees:
+                            type: array
+                            description: Staff with 3 or more absent days in the range
+                            items:
+                              type: object
+                              properties:
+                                staffId:
+                                  type: integer
+                                  example: 12
+                                staffName:
+                                  type: string
+                                  example: Jane Doe
+                                absentDays:
+                                  type: integer
+                                  example: 5
+                          missedCheckouts:
+                            type: array
+                            description: Staff with 2 or more days where a session was auto-closed due to a missing checkout
+                            items:
+                              type: object
+                              properties:
+                                staffId:
+                                  type: integer
+                                  example: 12
+                                staffName:
+                                  type: string
+                                  example: Jane Doe
+                                missedCheckoutDays:
+                                  type: integer
+                                  example: 2
+        '400':
+          description: Missing startDate/endDate, or startDate after endDate
+        '403':
+          description: Forbidden - insufficient permissions (manager/HR/superAdmin required)
         '500':
           description: Internal server error
 
@@ -5181,6 +5400,7 @@ components:
             - staff
             - manager
             - superAdmin
+            - hr
           example: staff
         isActive:
           type: boolean

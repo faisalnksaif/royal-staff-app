@@ -1,6 +1,6 @@
 import api from "./apiClient"
 import { ContentType } from "./generated/Api"
-import type { AttendanceScanResponse, AttendanceDayResponse, StaffListResponse, FaceEnrollResponse } from "../types"
+import type { AttendanceScanResponse, AttendanceDayResponse, AttendanceSummaryResponse, AttendanceDashboardResponse, StaffListResponse, FaceEnrollResponse } from "../types"
 
 async function photoToFormFile(photoUri: string): Promise<Blob> {
   const response = await fetch(photoUri)
@@ -53,6 +53,26 @@ async function getAttendance(date: string): Promise<AttendanceDayResponse> {
   return data
 }
 
+async function getAttendanceSummary(date: string): Promise<AttendanceSummaryResponse> {
+  const { data } = await api.http.request<AttendanceSummaryResponse>({
+    path: `/attendance/summary/${date}`,
+    method: "GET",
+    secure: true,
+    format: "json",
+  })
+  return data
+}
+
+async function getAttendanceDashboard(startDate: string, endDate: string): Promise<AttendanceDashboardResponse> {
+  const { data } = await api.http.request<AttendanceDashboardResponse>({
+    path: `/attendance/dashboard?startDate=${startDate}&endDate=${endDate}`,
+    method: "GET",
+    secure: true,
+    format: "json",
+  })
+  return data
+}
+
 async function getStaff(): Promise<StaffListResponse> {
   const { data } = await api.http.request<StaffListResponse>({
     path: "/staff",
@@ -63,4 +83,4 @@ async function getStaff(): Promise<StaffListResponse> {
   return data
 }
 
-export const attendanceService = { scanFace, enrollFace, deleteFaceEnrollment, getAttendance, getStaff }
+export const attendanceService = { scanFace, enrollFace, deleteFaceEnrollment, getAttendance, getAttendanceSummary, getAttendanceDashboard, getStaff }

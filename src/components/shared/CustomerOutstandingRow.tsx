@@ -1,7 +1,7 @@
 import { useRef, useEffect } from "react"
 import { View, TouchableOpacity, Animated, Easing, StyleSheet } from "react-native"
 import { useRouter } from "expo-router"
-import { ChevronRight, MessageCircle, CheckCircle2 } from "lucide-react-native"
+import { ChevronRight, MessageCircle, CheckCircle2, Lock } from "lucide-react-native"
 import AppText from "../ui/AppText"
 import { useTheme } from "../../providers/ThemeProvider"
 import { spacing, colors as palette } from "../../constants/theme"
@@ -70,6 +70,12 @@ export default function CustomerOutstandingRow({ item, index }: Props) {
             </View>
           )}
           <AppText variant="bodyMedium" numberOfLines={1} style={{ flex: 1 }}>{toTitleCase(item.name)}</AppText>
+          {item.on_hold && (
+            <View style={[styles.pill, { backgroundColor: palette.error.default + "22" }]}>
+              <Lock size={10} color={palette.error.default} strokeWidth={2} />
+              <AppText variant="caption" style={{ color: palette.error.default, fontSize: 10 }}>Held</AppText>
+            </View>
+          )}
           {item.is_new && (
             <View style={[styles.pill, { backgroundColor: palette.info.default + "22" }]}>
               <AppText variant="caption" style={{ color: palette.info.default, fontSize: 10 }}>New</AppText>
@@ -90,6 +96,12 @@ export default function CustomerOutstandingRow({ item, index }: Props) {
           </AppText>
           <ChevronRight size={14} color={palette.neutral[400]} strokeWidth={1.75} />
         </View>
+
+        {item.on_hold && item.hold_reason && (
+          <AppText variant="caption" numberOfLines={1} style={{ fontSize: 10, color: palette.error.default, fontStyle: "italic" }}>
+            {item.hold_reason}
+          </AppText>
+        )}
 
         {/* Retention + velocity hints */}
         {(item.retention_status || item.days_since_last_purchase != null || item.avg_days_to_clear != null) && (
