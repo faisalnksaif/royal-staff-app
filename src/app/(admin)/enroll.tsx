@@ -7,25 +7,20 @@ import {
   StyleSheet,
   Pressable,
   Modal,
+  Image,
 } from "react-native"
 import { useQuery } from "@tanstack/react-query"
-import { X, CheckCircle, UserCheck, Fingerprint } from "lucide-react-native"
+import { X, CheckCircle, UserCheck, RotateCcw } from "lucide-react-native"
 import BackButton from "../../components/shared/BackButton"
 import AppText from "../../components/ui/AppText"
 import AppCard from "../../components/ui/AppCard"
 import AppInput from "../../components/ui/AppInput"
 import AppButton from "../../components/ui/AppButton"
-import FingerprintScanner from "../../components/shared/FingerprintScanner"
+import FaceCamera from "../../components/shared/FaceCamera"
 import { useTheme } from "../../providers/ThemeProvider"
 import { spacing, colors as palette, radii } from "../../constants/theme"
 import { attendanceService } from "../../services/attendanceService"
-import { useFingerprint } from "../../hooks/useFingerprint"
 import type { StaffResponse } from "../../types"
-
-// ─── helpers ─────────────────────────────────────────────────────────────────
-
-
-const MIN_SCANS = 3
 
 // ─── StaffCard ────────────────────────────────────────────────────────────────
 
@@ -42,49 +37,49 @@ function StaffCard({ staff, onSelect }: { staff: StaffResponse; onSelect: () => 
           </View>
           <View style={styles.staffInfo}>
             <AppText variant="bodyMedium">{toTitleCase(staff.name)}</AppText>
-            <AppText variant="caption" color="secondary">ID: {staff.id}</AppText>
+            <AppText variant="caption" color="secondary">
+              {staff.hasPhoto ? "Photo enrolled" : `ID: ${staff.id}`}
+            </AppText>
           </View>
-          <UserCheck size={18} color={colors.text.tertiary} strokeWidth={1.5} />
+          {staff.hasPhoto ? (
+            <CheckCircle size={18} color={palette.success.default} strokeWidth={1.5} />
+          ) : (
+            <UserCheck size={18} color={colors.text.tertiary} strokeWidth={1.5} />
+          )}
         </AppCard>
       )}
     </Pressable>
   )
 }
 
-// ─── EnrollFingerprint ────────────────────────────────────────────────────────
+// ─── EnrollFace ───────────────────────────────────────────────────────────────
 
-function EnrollFingerprint({
+function EnrollFace({
   staff,
   onClose,
   onDone,
 }: {
   staff: StaffResponse
   onClose: () => void
-  onDone: (count: number) => void
+  onDone: (photoCount: number) => void
 }) {
-  const { readTemplate } = useFingerprint()
-  const [scanCount, setScanCount] = useState(0)
-  const [readyForAttendance, setReadyForAttendance] = useState(false)
-  const [isScanning, setIsScanning] = useState(false)
+  const [capturedUri, setCapturedUri] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [lastError, setLastError] = useState("")
 
-  async function handleScan() {
-    if (isScanning) return
+  async function handleSubmit() {
+    if (!capturedUri) return
+    setIsSubmitting(true)
     setLastError("")
-    setIsScanning(true)
     try {
-      const template = await readTemplate()
-      const res = await attendanceService.enrollFingerprint(staff.id, template)
-      setScanCount(res.enrollmentCount)
-      setReadyForAttendance(res.readyForAttendance)
+      const res = await attendanceService.enrollFace(staff.id, capturedUri)
+      onDone(res.photoCount)
     } catch (e) {
-      setLastError((e as Error).message ?? "Scan failed")
+      setLastError((e as Error).message ?? "Enrollment failed")
     } finally {
-      setIsScanning(false)
+      setIsSubmitting(false)
     }
   }
-
-  const canFinish = scanCount >= MIN_SCANS
 
   return (
     <View style={[styles.modalFull, { backgroundColor: "#000" }]}>
@@ -98,67 +93,52 @@ function EnrollFingerprint({
             {toTitleCase(staff.name)}
           </AppText>
           <AppText variant="caption" style={{ color: "rgba(255,255,255,0.6)" }}>
-            {scanCount < MIN_SCANS
-              ? `${scanCount} / ${MIN_SCANS} scans minimum`
-              : `${scanCount} scans captured ✓`}
+            {capturedUri ? "Photo captured" : "Capture reference photo"}
           </AppText>
         </View>
         <View style={{ width: 40 }} />
       </View>
 
-      {/* Scanner */}
-      <View style={styles.scanCenter}>
-        <FingerprintScanner isScanning={isScanning} />
-        {lastError ? (
-          <AppText
-            variant="caption"
-            style={{ color: palette.error.default, marginTop: spacing[3], textAlign: "center" }}
-          >
-            {lastError}
-          </AppText>
-        ) : null}
-      </View>
-
-      {/* Progress dots */}
-      <View style={styles.dotsRow}>
-        {Array.from({ length: Math.max(scanCount, MIN_SCANS) }).map((_, i) => (
-          <View
-            key={i}
-            style={[
-              styles.dot,
-              {
-                backgroundColor:
-                  i < scanCount
-                    ? readyForAttendance
-                      ? palette.success.default
-                      : palette.warning.default
-                    : "rgba(255,255,255,0.25)",
-              },
-            ]}
-          />
-        ))}
-      </View>
+      {/* Camera or preview */}
+      {capturedUri ? (
+        <View style={styles.scanCenter}>
+          <Image source={{ uri: capturedUri }} style={styles.preview} resizeMode="cover" />
+          {lastError ? (
+            <AppText
+              variant="caption"
+              style={{ color: palette.error.default, marginTop: spacing[3], textAlign: "center" }}
+            >
+              {lastError}
+            </AppText>
+          ) : null}
+        </View>
+      ) : (
+        <View style={styles.cameraFill}>
+          <FaceCamera onCapture={setCapturedUri} />
+        </View>
+      )}
 
       {/* Bottom bar */}
-      <View style={styles.modalBottom}>
-        {isScanning ? (
-          <ActivityIndicator size="large" color="#fff" />
-        ) : (
-          <Pressable onPress={handleScan} style={styles.scanBtn}>
-            <Fingerprint size={28} color="#fff" strokeWidth={1.5} />
-            <AppText variant="bodyMedium" style={{ color: "#fff" }}>Scan Fingerprint</AppText>
-          </Pressable>
-        )}
-
-        {canFinish && !isScanning && (
-          <Pressable
-            onPress={() => onDone(scanCount)}
-            style={[styles.finishBtn, { backgroundColor: palette.success.default }]}
-          >
-            <AppText variant="bodyMedium" style={{ color: "#fff" }}>Finish</AppText>
-          </Pressable>
-        )}
-      </View>
+      {capturedUri && (
+        <View style={styles.modalBottom}>
+          {isSubmitting ? (
+            <ActivityIndicator size="large" color="#fff" />
+          ) : (
+            <>
+              <Pressable onPress={() => setCapturedUri(null)} style={styles.scanBtn}>
+                <RotateCcw size={22} color="#fff" strokeWidth={1.5} />
+                <AppText variant="bodyMedium" style={{ color: "#fff" }}>Retake</AppText>
+              </Pressable>
+              <Pressable
+                onPress={handleSubmit}
+                style={[styles.finishBtn, { backgroundColor: palette.success.default }]}
+              >
+                <AppText variant="bodyMedium" style={{ color: "#fff" }}>Save Photo</AppText>
+              </Pressable>
+            </>
+          )}
+        </View>
+      )}
     </View>
   )
 }
@@ -167,11 +147,9 @@ function EnrollFingerprint({
 
 function EnrollDone({
   staffName,
-  scanCount,
   onClose,
 }: {
   staffName: string
-  scanCount: number
   onClose: () => void
 }) {
   return (
@@ -187,13 +165,7 @@ function EnrollDone({
         variant="body"
         style={{ color: palette.success.default, marginTop: spacing[2] }}
       >
-        Enrolled successfully
-      </AppText>
-      <AppText
-        variant="caption"
-        style={{ color: "rgba(255,255,255,0.45)", marginTop: spacing[2] }}
-      >
-        {scanCount} fingerprint scan{scanCount !== 1 ? "s" : ""} captured
+        Photo enrolled successfully
       </AppText>
       <View style={{ marginTop: spacing[8] }}>
         <AppButton label="Done" onPress={onClose} />
@@ -206,14 +178,13 @@ function EnrollDone({
 
 export default function EnrollScreen() {
   const { colors } = useTheme()
-  const router = useRouter()
 
   const [search, setSearch] = useState("")
   const [selectedStaff, setSelectedStaff] = useState<StaffResponse | null>(null)
   const [enrollOpen, setEnrollOpen] = useState(false)
-  const [doneCount, setDoneCount] = useState<number | null>(null)
+  const [done, setDone] = useState(false)
 
-  const { data: staffData, isLoading } = useQuery({
+  const { data: staffData, isLoading, refetch } = useQuery({
     queryKey: ["staff"],
     queryFn: () => attendanceService.getStaff(),
   })
@@ -224,13 +195,14 @@ export default function EnrollScreen() {
 
   function handleSelectStaff(staff: StaffResponse) {
     setSelectedStaff(staff)
-    setDoneCount(null)
+    setDone(false)
     setEnrollOpen(true)
   }
 
-  function handleEnrollDone(count: number) {
-    setDoneCount(count)
+  function handleEnrollDone() {
+    setDone(true)
     setEnrollOpen(false)
+    refetch()
   }
 
   return (
@@ -239,8 +211,8 @@ export default function EnrollScreen() {
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <BackButton />
         <View>
-          <AppText variant="heading3">Fingerprint Enrollment</AppText>
-          <AppText variant="caption" color="tertiary">Select staff to enroll</AppText>
+          <AppText variant="heading3">Add / Update Photo</AppText>
+          <AppText variant="caption" color="tertiary">Select staff to capture a reference photo</AppText>
         </View>
       </View>
 
@@ -276,19 +248,18 @@ export default function EnrollScreen() {
 
       {/* Enrollment modal */}
       <Modal
-        visible={enrollOpen || doneCount != null}
+        visible={enrollOpen || done}
         animationType="slide"
         statusBarTranslucent
-        onRequestClose={() => { setEnrollOpen(false); setDoneCount(null) }}
+        onRequestClose={() => { setEnrollOpen(false); setDone(false) }}
       >
-        {doneCount != null && selectedStaff ? (
+        {done && selectedStaff ? (
           <EnrollDone
             staffName={selectedStaff.name}
-            scanCount={doneCount}
-            onClose={() => { setDoneCount(null); setSelectedStaff(null) }}
+            onClose={() => { setDone(false); setSelectedStaff(null) }}
           />
         ) : selectedStaff ? (
-          <EnrollFingerprint
+          <EnrollFace
             staff={selectedStaff}
             onClose={() => setEnrollOpen(false)}
             onDone={handleEnrollDone}
@@ -360,15 +331,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: spacing[8],
   },
-  dotsRow: {
+  preview: {
+    alignSelf: "stretch",
+    aspectRatio: 3 / 4,
+    borderRadius: radii.lg,
+  },
+  cameraFill: {
+    flex: 1,
+  },
+  modalBottom: {
     flexDirection: "row",
     justifyContent: "center",
-    gap: spacing[2],
-    paddingBottom: spacing[3],
-  },
-  dot: { width: 10, height: 10, borderRadius: 5 },
-  modalBottom: {
-    alignItems: "center",
     paddingBottom: spacing[12],
     paddingTop: spacing[4],
     gap: spacing[4],
@@ -377,13 +350,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[3],
-    paddingHorizontal: spacing[8],
+    paddingHorizontal: spacing[6],
     paddingVertical: spacing[4],
     borderRadius: radii.lg,
     borderWidth: 1.5,
     borderColor: "rgba(255,255,255,0.4)",
   },
   finishBtn: {
+    justifyContent: "center",
     paddingHorizontal: spacing[8],
     paddingVertical: spacing[3],
     borderRadius: radii.lg,

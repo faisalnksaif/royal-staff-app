@@ -21,6 +21,8 @@ export interface StaffResponse {
   phone: string | null
   sales_target: number | null
   collection_target: number | null
+  hasPhoto?: boolean
+  photoCount?: number
   createdAt: string
   updatedAt: string
 }
@@ -369,6 +371,7 @@ export interface AttendanceScanResponse {
   matched: boolean
   staff?: { id: number; name: string }
   confidence?: number
+  reason?: "no_match" | "low_confidence" | "no_face_detected"
   action?: "checkIn" | "checkOut"
   attendance?: {
     id: string
@@ -380,6 +383,14 @@ export interface AttendanceScanResponse {
     totalBreakTime: number
     status: AttendanceStatus
   }
+}
+
+export interface FaceEnrollResponse {
+  success: boolean
+  message: string
+  staffId: number
+  photoCount: number
+  readyForAttendance: boolean
 }
 
 export interface AttendanceRecord {
@@ -397,6 +408,21 @@ export interface AttendanceDayResponse {
   date: string
   summary: { present: number; absent: number; late: number }
   data: AttendanceRecord[]
+}
+
+export interface AttendanceSummaryResponse {
+  success: boolean;
+  date: string; // YYYY-MM-DD
+  totalStaff: number;
+  presentCount: number;
+  absentCount: number;
+  lateCount: number;
+  onLeaveCount: number;
+  totalWorkHours: number;
+  totalBreakTime: number;
+  averageWorkHours: number;
+  averageBreakTime: number;
+  attendanceRate: number;
 }
 
 export interface FollowupsSummary {

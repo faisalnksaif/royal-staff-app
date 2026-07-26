@@ -43,6 +43,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     "expo-updates",
     "expo-notifications",
     [
+      "expo-camera",
+      {
+        cameraPermission: "Allow $(PRODUCT_NAME) to access your camera to capture attendance photos.",
+      },
+    ],
+    [
       "expo-splash-screen",
       {
         backgroundColor: "#000000",

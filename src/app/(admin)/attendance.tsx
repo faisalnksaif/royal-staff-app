@@ -7,29 +7,27 @@ import {
   StyleSheet,
   Pressable,
   Modal,
-  TouchableOpacity,
 } from "react-native"
 import { useRouter } from "expo-router"
-import { useQuery } from "@tanstack/react-query"
-import { Fingerprint, CheckCircle, XCircle, X, UserPlus, ChevronLeft } from "lucide-react-native"
+import { Camera as CameraIcon, CheckCircle, XCircle, X, UserPlus } from "lucide-react-native"
 import BackButton from "../../components/shared/BackButton"
 import RefreshButton from "../../components/shared/RefreshButton"
 import AnimatedListItem from "../../components/shared/AnimatedListItem"
 import StaffAvatar from "../../components/shared/StaffAvatar"
 import moment from "moment"
 import AppText from "../../components/ui/AppText"
-import AppInput from "../../components/ui/AppInput"
 import AppButton from "../../components/ui/AppButton"
-import FingerprintScanner from "../../components/shared/FingerprintScanner"
+import FaceCamera from "../../components/shared/FaceCamera"
 import { useTheme } from "../../providers/ThemeProvider"
 import { useTablet } from "../../hooks/useTablet"
 import { spacing, colors as palette, radii } from "../../constants/theme"
 import { useAttendance } from "../../hooks/useAttendance"
-import { useFingerprint } from "../../hooks/useFingerprint"
+import { useAttendanceSummary } from "../../hooks/useAttendanceSummary"
+import { useRole } from "../../hooks/useRole"
 import { attendanceService } from "../../services/attendanceService"
-import type { AttendanceRecord, AttendanceScanResponse, StaffResponse } from "../../types"
+import type { AttendanceRecord, AttendanceScanResponse, AttendanceSummaryResponse } from "../../types"
 
-// ─── helpers ─────────────────────────────────────────────────────────────────
+// ─── helpers ─────────────────────────────────────────────────────────────
 
 
 function statusColor(status: AttendanceRecord["status"]): string {
@@ -71,6 +69,85 @@ function SummaryBar({
           </View>
         ))
       )}
+    </View>
+  )
+}
+
+// ─── ExtendedSummary ─────────────────────────────────────────────────────────────
+
+function ExtendedSummary({ summary, isLoading }: { summary?: AttendanceSummaryResponse; isLoading: boolean }) {
+  const { colors } = useTheme()
+  if (isLoading) {
+    return (
+      <View style={{ padding: spacing[4] }}>
+        <ActivityIndicator color={colors.accent} size="small" />
+      </View>
+    )
+  }
+  if (!summary) {
+    return null
+  }
+
+  // Format numbers
+  const formatNumber = (value: number | undefined) => {
+    if (value === undefined) return '-'
+    return value.toString()
+  }
+  const formatHours = (value: number | undefined) => {
+    if (value === undefined) return '-'
+    return `${value.toFixed(1)}h`
+  }
+  const formatRate = (value: number | undefined) => {
+    if (value === undefined) return '-'
+    return `${(value * 100).toFixed(1)}%`
+  }
+
+  return (
+    <View style={styles.extendedSummaryContainer}>
+      <View style={styles.extendedSummaryRow}>
+        <View style={styles.extendedSummaryItem}>
+          <AppText variant="heading3">{formatNumber(summary.totalStaff)}</AppText>
+          <AppText variant="caption" color="tertiary">Total Staff</AppText>
+        </View>
+        <View style={styles.extendedSummaryItem}>
+          <AppText variant="heading3">{formatNumber(summary.presentCount)}</AppText>
+          <AppText variant="caption" color="tertiary">Present</AppText>
+        </View>
+        <View style={styles.extendedSummaryItem}>
+          <AppText variant="heading3">{formatNumber(summary.absentCount)}</AppText>
+          <AppText variant="caption" color="tertiary">Absent</AppText>
+        </View>
+        <View style={styles.extendedSummaryItem}>
+          <AppText variant="heading3">{formatNumber(summary.lateCount)}</AppText>
+          <AppText variant="caption" color="tertiary">Late</AppText>
+        </View>
+        <View style={styles.extendedSummaryItem}>
+          <AppText variant="heading3">{formatNumber(summary.onLeaveCount)}</AppText>
+          <AppText variant="caption" color="tertiary">On Leave</AppText>
+        </View>
+      </View>
+      <View style={styles.extendedSummaryRow}>
+        <View style={styles.extendedSummaryItem}>
+          <AppText variant="heading3">{formatHours(summary.totalWorkHours)}</AppText>
+          <AppText variant="caption" color="tertiary">Total Work Hrs</AppText>
+        </View>
+        <View style={styles.extendedSummaryItem}>
+          <AppText variant="heading3">{formatHours(summary.totalBreakTime)}</AppText>
+          <AppText variant="caption" color="tertiary">Total Break</AppText>
+        </View>
+        <View style={styles.extendedSummaryItem}>
+          <AppText variant="heading3">{formatHours(summary.averageWorkHours)}</AppText>
+          <AppText variant="caption" color="tertiary">Avg Work Hrs</AppText>
+        </View>
+        <View style={styles.extendedSummaryItem}>
+          <AppText variant="heading3">{formatHours(summary.averageBreakTime)}</AppText>
+          <AppText variant="caption" color="tertiary">Avg Break</AppText>
+        </View>
+        <View style={styles.extendedSummaryItem}>
+          <AppText variant="heading3">{formatRate(summary.attendanceRate)}</AppText>
+          <AppText variant="caption" color="tertiary">Attendance Rate</AppText>
+        </View>
+      </View>
     </View>
   )
 }
@@ -120,44 +197,25 @@ function AttendanceRow({ record }: { record: AttendanceRecord }) {
   )
 }
 
-// ─── FingerprintModal ─────────────────────────────────────────────────────────
+// ─── ScanModal ────────────────────────────────────────────────────────────────
 
-type ScanPhase = "pick" | "scan" | "scanning" | "result" | "no_match" | "error"
+type ScanPhase = "camera" | "scanning" | "result" | "no_match" | "error"
 
-function FingerprintModal({
+function ScanModal({
   onClose,
   onSuccess,
 }: {
   onClose: () => void
   onSuccess: () => void
 }) {
-  const { colors } = useTheme()
-  const { readTemplate } = useFingerprint()
-  const [phase, setPhase] = useState<ScanPhase>("pick")
-  const [search, setSearch] = useState("")
-  const [selectedStaff, setSelectedStaff] = useState<StaffResponse | null>(null)
+  const [phase, setPhase] = useState<ScanPhase>("camera")
   const [scanResult, setScanResult] = useState<AttendanceScanResponse | null>(null)
   const [errorMsg, setErrorMsg] = useState("")
 
-  const { data: staffData, isLoading: staffLoading } = useQuery({
-    queryKey: ["staff"],
-    queryFn: () => attendanceService.getStaff(),
-  })
-
-  const filtered = (staffData?.data ?? []).filter((s) =>
-    s.name.toLowerCase().includes(search.toLowerCase())
-  )
-
-  async function handleScan() {
-    if (!selectedStaff) return
+  async function handleCapture(photoUri: string) {
     setPhase("scanning")
     try {
-      const template = await readTemplate()
-      const res = await attendanceService.scanFingerprint(
-        selectedStaff.id,
-        template,
-        new Date().toISOString()
-      )
+      const res = await attendanceService.scanFace(photoUri, new Date().toISOString())
       setScanResult(res)
       setPhase(res.matched ? "result" : "no_match")
       if (res.matched) {
@@ -167,61 +225,6 @@ function FingerprintModal({
       setErrorMsg((e as Error).message ?? "Scan failed")
       setPhase("error")
     }
-  }
-
-  // ── Pick staff ───────────────────────────────────────────────────────────
-  if (phase === "pick") {
-    return (
-      <View style={[styles.modalFull, { backgroundColor: colors.background.primary }]}>
-        <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-          <Pressable onPress={onClose} hitSlop={8} style={{ padding: spacing[2] }}>
-            <X size={24} color={colors.text.primary} strokeWidth={2} />
-          </Pressable>
-          <AppText variant="heading3">Select Staff</AppText>
-          <View style={{ width: 40 }} />
-        </View>
-
-        <View style={[styles.searchWrap, { borderBottomColor: colors.border }]}>
-          <AppInput
-            placeholder="Search name..."
-            value={search}
-            onChangeText={setSearch}
-            returnKeyType="search"
-          />
-        </View>
-
-        <FlatList
-          data={filtered}
-          keyExtractor={(item) => String(item.id)}
-          renderItem={({ item, index }) => (
-            <AnimatedListItem index={index}>
-              <TouchableOpacity
-                activeOpacity={0.7}
-                onPress={() => { setSelectedStaff(item); setPhase("scan") }}
-              >
-                <View style={[styles.staffRow, { borderBottomColor: colors.border as string }]}>
-                  <StaffAvatar name={item.name} color={colors.accent} bgColor={colors.accentSubtle} />
-                  <View style={{ flex: 1 }}>
-                    <AppText variant="bodyMedium">{toTitleCase(item.name)}</AppText>
-                    <AppText variant="caption" color="secondary">ID: {item.id}</AppText>
-                  </View>
-                </View>
-              </TouchableOpacity>
-            </AnimatedListItem>
-          )}
-          contentContainerStyle={{ paddingBottom: spacing[10] }}
-          ListEmptyComponent={
-            staffLoading ? (
-              <ActivityIndicator size="large" color={colors.accent} style={styles.center} />
-            ) : (
-              <View style={styles.center}>
-                <AppText color="tertiary">No staff found</AppText>
-              </View>
-            )
-          }
-        />
-      </View>
-    )
   }
 
   // ── Result / no-match / error ────────────────────────────────────────────
@@ -269,11 +272,10 @@ function FingerprintModal({
               variant="body"
               style={{ color: "rgba(255,255,255,0.55)", marginTop: spacing[2], textAlign: "center" }}
             >
-              {phase === "error" ? errorMsg : "Please try again"}
+              {phase === "error" ? errorMsg : "No matching staff found — please try again"}
             </AppText>
-            <View style={{ marginTop: spacing[8], gap: spacing[3] }}>
-              <AppButton label="Try Again" onPress={() => setPhase("scan")} />
-              <AppButton label="Change Staff" variant="ghost" onPress={() => setPhase("pick")} />
+            <View style={{ marginTop: spacing[8] }}>
+              <AppButton label="Try Again" onPress={() => setPhase("camera")} />
             </View>
           </>
         )}
@@ -281,40 +283,27 @@ function FingerprintModal({
     )
   }
 
-  // ── Scan / scanning ──────────────────────────────────────────────────────
+  // ── Camera / scanning ─────────────────────────────────────────────────────
   return (
     <View style={[styles.modalFull, { backgroundColor: "#000" }]}>
       <View style={[styles.modalHeader, { borderBottomColor: "rgba(255,255,255,0.1)" }]}>
-        <Pressable onPress={() => setPhase("pick")} hitSlop={8} style={{ padding: spacing[2] }}>
-          <ChevronLeft size={24} color="#fff" strokeWidth={1.75} />
-        </Pressable>
-        <View style={{ alignItems: "center" }}>
-          <AppText variant="heading3" style={{ color: "#fff" }}>
-            {toTitleCase(selectedStaff?.name ?? "")}
-          </AppText>
-          <AppText variant="caption" style={{ color: "rgba(255,255,255,0.5)" }}>
-            ID: {selectedStaff?.id}
-          </AppText>
+        <View style={{ flex: 1 }}>
+          <AppText variant="heading3" style={{ color: "#fff" }}>Scan Attendance</AppText>
         </View>
         <Pressable onPress={onClose} hitSlop={8} style={{ padding: spacing[2] }}>
           <X size={24} color="#fff" strokeWidth={2} />
         </Pressable>
       </View>
 
-      <View style={styles.scanCenter}>
-        <FingerprintScanner isScanning={phase === "scanning"} />
-      </View>
-
-      <View style={styles.scanBottom}>
-        {phase === "scanning" ? (
+      {phase === "scanning" ? (
+        <View style={styles.scanCenter}>
           <ActivityIndicator size="large" color="#fff" />
-        ) : (
-          <Pressable onPress={handleScan} style={styles.scanBtn}>
-            <Fingerprint size={32} color="#fff" strokeWidth={1.5} />
-            <AppText variant="bodyMedium" style={{ color: "#fff" }}>Scan Fingerprint</AppText>
-          </Pressable>
-        )}
-      </View>
+        </View>
+      ) : (
+        <View style={styles.cameraFill}>
+          <FaceCamera onCapture={handleCapture} />
+        </View>
+      )}
     </View>
   )
 }
@@ -327,8 +316,16 @@ export default function AttendanceScreen() {
   const router = useRouter()
   const [modalOpen, setModalOpen] = useState(false)
   const today = moment().format("YYYY-MM-DD")
+  const { isAdmin } = useRole()
+
+  // Redirect if not admin or manager
+  if (!isAdmin) {
+    router.replace("/(admin)")
+    return null
+  }
 
   const { data, isLoading, refetch, isRefetching } = useAttendance(today)
+  const { data: summaryData, isLoading: summaryLoading } = useAttendanceSummary(today)
 
   const summary = data?.summary ?? { present: 0, late: 0, absent: 0 }
   const records = data?.data ?? []
@@ -353,12 +350,18 @@ export default function AttendanceScreen() {
       </View>
 
       {/* Summary */}
-      <SummaryBar
-        present={summary.present}
-        late={summary.late}
-        absent={summary.absent}
-        isLoading={isLoading}
-      />
+      <View style={{ marginVertical: spacing[4] }}>
+        <SummaryBar
+          present={summaryData?.presentCount ?? summary.present}
+          late={summaryData?.lateCount ?? summary.late}
+          absent={summaryData?.absentCount ?? summary.absent}
+          isLoading={isLoading || summaryLoading}
+        />
+        <ExtendedSummary
+          summary={summaryData}
+          isLoading={summaryLoading}
+        />
+      </View>
 
       {/* List */}
       <FlatList
@@ -373,7 +376,7 @@ export default function AttendanceScreen() {
         refreshing={isRefetching}
         onRefresh={refetch}
         ListEmptyComponent={
-          isLoading ? (
+          (isLoading || summaryLoading) ? (
             <ActivityIndicator size="large" color={colors.accent} style={styles.center} />
           ) : (
             <View style={styles.center}>
@@ -391,17 +394,17 @@ export default function AttendanceScreen() {
           { backgroundColor: colors.accent, opacity: pressed ? 0.8 : 1 },
         ]}
       >
-        <Fingerprint size={26} color="#fff" strokeWidth={1.75} />
+        <CameraIcon size={26} color="#fff" strokeWidth={1.75} />
       </Pressable>
 
-      {/* Fingerprint modal */}
+      {/* Scan modal */}
       <Modal
         visible={modalOpen}
         animationType="slide"
         statusBarTranslucent
         onRequestClose={() => setModalOpen(false)}
       >
-        <FingerprintModal
+        <ScanModal
           onClose={() => setModalOpen(false)}
           onSuccess={refetch}
         />
@@ -410,7 +413,7 @@ export default function AttendanceScreen() {
   )
 }
 
-// ─── styles ──────────────────────────────────────────────────────────────────
+// ─── styles ────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
@@ -437,6 +440,22 @@ const styles = StyleSheet.create({
   summaryRow: { flexDirection: "row", alignItems: "center" },
   summaryItem: { alignItems: "center", gap: spacing[1], paddingHorizontal: spacing[4] },
   summaryDivider: { width: StyleSheet.hairlineWidth, height: 32 },
+
+  // Extended Summary Styles
+  extendedSummaryContainer: {
+    marginVertical: spacing[2],
+  },
+  extendedSummaryRow: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    flexWrap: "wrap",
+  },
+  extendedSummaryItem: {
+    alignItems: "center",
+    marginVertical: spacing[1],
+    paddingHorizontal: spacing[2],
+    minWidth: 80,
+  },
 
   center: {
     alignItems: "center",
@@ -519,6 +538,9 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+  },
+  cameraFill: {
+    flex: 1,
   },
   scanBottom: {
     alignItems: "center",

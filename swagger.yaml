@@ -2015,6 +2015,7 @@ paths:
                 promisedAmount:
                   type: number
                   nullable: true
+                  description: Ignored/overridden when outcome is promisedToPay - the server always sets it to the customer's current live outstanding balance in that case (promisedToPay means the full amount by definition; use promisedPartial for a custom figure)
                   example: 5000
                 promisedDate:
                   type: string
@@ -2133,6 +2134,7 @@ paths:
                     - reminderSent
                 promisedAmount:
                   type: number
+                  description: Ignored/overridden if the resulting outcome (this update's, or the existing one if outcome isn't being changed) is promisedToPay - see POST /followups
                 promisedDate:
                   type: string
                   format: date
@@ -3171,35 +3173,35 @@ paths:
     post:
       tags:
         - Attendance
-      summary: Scan fingerprint for attendance (check-in/check-out)
-      description: Scan staff member's fingerprint for attendance marking. Public endpoint (no auth required). Toggle between check-in and check-out automatically. Supports multiple sessions per day.
+      summary: Scan a face photo for attendance (check-in/check-out)
+      description: |
+        Public endpoint (no auth required) - camera-first, no staff pre-selected. Runs face recognition
+        against all enrolled staff (open-set search) to identify the closest match, then automatically
+        toggles check-in/check-out based on that staff member's existing sessions for the day.
+        Duplicate/too-soon scans are rejected server-side using the existing fraud-prevention gap
+        (MIN_GAP_FOR_CHECKOUT / MIN_GAP_FOR_NEW_SESSION) - in that case the response has matched: true
+        but success: false with an error message, and no action/attendance fields.
       requestBody:
         required: true
         content:
-          application/json:
+          multipart/form-data:
             schema:
               type: object
               required:
-                - staffId
-                - fingerprintTemplate
+                - photo
                 - timestamp
               properties:
-                staffId:
-                  type: integer
-                  example: 2645
-                  description: Staff ID to identify the employee
-                fingerprintTemplate:
+                photo:
                   type: string
-                  format: byte
-                  example: "QmFzZTY0RW5jb2RlZEZpbmdlcnByaW50VGVtcGxhdGU="
-                  description: Base64 encoded fingerprint template from device sensor
+                  format: binary
+                  description: JPEG/PNG/WEBP photo captured from the device camera (max 5MB by default)
                 timestamp:
                   type: string
                   format: date-time
-                  example: 2026-06-29T09:30:45.123Z
+                  description: ISO timestamp of the scan
       responses:
         '200':
-          description: Fingerprint scan result (matched)
+          description: Scan result (check response body for success/matched, not just HTTP status)
           content:
             application/json:
               schema:
@@ -3207,29 +3209,32 @@ paths:
                 properties:
                   success:
                     type: boolean
-                    example: true
                   matched:
                     type: boolean
-                    example: true
                   staff:
                     type: object
                     properties:
                       id:
                         type: integer
-                        example: 2645
                       name:
                         type: string
-                        example: ANAS
                   confidence:
                     type: number
-                    example: 0.95
-                    description: Fingerprint match confidence (0-1), 0.90+ required
+                    description: 0-1 similarity score, shown as a rounded percentage in the UI
+                  reason:
+                    type: string
+                    enum: [no_match, low_confidence, no_face_detected]
+                    description: Present when matched is false
+                  error:
+                    type: string
+                    description: Present when success is false (no-match, no-face, or a matched-but-rejected scan e.g. duplicate/too-soon)
                   action:
                     type: string
                     enum: [checkIn, checkOut]
-                    example: checkIn
+                    description: Present when matched is true and the scan was accepted
                   attendance:
                     type: object
+                    description: Present when matched is true and the scan was accepted - that staff member's updated day summary
                     properties:
                       id:
                         type: string
@@ -3237,13 +3242,10 @@ paths:
                         type: integer
                       date:
                         type: string
-                        example: 2026-06-29
                       sessionCount:
                         type: integer
-                        example: 1
                       sessions:
                         type: array
-                        description: Multiple sessions for breaks and meals
                         items:
                           type: object
                           properties:
@@ -3261,22 +3263,36 @@ paths:
                               nullable: true
                       totalWorkHours:
                         type: number
-                        example: 2.5
+                        nullable: true
                       totalBreakTime:
                         type: number
-                        example: 0.5
+                        nullable: true
+                      overtimeHours:
+                        type: number
+                        nullable: true
                       status:
                         type: string
-                        enum: [present, absent, late]
+                        enum: [present, late, absent]
+                      isOnLeave:
+                        type: boolean
+                      leaveType:
+                        type: string
+                        nullable: true
         '400':
-          description: Bad request - invalid fingerprint or staff not found
+          description: Missing photo/timestamp, or unsupported photo format
+        '500':
+          description: Scan failed
 
   /attendance/enroll/{staffId}:
     post:
       tags:
         - Attendance
-      summary: Enroll staff member's fingerprint
-      description: Register a staff member's fingerprint for attendance recognition. Requires 3 scans minimum for optimal accuracy. Progressive enrollment (call this endpoint 3 times).
+      summary: Enroll (or add) a staff member's reference photo
+      description: |
+        Uploads one face photo, extracts its descriptor, and appends it to that staff member's
+        enrolled reference set (up to MAX_ENROLLMENT_PHOTOS, oldest dropped beyond that). A staff
+        member becomes scan-eligible once MIN_ENROLLMENT_PHOTOS is reached (default 1).
+        Requires owner, manager, or superAdmin role.
       security:
         - BearerAuth: []
       parameters:
@@ -3285,24 +3301,22 @@ paths:
           required: true
           schema:
             type: integer
-            example: 2645
       requestBody:
         required: true
         content:
-          application/json:
+          multipart/form-data:
             schema:
               type: object
               required:
-                - fingerprintTemplate
+                - photo
               properties:
-                fingerprintTemplate:
+                photo:
                   type: string
-                  format: byte
-                  example: "QmFzZTY0RW5jb2RlZEZpbmdlcnByaW50VGVtcGxhdGU="
-                  description: Base64 encoded fingerprint template from device sensor
+                  format: binary
+                  description: JPEG/PNG/WEBP photo with a single clear, well-lit face (max 5MB by default)
       responses:
         '200':
-          description: Fingerprint enrollment successful
+          description: Photo enrolled
           content:
             application/json:
               schema:
@@ -3310,20 +3324,46 @@ paths:
                 properties:
                   success:
                     type: boolean
-                    example: true
                   message:
                     type: string
-                    example: Fingerprint enrolled successfully
-                  enrollmentCount:
+                  staffId:
                     type: integer
-                    example: 1
-                    description: Current enrollment count (1, 2, or 3)
+                  photoCount:
+                    type: integer
                   readyForAttendance:
                     type: boolean
-                    example: false
-                    description: true when enrollmentCount reaches 3
         '400':
-          description: Invalid fingerprint template format
+          description: Missing photo, unsupported format, or no face detected in photo
+        '403':
+          description: Forbidden - insufficient permissions
+        '404':
+          description: Staff not found
+
+    delete:
+      tags:
+        - Attendance
+      summary: Delete a staff member's enrolled photo(s)
+      description: Removes all enrolled reference photos/descriptors for a staff member. They can re-enroll afterward. Requires owner, manager, or superAdmin role.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Enrollment cleared
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        '403':
+          description: Forbidden - insufficient permissions
         '404':
           description: Staff not found
 
@@ -3396,13 +3436,92 @@ paths:
                         totalBreakTime:
                           type: number
                           nullable: true
+                        overtimeHours:
+                          type: number
+                          nullable: true
                         status:
                           type: string
                           enum: [present, absent, late]
+                        isOnLeave:
+                          type: boolean
+                        leaveType:
+                          type: string
+                          nullable: true
         '400':
           description: Invalid date format
         '403':
           description: Forbidden
+
+  /attendance/summary/{date}:
+    get:
+      tags:
+        - Attendance
+      summary: Get attendance summary for dashboard
+      description: Retrieve aggregated attendance statistics for a specific date for dashboard view. Includes counts of present/absent/late/on leave staff, total and average work hours, break time, and attendance rate. Accessible only to managers and super admins.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: date
+          in: path
+          required: true
+          schema:
+            type: string
+            format: date
+            example: 2026-06-29
+      responses:
+        '200':
+          description: Attendance summary statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  date:
+                    type: string
+                    example: 2026-06-29
+                  totalStaff:
+                    type: integer
+                    example: 50
+                  presentCount:
+                    type: integer
+                    example: 45
+                  absentCount:
+                    type: integer
+                    example: 3
+                  lateCount:
+                    type: integer
+                    example: 2
+                  onLeaveCount:
+                    type: integer
+                    example: 0
+                  totalWorkHours:
+                    type: number
+                    format: float
+                    example: 360.5
+                  totalBreakTime:
+                    type: number
+                    format: float
+                    example: 45.0
+                  averageWorkHours:
+                    type: number
+                    format: float
+                    example: 8.0
+                  averageBreakTime:
+                    type: number
+                    format: float
+                    example: 1.0
+                  attendanceRate:
+                    type: number
+                    format: float
+                    example: 94.0
+        '400':
+          description: Missing or invalid date parameter
+        '403':
+          description: Forbidden - insufficient permissions (manager/superAdmin required)
+        '500':
+          description: Internal server error
 
   /attendance/my-history:
     get:
@@ -3483,79 +3602,6 @@ paths:
                               type: number
                             status:
                               type: string
-
-  /attendance/biometric-status/{staffId}:
-    get:
-      tags:
-        - Attendance
-      summary: Get biometric fingerprint enrollment status
-      description: Check if staff member has completed fingerprint enrollment and is ready for attendance scanning.
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: staffId
-          in: path
-          required: true
-          schema:
-            type: integer
-      responses:
-        '200':
-          description: Fingerprint enrollment status
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                  staffId:
-                    type: integer
-                  name:
-                    type: string
-                  enrolled:
-                    type: boolean
-                  enrollmentCount:
-                    type: integer
-                    description: Number of fingerprints enrolled (0-3)
-                  readyForAttendance:
-                    type: boolean
-                    description: true when enrollmentCount >= 3
-                  enrolledAt:
-                    type: string
-                    format: date-time
-                    nullable: true
-
-  /attendance/biometric-enrollment/{staffId}:
-    delete:
-      tags:
-        - Attendance
-      summary: Delete fingerprint enrollment (reset)
-      description: Remove all fingerprint enrollment data for a staff member. They can re-enroll afterward. Requires owner, manager, or superAdmin role.
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: staffId
-          in: path
-          required: true
-          schema:
-            type: integer
-      responses:
-        '200':
-          description: Fingerprint enrollment cleared
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                  message:
-                    type: string
-                    example: Biometric enrollment cleared
-        '403':
-          description: Forbidden - insufficient permissions
-        '404':
-          description: Staff not found
 
   /leaves/request:
     post:
@@ -5173,6 +5219,14 @@ components:
           type: number
           nullable: true
           example: null
+        hasPhoto:
+          type: boolean
+          description: Whether the staff member has at least one enrolled face photo
+          example: false
+        photoCount:
+          type: integer
+          description: Number of enrolled reference photos
+          example: 0
         createdAt:
           type: string
           format: date-time
@@ -5792,7 +5846,7 @@ tags:
   - name: Dashboard
     description: Company-wide overview and reporting for managers/superAdmin
   - name: Attendance
-    description: Biometric fingerprint attendance tracking and management
+    description: Staff attendance tracking and management
   - name: Leaves
     description: Leave request and approval tracking
   - name: Appearance

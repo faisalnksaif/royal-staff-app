@@ -1,33 +1,46 @@
 import api from "./apiClient"
-import type { AttendanceScanResponse, AttendanceDayResponse, StaffListResponse } from "../types"
+import { ContentType } from "./generated/Api"
+import type { AttendanceScanResponse, AttendanceDayResponse, StaffListResponse, FaceEnrollResponse } from "../types"
 
-async function scanFingerprint(
-  staffId: number,
-  fingerprintTemplate: string,
-  timestamp: string
-): Promise<AttendanceScanResponse> {
+async function photoToFormFile(photoUri: string): Promise<Blob> {
+  const response = await fetch(photoUri)
+  return await response.blob()
+}
+
+async function scanFace(photoUri: string, timestamp: string): Promise<AttendanceScanResponse> {
+  const photoBlob = await photoToFormFile(photoUri)
   const { data } = await api.http.request<AttendanceScanResponse>({
     path: "/attendance/scan",
     method: "POST",
-    body: { staffId, fingerprintTemplate, timestamp },
+    body: { photo: photoBlob, timestamp },
+    type: ContentType.FormData,
     secure: true,
     format: "json",
   })
   return data
 }
 
-async function enrollFingerprint(
-  staffId: number,
-  fingerprintTemplate: string
-): Promise<{ success: boolean; message: string; enrollmentCount: number; readyForAttendance: boolean }> {
-  const { data } = await api.http.request({
+async function enrollFace(staffId: number, photoUri: string): Promise<FaceEnrollResponse> {
+  const photoBlob = await photoToFormFile(photoUri)
+  const { data } = await api.http.request<FaceEnrollResponse>({
     path: `/attendance/enroll/${staffId}`,
     method: "POST",
-    body: { fingerprintTemplate },
+    body: { photo: photoBlob },
+    type: ContentType.FormData,
     secure: true,
     format: "json",
   })
-  return data as { success: boolean; message: string; enrollmentCount: number; readyForAttendance: boolean }
+  return data
+}
+
+async function deleteFaceEnrollment(staffId: number): Promise<{ success: boolean }> {
+  const { data } = await api.http.request<{ success: boolean }>({
+    path: `/attendance/enroll/${staffId}`,
+    method: "DELETE",
+    secure: true,
+    format: "json",
+  })
+  return data
 }
 
 async function getAttendance(date: string): Promise<AttendanceDayResponse> {
@@ -50,4 +63,4 @@ async function getStaff(): Promise<StaffListResponse> {
   return data
 }
 
-export const attendanceService = { scanFingerprint, enrollFingerprint, getAttendance, getStaff }
+export const attendanceService = { scanFace, enrollFace, deleteFaceEnrollment, getAttendance, getStaff }
