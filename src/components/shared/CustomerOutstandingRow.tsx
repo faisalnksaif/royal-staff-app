@@ -91,6 +91,11 @@ export default function CustomerOutstandingRow({ item, index }: Props) {
               <AppText variant="caption" style={{ color: palette.warning.default, fontSize: 10 }}>Overdue</AppText>
             </View>
           )}
+          {item.is_in_red_list && (
+            <View style={[styles.pill, { backgroundColor: palette.error.default + "22" }]}>
+              <AppText variant="caption" style={{ color: palette.error.default, fontSize: 10 }}>Red list</AppText>
+            </View>
+          )}
           <AppText variant="mono" style={{ color: balanceColor, fontSize: 16 }}>
             ₹{formatAmount(item.outstanding_balance)}{item.outstanding_dr_cr === "Cr" ? " Cr" : ""}
           </AppText>

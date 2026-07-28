@@ -42,6 +42,7 @@ if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental
 const OUTSTANDING_FILTERS: { value: LedgerOutstandingFilter; label: string }[] = [
   { value: "all",              label: "All" },
   { value: "overdue",         label: "Overdue" },
+  { value: "red_list",        label: "Red list" },
   { value: "open_followup",   label: "Open follow-up" },
   { value: "followed_up",     label: "Followed up" },
   { value: "not_followed_up", label: "Not contacted" },

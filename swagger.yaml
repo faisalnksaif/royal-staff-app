@@ -797,12 +797,14 @@ paths:
           in: query
           description: >
             Filter by follow-up status. `paid` means the customer has at
-            least one follow-up resolved by a payment. `follow_up_insights`
+            least one follow-up resolved by a payment. `red_list` means the
+            customer's last purchase was 21+ days ago and no payment has
+            been made since that purchase. `follow_up_insights`
             in the response is always computed over the full owned set,
             regardless of this filter.
           schema:
             type: string
-            enum: [all, followed_up, not_followed_up, paid, overdue, open_followup]
+            enum: [all, followed_up, not_followed_up, paid, overdue, open_followup, red_list]
             default: all
         - name: sortBy
           in: query
@@ -967,6 +969,9 @@ paths:
                         days_since_last_payment:
                           type: integer
                           nullable: true
+                        is_in_red_list:
+                          type: boolean
+                          description: True if last_purchase_date is 21+ days ago and no payment has been made since that purchase
                         is_new:
                           type: boolean
                           description: First synced from rowbest within the last `newDays` days
@@ -982,7 +987,7 @@ paths:
                           nullable: true
                   filter:
                     type: string
-                    enum: [all, followed_up, not_followed_up, paid, overdue, open_followup]
+                    enum: [all, followed_up, not_followed_up, paid, overdue, open_followup, red_list]
                     description: The filter that was applied to `data`
                   retention_status:
                     type: string
@@ -1084,10 +1089,14 @@ paths:
             type: string
         - name: filter
           in: query
-          description: Filter by follow-up status. `paid` means the customer has at least one follow-up resolved by a payment.
+          description: >
+            Filter by follow-up status. `paid` means the customer has at
+            least one follow-up resolved by a payment. `red_list` means the
+            customer's last purchase was 21+ days ago and no payment has
+            been made since that purchase.
           schema:
             type: string
-            enum: [all, followed_up, not_followed_up, paid, overdue, open_followup]
+            enum: [all, followed_up, not_followed_up, paid, overdue, open_followup, red_list]
             default: all
         - name: sortBy
           in: query
@@ -1230,6 +1239,9 @@ paths:
                         days_since_last_payment:
                           type: integer
                           nullable: true
+                        is_in_red_list:
+                          type: boolean
+                          description: True if last_purchase_date is 21+ days ago and no payment has been made since that purchase
                         is_new:
                           type: boolean
                           description: First synced from rowbest within the last `newDays` days
@@ -1245,7 +1257,7 @@ paths:
                           nullable: true
                   filter:
                     type: string
-                    enum: [all, followed_up, not_followed_up, paid, overdue, open_followup]
+                    enum: [all, followed_up, not_followed_up, paid, overdue, open_followup, red_list]
                   retention_status:
                     type: string
                     enum: [all, active, at_risk, churned, never_purchased]

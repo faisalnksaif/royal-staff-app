@@ -1439,7 +1439,7 @@ export class Api<SecurityDataType extends unknown> {
         /** Filter by customer name */
         search?: string;
         /**
-         * Filter by follow-up status. `paid` means the customer has at least one follow-up resolved by a payment. `follow_up_insights` in the response is always computed over the full owned set, regardless of this filter.
+         * Filter by follow-up status. `paid` means the customer has at least one follow-up resolved by a payment. `red_list` means the customer's last purchase was 21+ days ago and no payment has been made since that purchase. `follow_up_insights` in the response is always computed over the full owned set, regardless of this filter.
          * @default "all"
          */
         filter?:
@@ -1448,7 +1448,8 @@ export class Api<SecurityDataType extends unknown> {
           | "not_followed_up"
           | "paid"
           | "overdue"
-          | "open_followup";
+          | "open_followup"
+          | "red_list";
         /**
          * `priority` (default) ranks by worst-case risk, highest first: (1) overdue follow-up - a promise was already missed, (2) churned + still owes money (Dr balance) - stopped buying and hasn't paid, the highest bad-debt risk, (3) never followed up at all + still owes money - a coverage gap, (4) at_risk (buying is slowing down) + still owes money, (5) everyone else. Within each tier, longest since last payment first (customers who have never paid sort before any finite gap), then highest outstanding_balance. "balance" is the simple outstanding_balance-descending sort with no risk weighting. "newest" sorts by created_at descending (most recently synced first).
          * @default "priority"
@@ -1557,6 +1558,8 @@ export class Api<SecurityDataType extends unknown> {
             last_payment_date?: string | null;
             last_payment_amount?: number | null;
             days_since_last_payment?: number | null;
+            /** True if last_purchase_date is 21+ days ago and no payment has been made since that purchase */
+            is_in_red_list?: boolean;
             /** First synced from rowbest within the last `newDays` days */
             is_new?: boolean;
             /**
@@ -1575,7 +1578,8 @@ export class Api<SecurityDataType extends unknown> {
             | "not_followed_up"
             | "paid"
             | "overdue"
-            | "open_followup";
+            | "open_followup"
+            | "red_list";
           retention_status?:
             | "all"
             | "active"
@@ -1642,7 +1646,7 @@ export class Api<SecurityDataType extends unknown> {
         /** Filter by customer name */
         search?: string;
         /**
-         * Filter by follow-up status. `paid` means the customer has at least one follow-up resolved by a payment.
+         * Filter by follow-up status. `paid` means the customer has at least one follow-up resolved by a payment. `red_list` means the customer's last purchase was 21+ days ago and no payment has been made since that purchase.
          * @default "all"
          */
         filter?:
@@ -1651,7 +1655,8 @@ export class Api<SecurityDataType extends unknown> {
           | "not_followed_up"
           | "paid"
           | "overdue"
-          | "open_followup";
+          | "open_followup"
+          | "red_list";
         /**
          * `priority` (default) ranks by worst-case risk, highest first: (1) overdue follow-up - a promise was already missed, (2) churned + still owes money (Dr balance) - stopped buying and hasn't paid, the highest bad-debt risk, (3) never followed up at all + still owes money - a coverage gap, (4) at_risk (buying is slowing down) + still owes money, (5) everyone else. Within each tier, longest since last payment first (customers who have never paid sort before any finite gap), then highest outstanding_balance. `balance` is the simple outstanding_balance-descending sort with no risk weighting. `newest` sorts by created_at descending (most recently synced first).
          * @default "priority"
@@ -1745,6 +1750,8 @@ export class Api<SecurityDataType extends unknown> {
             last_payment_date?: string | null;
             last_payment_amount?: number | null;
             days_since_last_payment?: number | null;
+            /** True if last_purchase_date is 21+ days ago and no payment has been made since that purchase */
+            is_in_red_list?: boolean;
             /** First synced from rowbest within the last `newDays` days */
             is_new?: boolean;
             /**
@@ -1762,7 +1769,8 @@ export class Api<SecurityDataType extends unknown> {
             | "not_followed_up"
             | "paid"
             | "overdue"
-            | "open_followup";
+            | "open_followup"
+            | "red_list";
           retention_status?:
             | "all"
             | "active"

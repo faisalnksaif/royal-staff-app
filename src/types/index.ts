@@ -146,6 +146,7 @@ export interface LedgerCustomerOutstanding {
   last_payment_date: string | null
   last_payment_amount: number | null
   days_since_last_payment: number | null
+  is_in_red_list?: boolean
   is_new?: boolean
   created_at?: string
   on_hold?: boolean
@@ -176,7 +177,7 @@ export interface LedgerOutstandingResponse {
   retention_thresholds?: { activeDays: number; churnedDays: number }
 }
 
-export type LedgerOutstandingFilter = "all" | "followed_up" | "not_followed_up" | "paid" | "overdue" | "open_followup"
+export type LedgerOutstandingFilter = "all" | "followed_up" | "not_followed_up" | "paid" | "overdue" | "open_followup" | "red_list"
 
 
 export interface LedgerOutstandingParams {
