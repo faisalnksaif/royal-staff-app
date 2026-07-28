@@ -41,7 +41,7 @@ const RETENTION_STATUS_FILTERS: { value: RetentionStatus | "all"; label: string 
   { value: "all",             label: "All" },
   { value: "active",          label: "Active" },
   { value: "at_risk",         label: "At Risk" },
-  { value: "churned",         label: "Churned" },
+  { value: "churned",         label: "Inactive" },
   { value: "never_purchased", label: "Never Purchased" },
 ]
 

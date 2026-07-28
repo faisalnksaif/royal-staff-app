@@ -79,14 +79,21 @@ const CUSTOMER_FILTERS: { value: LedgerOutstandingFilter; label: string }[] = [
 ]
 
 
+const CUSTOMER_SORTS: { value: "priority" | "balance" | "newest"; label: string }[] = [
+  { value: "priority", label: "Priority ↑" },
+  { value: "balance",  label: "Balance ↑" },
+  { value: "newest",   label: "New Customer" },
+]
+
 function CustomersTab({ staffId }: { staffId: number }) {
   const { colors } = useTheme()
   const [searchInput, setSearchInput] = useState("")
   const debouncedSearch = useDebounce(searchInput, 400)
   const [activeFilter, setActiveFilter] = useState<LedgerOutstandingFilter>("all")
+  const [sortBy, setSortBy] = useState<"priority" | "balance" | "newest">("priority")
 
   const { data, isLoading, isFetchingNextPage, hasNextPage, fetchNextPage } =
-    useStaffCustomers(staffId, { limit: 20, search: debouncedSearch || undefined, filter: activeFilter })
+    useStaffCustomers(staffId, { limit: 20, search: debouncedSearch || undefined, filter: activeFilter, sortBy })
 
   const customerList = data?.pages.flatMap((p) => p.data) ?? []
 
@@ -135,6 +142,25 @@ function CustomersTab({ staffId }: { staffId: number }) {
                   }]}
                 >
                   <AppText variant="caption" style={{ color: isActive ? "#fff" : colors.text.secondary }}>
+                    {label}
+                  </AppText>
+                </TouchableOpacity>
+              )
+            })}
+            <View style={[styles.sortDivider, { backgroundColor: colors.border }]} />
+            {CUSTOMER_SORTS.map(({ value, label }) => {
+              const isActive = sortBy === value
+              return (
+                <TouchableOpacity
+                  key={value}
+                  activeOpacity={0.7}
+                  onPress={() => setSortBy(value)}
+                  style={[styles.filterChip, {
+                    backgroundColor: isActive ? colors.text.primary + "18" : colors.background.secondary,
+                    borderColor: isActive ? colors.text.primary : colors.border,
+                  }]}
+                >
+                  <AppText variant="caption" style={{ color: isActive ? colors.text.primary : colors.text.tertiary }}>
                     {label}
                   </AppText>
                 </TouchableOpacity>
@@ -396,6 +422,7 @@ const styles = StyleSheet.create({
   filterWrap: { borderBottomWidth: StyleSheet.hairlineWidth, flexGrow: 0 },
   filterChipRow: { flexDirection: "row", paddingHorizontal: spacing[4], paddingVertical: spacing[2], gap: spacing[2] },
   filterChip: { paddingHorizontal: spacing[3], paddingVertical: spacing[1] + 2, borderRadius: 20, borderWidth: 1 },
+  sortDivider: { width: StyleSheet.hairlineWidth, marginVertical: spacing[2] },
   customerCard: { padding: 0, overflow: "hidden" },
   overdueCard: { borderLeftWidth: 3, borderLeftColor: palette.warning.default },
   settledCard: { borderLeftWidth: 3, borderLeftColor: palette.success.default },
