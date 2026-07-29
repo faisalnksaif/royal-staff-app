@@ -1,5 +1,5 @@
 import { toTitleCase } from "../../utils/helpers"
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import {
   View,
   FlatList,
@@ -7,8 +7,12 @@ import {
   StyleSheet,
   Pressable,
   Modal,
+  Animated,
+  Easing,
 } from "react-native"
 import { useRouter } from "expo-router"
+import { useAudioPlayer } from "expo-audio"
+import * as Haptics from "expo-haptics"
 import { Camera as CameraIcon, CheckCircle, XCircle, X, UserPlus, BarChart3 } from "lucide-react-native"
 import BackButton from "../../components/shared/BackButton"
 import RefreshButton from "../../components/shared/RefreshButton"
@@ -123,6 +127,53 @@ function AttendanceRow({ record }: { record: AttendanceRecord }) {
   )
 }
 
+// ─── SuccessCheckmark ─────────────────────────────────────────────────────────
+
+function SuccessCheckmark() {
+  const scale = useRef(new Animated.Value(0)).current
+  const ringScale = useRef(new Animated.Value(0.4)).current
+  const ringOpacity = useRef(new Animated.Value(0.5)).current
+
+  useEffect(() => {
+    Animated.sequence([
+      Animated.spring(scale, {
+        toValue: 1,
+        friction: 4,
+        tension: 140,
+        useNativeDriver: true,
+      }),
+    ]).start()
+    Animated.parallel([
+      Animated.timing(ringScale, {
+        toValue: 1.6,
+        duration: 550,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
+      Animated.timing(ringOpacity, {
+        toValue: 0,
+        duration: 550,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
+    ]).start()
+  }, [])
+
+  return (
+    <View style={styles.checkmarkWrap}>
+      <Animated.View
+        style={[
+          styles.checkmarkRing,
+          { borderColor: palette.success.default, transform: [{ scale: ringScale }], opacity: ringOpacity },
+        ]}
+      />
+      <Animated.View style={{ transform: [{ scale }] }}>
+        <CheckCircle size={80} color={palette.success.default} strokeWidth={1.5} />
+      </Animated.View>
+    </View>
+  )
+}
+
 // ─── ScanModal ────────────────────────────────────────────────────────────────
 
 type ScanPhase = "camera" | "scanning" | "result" | "no_match" | "error"
@@ -137,6 +188,7 @@ function ScanModal({
   const [phase, setPhase] = useState<ScanPhase>("camera")
   const [scanResult, setScanResult] = useState<AttendanceScanResponse | null>(null)
   const [errorMsg, setErrorMsg] = useState("")
+  const successPlayer = useAudioPlayer(require("../../../assets/sounds/success.mp3"))
 
   async function handleCapture(photoUri: string) {
     setPhase("scanning")
@@ -145,6 +197,9 @@ function ScanModal({
       setScanResult(res)
       setPhase(res.matched ? "result" : "no_match")
       if (res.matched) {
+        successPlayer.seekTo(0)
+        successPlayer.play()
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
         setTimeout(() => { onSuccess(); onClose() }, 2500)
       }
     } catch (e) {
@@ -168,7 +223,7 @@ function ScanModal({
         </Pressable>
 
         {isSuccess ? (
-          <CheckCircle size={80} color={palette.success.default} strokeWidth={1.5} />
+          <SuccessCheckmark />
         ) : (
           <XCircle size={80} color={palette.error.default} strokeWidth={1.5} />
         )}
@@ -355,6 +410,20 @@ const styles = StyleSheet.create({
     gap: spacing[3],
   },
   enrollBtn: { padding: spacing[2] },
+
+  checkmarkWrap: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: 96,
+    height: 96,
+  },
+  checkmarkRing: {
+    position: "absolute",
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    borderWidth: 2,
+  },
 
   summaryBar: {
     flexDirection: "row",
