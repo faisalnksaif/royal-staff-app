@@ -13,7 +13,7 @@ import {
 import { useRouter } from "expo-router"
 import { useAudioPlayer } from "expo-audio"
 import * as Haptics from "expo-haptics"
-import { Camera as CameraIcon, CheckCircle, XCircle, X, UserPlus, BarChart3 } from "lucide-react-native"
+import { Camera as CameraIcon, CheckCircle, XCircle, X, UserPlus, BarChart3, ChevronDown, LogIn, LogOut, AlertTriangle } from "lucide-react-native"
 import BackButton from "../../components/shared/BackButton"
 import RefreshButton from "../../components/shared/RefreshButton"
 import AnimatedListItem from "../../components/shared/AnimatedListItem"
@@ -42,6 +42,7 @@ function statusColor(status: AttendanceRecord["status"]): string {
 }
 
 const STATUS_LABEL = { present: "Present", late: "Late", absent: "Absent" }
+const STATUS_ORDER: Record<AttendanceRecord["status"], number> = { present: 0, late: 1, absent: 2 }
 
 // ─── SummaryBar ───────────────────────────────────────────────────────────────
 
@@ -78,15 +79,88 @@ function SummaryBar({
 
 // ─── AttendanceRow ────────────────────────────────────────────────────────────
 
+function SessionTimeline({ record, color }: { record: AttendanceRecord; color: string }) {
+  const { colors } = useTheme()
+  return (
+    <View style={styles.timeline}>
+      {record.sessions.map((session) => {
+        const isOpen = !session.checkOut && !session.autoClosed
+        return (
+          <View key={session.sessionNumber} style={styles.timelineRow}>
+            <View style={styles.timelineLeft}>
+              <View style={[styles.sessionDot, { backgroundColor: color }]} />
+              <AppText variant="caption" color="tertiary">
+                Session {session.sessionNumber}
+              </AppText>
+            </View>
+
+            <View style={styles.timelineTimes}>
+              <View style={styles.timeChip}>
+                <LogIn size={13} color={palette.success.default} strokeWidth={2} />
+                <AppText variant="caption" style={{ color: colors.text.primary }}>
+                  {moment(session.checkIn).format("HH:mm")}
+                </AppText>
+              </View>
+
+              <View style={[styles.timeDash, { backgroundColor: colors.border as string }]} />
+
+              {session.checkOut ? (
+                <View style={styles.timeChip}>
+                  <LogOut size={13} color={palette.error.default} strokeWidth={2} />
+                  <AppText variant="caption" style={{ color: colors.text.primary }}>
+                    {moment(session.checkOut).format("HH:mm")}
+                  </AppText>
+                </View>
+              ) : session.autoClosed ? (
+                <View style={styles.timeChip}>
+                  <AlertTriangle size={13} color={palette.warning.default} strokeWidth={2} />
+                  <AppText variant="caption" style={{ color: palette.warning.default }}>
+                    Auto-closed
+                  </AppText>
+                </View>
+              ) : (
+                <View style={styles.timeChip}>
+                  <AppText variant="caption" style={{ color: palette.success.default }}>
+                    Still in
+                  </AppText>
+                </View>
+              )}
+
+              {session.workHours != null && (
+                <AppText variant="caption" color="tertiary" style={{ marginLeft: spacing[2] }}>
+                  {session.workHours.toFixed(1)}h
+                </AppText>
+              )}
+            </View>
+
+            {isOpen && (
+              <View style={[styles.liveBadge, { backgroundColor: palette.success.default + "22" }]}>
+                <AppText variant="caption" style={{ color: palette.success.default, fontSize: 10 }}>
+                  Live
+                </AppText>
+              </View>
+            )}
+          </View>
+        )
+      })}
+    </View>
+  )
+}
+
 function AttendanceRow({ record }: { record: AttendanceRecord }) {
   const { colors } = useTheme()
+  const [expanded, setExpanded] = useState(false)
   const color = statusColor(record.status)
   const firstSession = record.sessions?.[0]
   const hasAutoClosed = record.sessions?.some((s) => s.autoClosed)
+  const hasSessions = record.sessions?.length > 0
 
   return (
     <View style={[styles.row, { borderBottomColor: colors.border as string }]}>
-      <View style={styles.rowContent}>
+      <Pressable
+        onPress={() => hasSessions && setExpanded((v) => !v)}
+        style={({ pressed }) => [styles.rowContent, { opacity: pressed && hasSessions ? 0.7 : 1 }]}
+      >
         <StaffAvatar name={record.staffName} color={color} bgColor={color + "22"} />
 
         <View style={styles.rowInfo}>
@@ -122,7 +196,60 @@ function AttendanceRow({ record }: { record: AttendanceRecord }) {
             {STATUS_LABEL[record.status]}
           </AppText>
         </View>
+
+        {hasSessions && (
+          <View style={{ transform: [{ rotate: expanded ? "180deg" : "0deg" }], marginLeft: spacing[1] }}>
+            <ChevronDown size={18} color={colors.text.tertiary} strokeWidth={2} />
+          </View>
+        )}
+      </Pressable>
+
+      {expanded && hasSessions && <SessionTimeline record={record} color={color} />}
+    </View>
+  )
+}
+
+// ─── StaffCardDesktop ─────────────────────────────────────────────────────────
+
+function StaffCardDesktop({ record }: { record: AttendanceRecord }) {
+  const { colors } = useTheme()
+  const color = statusColor(record.status)
+  const hasAutoClosed = record.sessions?.some((s) => s.autoClosed)
+  const hasSessions = record.sessions?.length > 0
+
+  return (
+    <View style={[styles.deskCard, { backgroundColor: colors.background.secondary, borderColor: colors.border as string }]}>
+      <View style={styles.deskCardHeader}>
+        <StaffAvatar name={record.staffName} color={color} bgColor={color + "22"} />
+        <View style={{ flex: 1 }}>
+          <AppText variant="bodyMedium" numberOfLines={1}>{toTitleCase(record.staffName)}</AppText>
+          <View style={styles.deskCardMeta}>
+            {record.totalWorkHours != null && (
+              <AppText variant="caption" color="tertiary">{record.totalWorkHours.toFixed(1)}h today</AppText>
+            )}
+            {hasAutoClosed && (
+              <AppText variant="caption" style={{ color: palette.error.default }}>
+                {record.totalWorkHours != null ? "  ·  " : ""}Missed checkout
+              </AppText>
+            )}
+          </View>
+        </View>
+        <View style={[styles.statusBadge, { backgroundColor: color + "22" }]}>
+          <AppText variant="caption" style={{ color, fontSize: 11 }}>
+            {STATUS_LABEL[record.status]}
+          </AppText>
+        </View>
       </View>
+
+      <View style={[styles.deskCardDivider, { backgroundColor: colors.border as string }]} />
+
+      {hasSessions ? (
+        <SessionTimeline record={record} color={color} />
+      ) : (
+        <View style={styles.deskCardEmpty}>
+          <AppText variant="caption" color="tertiary">Not checked in</AppText>
+        </View>
+      )}
     </View>
   )
 }
@@ -176,7 +303,7 @@ function SuccessCheckmark() {
 
 // ─── ScanModal ────────────────────────────────────────────────────────────────
 
-type ScanPhase = "camera" | "scanning" | "result" | "no_match" | "error"
+type ScanPhase = "camera" | "scanning" | "result" | "no_match" | "rejected" | "error"
 
 function ScanModal({
   onClose,
@@ -195,12 +322,17 @@ function ScanModal({
     try {
       const res = await attendanceService.scanFace(photoUri, new Date().toISOString())
       setScanResult(res)
-      setPhase(res.matched ? "result" : "no_match")
-      if (res.matched) {
+      if (res.matched && res.success) {
+        setPhase("result")
         successPlayer.seekTo(0)
         successPlayer.play()
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
         setTimeout(() => { onSuccess(); onClose() }, 2500)
+      } else if (res.matched && !res.success) {
+        setPhase("rejected")
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)
+      } else {
+        setPhase("no_match")
       }
     } catch (e) {
       setErrorMsg((e as Error).message ?? "Scan failed")
@@ -208,9 +340,10 @@ function ScanModal({
     }
   }
 
-  // ── Result / no-match / error ────────────────────────────────────────────
-  if (phase === "result" || phase === "no_match" || phase === "error") {
+  // ── Result / no-match / rejected / error ─────────────────────────────────
+  if (phase === "result" || phase === "no_match" || phase === "rejected" || phase === "error") {
     const isSuccess = phase === "result"
+    const isRejected = phase === "rejected"
     const staffName = scanResult?.staff?.name ? toTitleCase(scanResult.staff.name) : ""
     const actionLabel = scanResult?.action === "checkOut" ? "Checked Out" : "Checked In"
     const confidence = scanResult?.confidence != null
@@ -224,6 +357,8 @@ function ScanModal({
 
         {isSuccess ? (
           <SuccessCheckmark />
+        ) : isRejected ? (
+          <AlertTriangle size={80} color={palette.warning.default} strokeWidth={1.5} />
         ) : (
           <XCircle size={80} color={palette.error.default} strokeWidth={1.5} />
         )}
@@ -232,7 +367,7 @@ function ScanModal({
           variant="heading2"
           style={{ color: "#fff", marginTop: spacing[5], textAlign: "center" }}
         >
-          {isSuccess ? staffName : "Not Recognized"}
+          {isSuccess || isRejected ? staffName : "Not Recognized"}
         </AppText>
 
         {isSuccess && (
@@ -253,7 +388,11 @@ function ScanModal({
               variant="body"
               style={{ color: "rgba(255,255,255,0.55)", marginTop: spacing[2], textAlign: "center" }}
             >
-              {phase === "error" ? errorMsg : "No matching staff found — please try again"}
+              {phase === "error"
+                ? errorMsg
+                : isRejected
+                  ? (scanResult?.error ?? "Scan rejected — please try again")
+                  : "No matching staff found — please try again"}
             </AppText>
             <View style={{ marginTop: spacing[8] }}>
               <AppButton label="Try Again" onPress={() => setPhase("camera")} />
@@ -298,6 +437,7 @@ export default function AttendanceScreen() {
   const [modalOpen, setModalOpen] = useState(false)
   const today = moment().format("YYYY-MM-DD")
   const { canViewAttendance } = useRole()
+  const numColumns = isTablet ? 3 : 1
 
   // Redirect if not admin, manager, or HR
   if (!canViewAttendance) {
@@ -308,7 +448,9 @@ export default function AttendanceScreen() {
   const { data, isLoading, refetch, isRefetching } = useAttendance(today)
 
   const summary = data?.summary ?? { present: 0, late: 0, absent: 0 }
-  const records = data?.data ?? []
+  const records = [...(data?.data ?? [])].sort(
+    (a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status]
+  )
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background.primary }]}>
@@ -347,27 +489,54 @@ export default function AttendanceScreen() {
       </View>
 
       {/* List */}
-      <FlatList
-        data={records}
-        keyExtractor={(item) => String(item.staffId)}
-        renderItem={({ item, index }) => (
-          <AnimatedListItem index={index}>
-            <AttendanceRow record={item} />
-          </AnimatedListItem>
-        )}
-        contentContainerStyle={{ paddingBottom: spacing[20] }}
-        refreshing={isRefetching}
-        onRefresh={refetch}
-        ListEmptyComponent={
-          isLoading ? (
-            <ActivityIndicator size="large" color={colors.accent} style={styles.center} />
-          ) : (
-            <View style={styles.center}>
-              <AppText color="tertiary">No attendance records for today</AppText>
-            </View>
-          )
-        }
-      />
+      {isTablet ? (
+        <FlatList
+          key={numColumns}
+          data={records}
+          numColumns={numColumns}
+          keyExtractor={(item) => String(item.staffId)}
+          renderItem={({ item, index }) => (
+            <AnimatedListItem index={index} style={{ flex: 1 }}>
+              <StaffCardDesktop record={item} />
+            </AnimatedListItem>
+          )}
+          columnWrapperStyle={numColumns > 1 ? styles.deskGridRow : undefined}
+          contentContainerStyle={styles.deskGridContent}
+          refreshing={isRefetching}
+          onRefresh={refetch}
+          ListEmptyComponent={
+            isLoading ? (
+              <ActivityIndicator size="large" color={colors.accent} style={styles.center} />
+            ) : (
+              <View style={styles.center}>
+                <AppText color="tertiary">No attendance records for today</AppText>
+              </View>
+            )
+          }
+        />
+      ) : (
+        <FlatList
+          data={records}
+          keyExtractor={(item) => String(item.staffId)}
+          renderItem={({ item, index }) => (
+            <AnimatedListItem index={index}>
+              <AttendanceRow record={item} />
+            </AnimatedListItem>
+          )}
+          contentContainerStyle={{ paddingBottom: spacing[20] }}
+          refreshing={isRefetching}
+          onRefresh={refetch}
+          ListEmptyComponent={
+            isLoading ? (
+              <ActivityIndicator size="large" color={colors.accent} style={styles.center} />
+            ) : (
+              <View style={styles.center}>
+                <AppText color="tertiary">No attendance records for today</AppText>
+              </View>
+            )
+          }
+        />
+      )}
 
       {/* FAB */}
       <Pressable
@@ -438,6 +607,38 @@ const styles = StyleSheet.create({
   summaryItem: { alignItems: "center", gap: spacing[1], paddingHorizontal: spacing[4] },
   summaryDivider: { width: StyleSheet.hairlineWidth, height: 32 },
 
+  deskGridContent: {
+    paddingHorizontal: spacing[5],
+    paddingBottom: spacing[20],
+    gap: spacing[4],
+  },
+  deskGridRow: {
+    gap: spacing[4],
+  },
+  deskCard: {
+    flex: 1,
+    borderRadius: radii.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: spacing[4],
+  },
+  deskCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[3],
+  },
+  deskCardMeta: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginTop: spacing[1],
+  },
+  deskCardDivider: {
+    height: StyleSheet.hairlineWidth,
+    marginVertical: spacing[3],
+  },
+  deskCardEmpty: {
+    paddingVertical: spacing[2],
+  },
+
   center: {
     alignItems: "center",
     justifyContent: "center",
@@ -459,6 +660,48 @@ const styles = StyleSheet.create({
   statusBadge: {
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[1],
+    borderRadius: radii.full,
+  },
+
+  timeline: {
+    paddingHorizontal: spacing[5],
+    paddingBottom: spacing[4],
+    gap: spacing[3],
+  },
+  timelineRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[2],
+  },
+  timelineLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[2],
+    width: 84,
+  },
+  sessionDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  timelineTimes: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  timeChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[1],
+  },
+  timeDash: {
+    width: 16,
+    height: StyleSheet.hairlineWidth,
+    marginHorizontal: spacing[2],
+  },
+  liveBadge: {
+    paddingHorizontal: spacing[2],
+    paddingVertical: 2,
     borderRadius: radii.full,
   },
 

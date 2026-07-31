@@ -378,6 +378,7 @@ export interface AttendanceScanResponse {
   staff?: { id: number; name: string }
   confidence?: number
   reason?: "no_match" | "low_confidence" | "no_face_detected"
+  error?: string
   action?: "checkIn" | "checkOut"
   attendance?: {
     id: string
@@ -391,11 +392,16 @@ export interface AttendanceScanResponse {
   }
 }
 
+export type EnrollmentPose = "straight" | "left" | "right"
+
 export interface FaceEnrollResponse {
   success: boolean
   message: string
   staffId: number
+  pose: EnrollmentPose
   photoCount: number
+  posesCaptured: EnrollmentPose[]
+  posesRemaining: EnrollmentPose[]
   readyForAttendance: boolean
 }
 

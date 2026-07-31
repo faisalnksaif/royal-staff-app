@@ -10,7 +10,7 @@ import {
   Image,
 } from "react-native"
 import { useQuery } from "@tanstack/react-query"
-import { X, CheckCircle, UserCheck, RotateCcw } from "lucide-react-native"
+import { X, CheckCircle, UserCheck, RotateCcw, ArrowLeft, ArrowRight, ScanFace, Check } from "lucide-react-native"
 import BackButton from "../../components/shared/BackButton"
 import AppText from "../../components/ui/AppText"
 import AppCard from "../../components/ui/AppCard"
@@ -20,7 +20,7 @@ import FaceCamera from "../../components/shared/FaceCamera"
 import { useTheme } from "../../providers/ThemeProvider"
 import { spacing, colors as palette, radii } from "../../constants/theme"
 import { attendanceService } from "../../services/attendanceService"
-import type { StaffResponse } from "../../types"
+import type { StaffResponse, EnrollmentPose } from "../../types"
 
 // ─── StaffCard ────────────────────────────────────────────────────────────────
 
@@ -38,10 +38,10 @@ function StaffCard({ staff, onSelect }: { staff: StaffResponse; onSelect: () => 
           <View style={styles.staffInfo}>
             <AppText variant="bodyMedium">{toTitleCase(staff.name)}</AppText>
             <AppText variant="caption" color="secondary">
-              {staff.hasPhoto ? "Photo enrolled" : `ID: ${staff.id}`}
+              {staff.photoCount ? `${staff.photoCount}/3 poses enrolled` : `ID: ${staff.id}`}
             </AppText>
           </View>
-          {staff.hasPhoto ? (
+          {(staff.photoCount ?? 0) >= 3 ? (
             <CheckCircle size={18} color={palette.success.default} strokeWidth={1.5} />
           ) : (
             <UserCheck size={18} color={colors.text.tertiary} strokeWidth={1.5} />
@@ -54,6 +54,46 @@ function StaffCard({ staff, onSelect }: { staff: StaffResponse; onSelect: () => 
 
 // ─── EnrollFace ───────────────────────────────────────────────────────────────
 
+const ENROLL_POSES = [
+  { key: "straight", label: "Straight", instruction: "Look straight at the camera", Icon: ScanFace },
+  // Camera preview is not mirrored, so turning your head left moves your
+  // face toward the right of the screen — icon points the way it'll look on screen.
+  { key: "left", label: "Left", instruction: "Turn your head to the left", Icon: ArrowRight },
+  { key: "right", label: "Right", instruction: "Turn your head to the right", Icon: ArrowLeft },
+] as const
+
+function PoseTracker({ capturedPoses }: { capturedPoses: EnrollmentPose[] }) {
+  return (
+    <View style={styles.poseTracker}>
+      {ENROLL_POSES.map((pose) => {
+        const done = capturedPoses.includes(pose.key)
+        return (
+          <View key={pose.key} style={styles.poseStep}>
+            <View
+              style={[
+                styles.poseIconWrap,
+                done && { backgroundColor: palette.success.default },
+              ]}
+            >
+              {done ? (
+                <Check size={16} color="#fff" strokeWidth={2.5} />
+              ) : (
+                <pose.Icon size={16} color="rgba(255,255,255,0.5)" strokeWidth={2} />
+              )}
+            </View>
+            <AppText
+              variant="caption"
+              style={{ color: done ? "#fff" : "rgba(255,255,255,0.5)" }}
+            >
+              {pose.label}
+            </AppText>
+          </View>
+        )
+      })}
+    </View>
+  )
+}
+
 function EnrollFace({
   staff,
   onClose,
@@ -64,18 +104,31 @@ function EnrollFace({
   onDone: (photoCount: number) => void
 }) {
   const [capturedUri, setCapturedUri] = useState<string | null>(null)
+  const [capturedPoses, setCapturedPoses] = useState<EnrollmentPose[]>([])
+  const [readyForAttendance, setReadyForAttendance] = useState(false)
+  const [photoCount, setPhotoCount] = useState(0)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [lastError, setLastError] = useState("")
 
-  async function handleSubmit() {
+  const nextPose =
+    ENROLL_POSES.find((p) => !capturedPoses.includes(p.key)) ?? ENROLL_POSES[0]
+
+  async function handleSavePhoto() {
     if (!capturedUri) return
     setIsSubmitting(true)
     setLastError("")
     try {
-      const res = await attendanceService.enrollFace(staff.id, capturedUri)
-      onDone(res.photoCount)
+      const res = await attendanceService.enrollFace(staff.id, capturedUri, nextPose.key)
+      if (res.readyForAttendance) {
+        onDone(res.photoCount)
+        return
+      }
+      setCapturedPoses(res.posesCaptured)
+      setReadyForAttendance(res.readyForAttendance)
+      setPhotoCount(res.photoCount)
+      setCapturedUri(null)
     } catch (e) {
-      setLastError((e as Error).message ?? "Enrollment failed")
+      setLastError((e as Error).message ?? "Enrollment failed — try again")
     } finally {
       setIsSubmitting(false)
     }
@@ -93,44 +146,53 @@ function EnrollFace({
             {toTitleCase(staff.name)}
           </AppText>
           <AppText variant="caption" style={{ color: "rgba(255,255,255,0.6)" }}>
-            {capturedUri ? "Photo captured" : "Capture reference photo"}
+            {capturedUri
+              ? "Photo captured"
+              : !readyForAttendance
+                ? nextPose.instruction
+                : `${photoCount} photos saved — add more or finish`}
           </AppText>
         </View>
         <View style={{ width: 40 }} />
       </View>
 
+      <PoseTracker capturedPoses={capturedPoses} />
+
       {/* Camera or preview */}
       {capturedUri ? (
         <View style={styles.scanCenter}>
           <Image source={{ uri: capturedUri }} style={styles.preview} resizeMode="cover" />
-          {lastError ? (
-            <AppText
-              variant="caption"
-              style={{ color: palette.error.default, marginTop: spacing[3], textAlign: "center" }}
-            >
-              {lastError}
-            </AppText>
-          ) : null}
         </View>
       ) : (
         <View style={styles.cameraFill}>
-          <FaceCamera onCapture={setCapturedUri} />
+          <View style={styles.poseHintWrap}>
+            <nextPose.Icon size={28} color="#fff" strokeWidth={2} />
+            <AppText variant="bodyMedium" style={{ color: "#fff" }}>
+              {nextPose.instruction}
+            </AppText>
+          </View>
+          <FaceCamera
+            onCapture={(uri) => { setLastError(""); setCapturedUri(uri) }}
+          />
         </View>
       )}
 
       {/* Bottom bar */}
-      {capturedUri && (
+      {capturedUri ? (
         <View style={styles.modalBottom}>
           {isSubmitting ? (
             <ActivityIndicator size="large" color="#fff" />
           ) : (
             <>
-              <Pressable onPress={() => setCapturedUri(null)} style={styles.scanBtn}>
+              <Pressable
+                onPress={() => { setCapturedUri(null); setLastError("") }}
+                style={styles.scanBtn}
+              >
                 <RotateCcw size={22} color="#fff" strokeWidth={1.5} />
                 <AppText variant="bodyMedium" style={{ color: "#fff" }}>Retake</AppText>
               </Pressable>
               <Pressable
-                onPress={handleSubmit}
+                onPress={handleSavePhoto}
                 style={[styles.finishBtn, { backgroundColor: palette.success.default }]}
               >
                 <AppText variant="bodyMedium" style={{ color: "#fff" }}>Save Photo</AppText>
@@ -138,7 +200,25 @@ function EnrollFace({
             </>
           )}
         </View>
-      )}
+      ) : readyForAttendance ? (
+        <View style={styles.modalBottom}>
+          <Pressable
+            onPress={() => onDone(photoCount)}
+            style={[styles.finishBtn, { backgroundColor: palette.success.default }]}
+          >
+            <AppText variant="bodyMedium" style={{ color: "#fff" }}>Finish</AppText>
+          </Pressable>
+        </View>
+      ) : null}
+
+      {/* Error banner — rendered last so it always stacks above the native camera surface */}
+      {lastError ? (
+        <View style={styles.errorBanner} pointerEvents="none">
+          <AppText variant="bodyMedium" style={{ color: "#fff", textAlign: "center" }}>
+            {lastError}
+          </AppText>
+        </View>
+      ) : null}
     </View>
   )
 }
@@ -212,7 +292,7 @@ export default function EnrollScreen() {
         <BackButton />
         <View>
           <AppText variant="heading3">Add / Update Photo</AppText>
-          <AppText variant="caption" color="tertiary">Select staff to capture a reference photo</AppText>
+          <AppText variant="caption" color="tertiary">Select staff to capture reference photos</AppText>
         </View>
       </View>
 
@@ -325,6 +405,46 @@ const styles = StyleSheet.create({
     paddingBottom: spacing[4],
   },
   topBarCenter: { alignItems: "center", gap: spacing[1] },
+  poseTracker: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: spacing[8],
+    paddingBottom: spacing[4],
+  },
+  poseStep: {
+    alignItems: "center",
+    gap: spacing[1],
+  },
+  poseIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: radii.full,
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.3)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  errorBanner: {
+    position: "absolute",
+    top: spacing[20],
+    left: spacing[4],
+    right: spacing[4],
+    paddingVertical: spacing[3],
+    paddingHorizontal: spacing[4],
+    borderRadius: radii.lg,
+    backgroundColor: palette.error.default,
+    zIndex: 10,
+    elevation: 10,
+  },
+  poseHintWrap: {
+    position: "absolute",
+    top: spacing[6],
+    left: 0,
+    right: 0,
+    alignItems: "center",
+    gap: spacing[2],
+    zIndex: 1,
+  },
   scanCenter: {
     flex: 1,
     alignItems: "center",

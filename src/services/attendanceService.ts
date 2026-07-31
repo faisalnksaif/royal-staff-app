@@ -1,6 +1,6 @@
 import api from "./apiClient"
 import { ContentType } from "./generated/Api"
-import type { AttendanceScanResponse, AttendanceDayResponse, AttendanceSummaryResponse, AttendanceDashboardResponse, StaffListResponse, FaceEnrollResponse } from "../types"
+import type { AttendanceScanResponse, AttendanceDayResponse, AttendanceSummaryResponse, AttendanceDashboardResponse, StaffListResponse, FaceEnrollResponse, EnrollmentPose } from "../types"
 
 async function photoToFormFile(photoUri: string): Promise<Blob> {
   const response = await fetch(photoUri)
@@ -20,12 +20,12 @@ async function scanFace(photoUri: string, timestamp: string): Promise<Attendance
   return data
 }
 
-async function enrollFace(staffId: number, photoUri: string): Promise<FaceEnrollResponse> {
+async function enrollFace(staffId: number, photoUri: string, pose: EnrollmentPose): Promise<FaceEnrollResponse> {
   const photoBlob = await photoToFormFile(photoUri)
   const { data } = await api.http.request<FaceEnrollResponse>({
     path: `/attendance/enroll/${staffId}`,
     method: "POST",
-    body: { photo: photoBlob },
+    body: { photo: photoBlob, pose },
     type: ContentType.FormData,
     secure: true,
     format: "json",

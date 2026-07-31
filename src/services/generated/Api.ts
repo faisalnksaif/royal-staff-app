@@ -3208,11 +3208,11 @@ export class Api<SecurityDataType extends unknown> {
       }),
 
     /**
-     * @description Uploads one face photo, extracts its descriptor, and appends it to that staff member's enrolled reference set (up to MAX_ENROLLMENT_PHOTOS, oldest dropped beyond that). A staff member becomes scan-eligible once MIN_ENROLLMENT_PHOTOS is reached (default 1). Requires owner, manager, or superAdmin role.
+     * @description Uploads one face photo for a specific pose (straight, left, or right), extracts its descriptor, and stores it as that pose's reference photo - re-enrolling the same pose replaces the previous photo/descriptor for it. The pose label is provided by the client and is NOT server-validated (no pose/landmark checking is performed) - it's used only for bookkeeping so a staff member becomes scan-eligible (readyForAttendance) once all three required poses (straight, left, right) have been enrolled. Requires owner, manager, or superAdmin role.
      *
      * @tags Attendance
      * @name EnrollCreate
-     * @summary Enroll (or add) a staff member's reference photo
+     * @summary Enroll (or replace) a staff member's reference photo for one pose
      * @request POST:/attendance/enroll/{staffId}
      * @secure
      */
@@ -3224,6 +3224,8 @@ export class Api<SecurityDataType extends unknown> {
          * @format binary
          */
         photo: File;
+        /** Which pose this photo represents - client-labeled, not server-validated */
+        pose: "straight" | "left" | "right";
       },
       params: RequestParams = {},
     ) =>
@@ -3232,7 +3234,11 @@ export class Api<SecurityDataType extends unknown> {
           success?: boolean;
           message?: string;
           staffId?: number;
+          pose?: "straight" | "left" | "right";
           photoCount?: number;
+          posesCaptured?: ("straight" | "left" | "right")[];
+          posesRemaining?: ("straight" | "left" | "right")[];
+          /** True once straight, left, and right have all been enrolled */
           readyForAttendance?: boolean;
         },
         void

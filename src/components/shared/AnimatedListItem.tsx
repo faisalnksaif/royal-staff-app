@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react"
-import { Animated, Easing } from "react-native"
+import { Animated, Easing, StyleProp, ViewStyle } from "react-native"
 
 const STAGGER_MS = 40
 const DURATION = 320
@@ -8,9 +8,10 @@ const SLIDE_OFFSET = 18
 interface Props {
   index: number
   children: React.ReactNode
+  style?: StyleProp<ViewStyle>
 }
 
-export default function AnimatedListItem({ index, children }: Props) {
+export default function AnimatedListItem({ index, children, style }: Props) {
   const opacity = useRef(new Animated.Value(0)).current
   const translateY = useRef(new Animated.Value(SLIDE_OFFSET)).current
 
@@ -35,7 +36,7 @@ export default function AnimatedListItem({ index, children }: Props) {
   }, [])
 
   return (
-    <Animated.View pointerEvents="box-none" style={{ opacity, transform: [{ translateY }] }}>
+    <Animated.View pointerEvents="box-none" style={[{ opacity, transform: [{ translateY }] }, style]}>
       {children}
     </Animated.View>
   )

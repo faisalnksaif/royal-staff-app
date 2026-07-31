@@ -3308,12 +3308,14 @@ paths:
     post:
       tags:
         - Attendance
-      summary: Enroll (or add) a staff member's reference photo
+      summary: Enroll (or replace) a staff member's reference photo for one pose
       description: |
-        Uploads one face photo, extracts its descriptor, and appends it to that staff member's
-        enrolled reference set (up to MAX_ENROLLMENT_PHOTOS, oldest dropped beyond that). A staff
-        member becomes scan-eligible once MIN_ENROLLMENT_PHOTOS is reached (default 1).
-        Requires owner, manager, or superAdmin role.
+        Uploads one face photo for a specific pose (straight, left, or right), extracts its descriptor,
+        and stores it as that pose's reference photo - re-enrolling the same pose replaces the previous
+        photo/descriptor for it. The pose label is provided by the client and is NOT server-validated
+        (no pose/landmark checking is performed) - it's used only for bookkeeping so a staff member
+        becomes scan-eligible (readyForAttendance) once all three required poses (straight, left, right)
+        have been enrolled. Requires owner, manager, or superAdmin role.
       security:
         - BearerAuth: []
       parameters:
@@ -3330,11 +3332,16 @@ paths:
               type: object
               required:
                 - photo
+                - pose
               properties:
                 photo:
                   type: string
                   format: binary
                   description: JPEG/PNG/WEBP photo with a single clear, well-lit face (max 5MB by default)
+                pose:
+                  type: string
+                  enum: [straight, left, right]
+                  description: Which pose this photo represents - client-labeled, not server-validated
       responses:
         '200':
           description: Photo enrolled
@@ -3349,12 +3356,26 @@ paths:
                     type: string
                   staffId:
                     type: integer
+                  pose:
+                    type: string
+                    enum: [straight, left, right]
                   photoCount:
                     type: integer
+                  posesCaptured:
+                    type: array
+                    items:
+                      type: string
+                      enum: [straight, left, right]
+                  posesRemaining:
+                    type: array
+                    items:
+                      type: string
+                      enum: [straight, left, right]
                   readyForAttendance:
                     type: boolean
+                    description: True once straight, left, and right have all been enrolled
         '400':
-          description: Missing photo, unsupported format, or no face detected in photo
+          description: Missing photo/pose, unsupported format, or no face detected in photo
         '403':
           description: Forbidden - insufficient permissions
         '404':

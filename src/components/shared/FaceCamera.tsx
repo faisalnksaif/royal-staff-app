@@ -11,6 +11,14 @@ interface FaceCameraProps {
   isBusy?: boolean
 }
 
+function FaceGuide() {
+  return (
+    <View style={styles.guideWrap} pointerEvents="none">
+      <View style={styles.guideOval} />
+    </View>
+  )
+}
+
 export default function FaceCamera({ onCapture, isBusy }: FaceCameraProps) {
   const cameraRef = useRef<CameraView>(null)
   const [permission, requestPermission] = useCameraPermissions()
@@ -54,6 +62,7 @@ export default function FaceCamera({ onCapture, isBusy }: FaceCameraProps) {
         ref={cameraRef}
         style={styles.fill}
         facing="front"
+        mirror={false}
         onCameraReady={() => {
           // expo-camera's web implementation can fire onCameraReady slightly
           // before the underlying <video> element has actual frame data.
@@ -61,6 +70,7 @@ export default function FaceCamera({ onCapture, isBusy }: FaceCameraProps) {
           setTimeout(() => setIsCameraReady(true), delay)
         }}
       />
+      <FaceGuide />
       <View style={styles.shutterRow}>
         {!isCameraReady && (
           <AppText variant="caption" style={{ color: "rgba(255,255,255,0.7)", marginBottom: spacing[3] }}>
@@ -100,6 +110,19 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     alignItems: "center",
+  },
+  guideWrap: {
+    ...StyleSheet.absoluteFill,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  guideOval: {
+    width: 220,
+    height: 290,
+    borderRadius: 140,
+    borderWidth: 2.5,
+    borderColor: "rgba(255,255,255,0.55)",
+    borderStyle: "dashed",
   },
   shutterBtn: {
     width: 76,
