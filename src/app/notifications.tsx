@@ -161,7 +161,7 @@ export default function NotificationsScreen() {
       if (!item.isRead) markReadMutation.mutate(item._id)
       if (item.type === "leave_requested" || item.type === "leave_approved") {
         const role = useAuthStore.getState().user?.role
-        router.push(role === "staff" ? "/(tabs)/leaves" : "/(admin)/leaves")
+        router.push(role === "staff" ? "/(tabs)/leaves" : "/(admin)/team-leaves")
       } else if (item.ledgerName) {
         router.push({
           pathname: "/customer/[name]",

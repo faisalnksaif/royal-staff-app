@@ -14,6 +14,7 @@ import {
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { Search, ChevronDown, X, Ban } from "lucide-react-native"
 import DrawerMenuButton from "../../components/shared/DrawerMenuButton"
+import StaffPickerModal from "../../components/shared/StaffPickerModal"
 import AppText from "../../components/ui/AppText"
 import AppCard from "../../components/ui/AppCard"
 import { useTheme } from "../../providers/ThemeProvider"
@@ -115,72 +116,6 @@ function HoldModal({
 
 const PAGE_SIZE = 50
 
-
-// ─── Staff picker modal ───────────────────────────────────────────────────────
-
-function StaffPickerModal({
-  visible,
-  staff,
-  current,
-  onSelect,
-  onClose,
-}: {
-  visible: boolean
-  staff: StaffOption[]
-  current: number | null
-  onSelect: (s: StaffOption) => void
-  onClose: () => void
-}) {
-  const { colors } = useTheme()
-  const [q, setQ] = useState("")
-  const filtered = q.trim()
-    ? staff.filter((s) => s.name.toLowerCase().includes(q.toLowerCase()))
-    : staff
-
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.modalOverlay} onPress={onClose}>
-        <Pressable style={[styles.modalBox, { backgroundColor: colors.background.primary, borderColor: colors.border }]}>
-          <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-            <AppText variant="bodyMedium">Assign Staff</AppText>
-            <TouchableOpacity onPress={onClose} hitSlop={8}>
-              <X size={18} color={colors.text.tertiary} strokeWidth={1.75} />
-            </TouchableOpacity>
-          </View>
-          <View style={[styles.searchBox, { borderColor: colors.border, backgroundColor: colors.background.secondary }]}>
-            <Search size={14} color={colors.text.tertiary} strokeWidth={1.75} />
-            <TextInput
-              style={[styles.searchInput, { color: colors.text.primary }]}
-              placeholder="Search staff..."
-              placeholderTextColor={colors.text.tertiary}
-              value={q}
-              onChangeText={setQ}
-              autoFocus
-            />
-          </View>
-          <ScrollView style={styles.modalList}>
-            {filtered.map((s) => {
-              const active = s.staff_id === current
-              return (
-                <TouchableOpacity
-                  key={s.staff_id}
-                  onPress={() => { onSelect(s); setQ("") }}
-                  style={[styles.staffOption, active && { backgroundColor: colors.accent + "18" }]}
-                >
-                  <AppText variant="body" style={{ color: active ? colors.accent : colors.text.primary }}>{s.name}</AppText>
-                  {active && <AppText variant="caption" color="accent">Current</AppText>}
-                </TouchableOpacity>
-              )
-            })}
-            {filtered.length === 0 && (
-              <AppText variant="caption" color="tertiary" style={{ padding: spacing[4], textAlign: "center" }}>No staff found</AppText>
-            )}
-          </ScrollView>
-        </Pressable>
-      </Pressable>
-    </Modal>
-  )
-}
 
 // ─── Row ──────────────────────────────────────────────────────────────────────
 

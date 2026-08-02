@@ -4928,6 +4928,262 @@ paths:
                         type: integer
                         example: 3
 
+  /todos:
+    post:
+      tags:
+        - Todos
+      summary: Create a todo/note for the current staff member
+      description: Personal notes and to-dos - always created for the authenticated staff member (no staffId in the body).
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - title
+              properties:
+                title:
+                  type: string
+                  example: Follow up with vendor about delayed shipment
+                notes:
+                  type: string
+                  nullable: true
+                plannedFor:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: YYYY-MM-DD
+                  example: "2026-08-05"
+      responses:
+        '201':
+          description: Todo created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                  data:
+                    $ref: '#/components/schemas/TodoResponse'
+        '400':
+          description: Missing title, or plannedFor not in YYYY-MM-DD format
+        '401':
+          description: Unauthorized
+
+  /todos:
+    get:
+      tags:
+        - Todos
+      summary: List todos for the current staff member (or another, for admins)
+      description: Defaults to the authenticated user's own todos. Managers/HR/superAdmin may pass ?staffId= to view another staff member's instead.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Admin roles only - view this staff member's todos instead of your own
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [planned, done, cancelled]
+        - name: plannedFor
+          in: query
+          schema:
+            type: string
+            format: date
+          description: Exact YYYY-MM-DD match
+      responses:
+        '200':
+          description: List of todos
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  count:
+                    type: integer
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TodoResponse'
+        '400':
+          description: Invalid status filter
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden - can only access your own todos
+
+  /todos/{id}:
+    get:
+      tags:
+        - Todos
+      summary: Get a todo by ID
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Todo details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/TodoResponse'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden - can only access your own todos
+        '404':
+          description: Todo not found
+    put:
+      tags:
+        - Todos
+      summary: Update a todo's title/notes/plannedFor
+      description: For closing out a todo (marking it done/cancelled with what was actually done), use POST /todos/{id}/complete instead.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                notes:
+                  type: string
+                  nullable: true
+                plannedFor:
+                  type: string
+                  format: date
+                  nullable: true
+      responses:
+        '200':
+          description: Todo updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  data:
+                    $ref: '#/components/schemas/TodoResponse'
+        '400':
+          description: Empty title, or plannedFor not in YYYY-MM-DD format
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden - can only update your own todos
+        '404':
+          description: Todo not found
+    delete:
+      tags:
+        - Todos
+      summary: Delete a todo
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Todo deleted successfully
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden - can only delete your own todos
+        '404':
+          description: Todo not found
+
+  /todos/{id}/complete:
+    post:
+      tags:
+        - Todos
+      summary: Mark a todo done or cancelled, optionally noting what was actually done
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum: [done, cancelled]
+                actionNote:
+                  type: string
+                  nullable: true
+                  description: What was actually done
+                  example: Called vendor, shipment arriving Monday
+      responses:
+        '200':
+          description: Todo marked done/cancelled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  data:
+                    $ref: '#/components/schemas/TodoResponse'
+        '400':
+          description: status must be "done" or "cancelled"
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden - can only complete your own todos
+        '404':
+          description: Todo not found
+
   /leaves:
     get:
       tags:
@@ -6407,6 +6663,49 @@ components:
         - email
         - role
         - isActive
+
+    TodoResponse:
+      type: object
+      description: A staff member's own note/todo item
+      properties:
+        id:
+          type: string
+          example: 507f1f77bcf86cd799439033
+        staffId:
+          type: integer
+          example: 3027
+        title:
+          type: string
+          example: Follow up with vendor about delayed shipment
+        notes:
+          type: string
+          nullable: true
+          example: Call in the afternoon after lunch
+        plannedFor:
+          type: string
+          nullable: true
+          format: date
+          description: YYYY-MM-DD the todo is intended for, or null if undated
+          example: "2026-08-05"
+        status:
+          type: string
+          enum: [planned, done, cancelled]
+          example: planned
+        actionNote:
+          type: string
+          nullable: true
+          description: What was actually done - set when marking done/cancelled
+          example: Called vendor, shipment arriving Monday
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
 
     ScanningDeviceResponse:
       type: object

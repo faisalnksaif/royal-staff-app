@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Tabs, useRouter, usePathname } from "expo-router"
 import { StyleSheet, View, Pressable, ScrollView, Platform, StatusBar } from "react-native"
 import type { ColorValue } from "react-native"
@@ -12,6 +12,7 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
+  ListChecks,
 } from "lucide-react-native"
 
 const EXPANDED_WIDTH = 240
@@ -19,6 +20,7 @@ const COLLAPSED_WIDTH = 60
 import { useTheme } from "../../providers/ThemeProvider"
 import { colors as palette, spacing, radii } from "../../constants/theme"
 import { useTablet } from "../../hooks/useTablet"
+import { useRole } from "../../hooks/useRole"
 import useAuthStore from "../../stores/useAuthStore"
 import AppText from "../../components/ui/AppText"
 
@@ -27,6 +29,7 @@ const NAV_ITEMS = [
   { label: "Customers",   href: "/(tabs)/customers",       icon: Users,           match: "customers" },
   { label: "Follow-ups",  href: "/(tabs)/followups",       icon: ClipboardList,   match: "followups" },
   { label: "Leaves",      href: "/(tabs)/leaves",          icon: CalendarClock,   match: "leaves" },
+  { label: "Todo",        href: "/(tabs)/todo",            icon: ListChecks,      match: "todo" },
   { label: "Performance", href: "/(tabs)/extra-performance", icon: Award,         match: "extra-performance" },
   { label: "Settings",    href: "/(tabs)/settings",        icon: Settings,        match: "settings" },
 ]
@@ -114,8 +117,16 @@ function StaffSidebar() {
 export default function TabsLayout() {
   const { colors, isDark } = useTheme()
   const { isTablet } = useTablet()
+  const { role, isStaff } = useRole()
+  const router = useRouter()
   const activeColor = isDark ? palette.primary[400] : palette.primary[600]
   const inactiveColor = colors.text.tertiary as string
+
+  useEffect(() => {
+    if (role && !isStaff) router.replace("/")
+  }, [role, isStaff])
+
+  if (!isStaff) return null
 
   const tabs = (
     <Tabs
@@ -149,16 +160,15 @@ export default function TabsLayout() {
       />
       <Tabs.Screen name="customers"         options={{ href: null }} />
       <Tabs.Screen name="leaves"            options={{ href: null }} />
+      <Tabs.Screen name="todo"              options={{ href: null }} />
       <Tabs.Screen name="extra-performance" options={{ href: null }} />
       <Tabs.Screen name="followups"         options={{ href: null }} />
     </Tabs>
   )
 
-  if (!isTablet) return tabs
-
   return (
     <View style={[styles.row, { backgroundColor: colors.background.primary }]}>
-      <StaffSidebar />
+      {isTablet && <StaffSidebar />}
       <View style={styles.main}>{tabs}</View>
     </View>
   )

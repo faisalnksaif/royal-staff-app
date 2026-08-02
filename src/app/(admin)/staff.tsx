@@ -1,5 +1,5 @@
 import { toTitleCase } from "../../utils/helpers"
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import {
   View,
   FlatList,
@@ -8,7 +8,6 @@ import {
   Pressable,
   ScrollView,
 } from "react-native"
-import { useRouter } from "expo-router"
 import { Pencil, ChevronDown, Check, Clock, Building2 } from "lucide-react-native"
 import BackButton from "../../components/shared/BackButton"
 import RefreshButton from "../../components/shared/RefreshButton"
@@ -479,7 +478,6 @@ export default function StaffScreen() {
   const { colors } = useTheme()
   const { isTablet } = useTablet()
   const { isAdmin, isHR } = useRole()
-  const router = useRouter()
   const queryClient = useQueryClient()
 
   const canEdit = isAdmin || isHR
@@ -508,13 +506,6 @@ export default function StaffScreen() {
     if (!staff.departmentId) return null
     return departments.find((d) => d._id === staff.departmentId) ?? null
   }
-
-  // Redirect if not admin, manager, or HR
-  useEffect(() => {
-    if (!canEdit) router.replace("/(admin)")
-  }, [canEdit])
-
-  if (!canEdit) return null
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background.primary }]}>

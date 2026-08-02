@@ -460,6 +460,26 @@ export interface RecentScansResponse {
   data: RecentScanEvent[]
 }
 
+export type TodoStatus = "planned" | "done" | "cancelled"
+
+export interface TodoResponse {
+  _id: string
+  staffId: number
+  title: string
+  notes: string | null
+  plannedFor: string | null
+  status: TodoStatus
+  actionNote: string | null
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface TodoListResponse {
+  success: boolean
+  count: number
+  data: TodoResponse[]
+}
+
 export type EnrollmentPose = "straight" | "left" | "right"
 
 export interface FaceEnrollResponse {

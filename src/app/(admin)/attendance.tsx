@@ -1,5 +1,5 @@
 import { toTitleCase } from "../../utils/helpers"
-import React, { useState, useEffect, useRef } from "react"
+import React, { useState, useRef } from "react"
 import {
   View,
   FlatList,
@@ -15,6 +15,7 @@ import DateTimePicker, { DateTimePickerAndroid } from "@react-native-community/d
 import { useRouter } from "expo-router"
 import { CheckCircle, XCircle, UserPlus, BarChart3, ChevronDown, ChevronLeft, ChevronRight, ChevronsUpDown, LogIn, LogOut, AlertTriangle, Clock, Pencil, Trash2, Plus } from "lucide-react-native"
 import BackButton from "../../components/shared/BackButton"
+import DrawerMenuButton from "../../components/shared/DrawerMenuButton"
 import RefreshButton from "../../components/shared/RefreshButton"
 import AnimatedListItem from "../../components/shared/AnimatedListItem"
 import AttendanceListSkeleton from "../../components/shared/AttendanceListSkeleton"
@@ -862,7 +863,7 @@ export default function AttendanceScreen() {
   const today = moment().format("YYYY-MM-DD")
   const [selectedDate, setSelectedDate] = useState(today)
   const isToday = selectedDate === today
-  const { canViewAttendance } = useRole()
+  const { isHR } = useRole()
   const { currentStaff } = useCurrentStaff()
   const { data: staffData } = useStaff()
   const { data: departmentsData } = useDepartments()
@@ -878,13 +879,6 @@ export default function AttendanceScreen() {
   }
 
   const { data, isLoading, refetch, isRefetching } = useAttendance(selectedDate)
-
-  // Redirect if not admin, manager, or HR
-  useEffect(() => {
-    if (!canViewAttendance) router.replace("/(admin)")
-  }, [canViewAttendance])
-
-  if (!canViewAttendance) return null
 
   function goToPrevDay() {
     setSelectedDate(moment(selectedDate).subtract(1, "day").format("YYYY-MM-DD"))
@@ -973,11 +967,41 @@ export default function AttendanceScreen() {
     <View style={[styles.screen, { backgroundColor: colors.background.primary }]}>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        {!isTablet && <BackButton />}
+        {!isTablet && (isHR ? <DrawerMenuButton /> : <BackButton />)}
         <View style={{ flex: 1 }}>
           <AppText variant="heading3">Attendance</AppText>
         </View>
-        <View style={styles.headerSearch}>
+
+        {isDesktop && (
+          <View style={styles.headerSearch}>
+            <AppInput
+              placeholder="Search staff name..."
+              value={search}
+              onChangeText={setSearch}
+              returnKeyType="search"
+            />
+          </View>
+        )}
+
+        <View style={styles.headerActions}>
+          <RefreshButton onPress={() => refetch()} isRefreshing={isRefetching} />
+          <Pressable onPress={toggleExpandAll} style={styles.enrollBtn} hitSlop={8}>
+            <ChevronsUpDown size={20} color={colors.text.tertiary} strokeWidth={1.75} />
+          </Pressable>
+          <Pressable onPress={() => setEditMode((v) => !v)} style={styles.enrollBtn} hitSlop={8}>
+            <Pencil size={22} color={editMode ? colors.accent : colors.text.tertiary} strokeWidth={1.75} />
+          </Pressable>
+          <Pressable onPress={() => router.push("/(admin)/attendance-dashboard")} style={styles.enrollBtn} hitSlop={8}>
+            <BarChart3 size={22} color={colors.accent} strokeWidth={1.75} />
+          </Pressable>
+          <Pressable onPress={() => router.push("/(admin)/enroll")} style={styles.enrollBtn} hitSlop={8}>
+            <UserPlus size={22} color={colors.accent} strokeWidth={1.75} />
+          </Pressable>
+        </View>
+      </View>
+
+      {!isDesktop && (
+        <View style={[styles.searchBar, { borderBottomColor: colors.border }]}>
           <AppInput
             placeholder="Search staff name..."
             value={search}
@@ -985,36 +1009,7 @@ export default function AttendanceScreen() {
             returnKeyType="search"
           />
         </View>
-        <RefreshButton onPress={() => refetch()} isRefreshing={isRefetching} />
-        <Pressable
-          onPress={toggleExpandAll}
-          style={styles.enrollBtn}
-          hitSlop={8}
-        >
-          <ChevronsUpDown size={20} color={colors.text.tertiary} strokeWidth={1.75} />
-        </Pressable>
-        <Pressable
-          onPress={() => setEditMode((v) => !v)}
-          style={styles.enrollBtn}
-          hitSlop={8}
-        >
-          <Pencil size={22} color={editMode ? colors.accent : colors.text.tertiary} strokeWidth={1.75} />
-        </Pressable>
-        <Pressable
-          onPress={() => router.push("/(admin)/attendance-dashboard")}
-          style={styles.enrollBtn}
-          hitSlop={8}
-        >
-          <BarChart3 size={22} color={colors.accent} strokeWidth={1.75} />
-        </Pressable>
-        <Pressable
-          onPress={() => router.push("/(admin)/enroll")}
-          style={styles.enrollBtn}
-          hitSlop={8}
-        >
-          <UserPlus size={22} color={colors.accent} strokeWidth={1.75} />
-        </Pressable>
-      </View>
+      )}
 
       {/* Date switcher */}
       <View style={[styles.dateBar, { borderBottomColor: colors.border }]}>
@@ -1203,6 +1198,16 @@ const styles = StyleSheet.create({
   },
   enrollBtn: { padding: spacing[2] },
   headerSearch: { width: 180 },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[1],
+  },
+  searchBar: {
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3],
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
   dateBar: {
     flexDirection: "row",
     alignItems: "center",

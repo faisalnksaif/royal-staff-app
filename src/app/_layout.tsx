@@ -37,6 +37,7 @@ function RootStack() {
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts(fontAssets)
+  const hasHydrated = useAuthStore((s) => s.hasHydrated)
 
   useEffect(() => {
     setUnauthorizedHandler(() => {
@@ -46,12 +47,12 @@ export default function RootLayout() {
   }, [])
 
   useEffect(() => {
-    if (fontsLoaded || fontError) {
+    if ((fontsLoaded || fontError) && hasHydrated) {
       SplashScreen.hideAsync()
     }
-  }, [fontsLoaded, fontError])
+  }, [fontsLoaded, fontError, hasHydrated])
 
-  if (!fontsLoaded && !fontError) return null
+  if ((!fontsLoaded && !fontError) || !hasHydrated) return null
 
   return (
     <QueryProvider>

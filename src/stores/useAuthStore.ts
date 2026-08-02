@@ -10,6 +10,7 @@ interface AuthState {
   token: string | null
   isLoading: boolean
   error: string | null
+  hasHydrated: boolean
   login: (email: string, password: string) => Promise<void>
   register: (email: string, password: string, name: string) => Promise<void>
   logout: () => Promise<void>
@@ -24,6 +25,7 @@ const useAuthStore = create<AuthState>()(
       token: null,
       isLoading: false,
       error: null,
+      hasHydrated: false,
       login: async (email, password) => {
         set({ isLoading: true, error: null })
         try {
@@ -65,6 +67,7 @@ const useAuthStore = create<AuthState>()(
       partialize: (state) => ({ user: state.user, token: state.token }),
       onRehydrateStorage: () => (state) => {
         if (state?.token) setAuthToken(state.token)
+        useAuthStore.setState({ hasHydrated: true })
       },
     }
   )

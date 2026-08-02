@@ -11,7 +11,9 @@ import {
   Easing,
 } from "react-native"
 import { useRouter, useLocalSearchParams } from "expo-router"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useTablet } from "../../../hooks/useTablet"
+import { useRole } from "../../../hooks/useRole"
 import {
   ChevronLeft,
   Phone,
@@ -41,6 +43,8 @@ import AnimatedListItem from "../../../components/shared/AnimatedListItem"
 import { useCustomerFollowups } from "../../../hooks/useCustomerFollowups"
 import { useCustomerLedger } from "../../../hooks/useCustomerLedger"
 import { followupService } from "../../../services/followupService"
+import { mappingService } from "../../../services/mappingService"
+import StaffPickerModal from "../../../components/shared/StaffPickerModal"
 import { formatDate, formatAmount, toTitleCase } from "../../../utils/helpers"
 import moment from "moment"
 import type { FollowUp, ContactMethod, FollowUpOutcome, LedgerEntry } from "../../../types"
@@ -466,8 +470,26 @@ export default function CustomerDetailScreen() {
     initialTab === "ledger" ? "ledger" : initialTab === "profile" ? "profile" : "followups"
   )
   const [chartContainerWidth, setChartContainerWidth] = useState(0)
+  const [staffPickerOpen, setStaffPickerOpen] = useState(false)
 
   const isStaff = user?.role === "staff"
+  const { isAdmin } = useRole()
+  const queryClient = useQueryClient()
+
+  const { data: staffOptionsData } = useQuery({
+    queryKey: ["mapping-staff-options"],
+    queryFn: () => mappingService.getStaffOptions(),
+    enabled: isAdmin,
+  })
+  const staffOptions = staffOptionsData ?? []
+
+  const { mutate: reassignStaff, isPending: isReassigning } = useMutation({
+    mutationFn: (staffId: number) => mappingService.reassign(Number(customerId), staffId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["customer-ledger", customerId] })
+      setStaffPickerOpen(false)
+    },
+  })
 
   const { data, isLoading, refetch: refetchFollowups } = useCustomerFollowups(customerId)
   const {
@@ -929,10 +951,31 @@ export default function CustomerDetailScreen() {
                     </AppText>
                   </View>
                 </View>
+                {isAdmin && (
+                  <TouchableOpacity
+                    onPress={() => setStaffPickerOpen(true)}
+                    style={[styles.reassignBtn, { borderColor: colors.border }]}
+                    activeOpacity={0.7}
+                  >
+                    <AppText variant="caption" color="accent">
+                      {isReassigning ? "Reassigning…" : "Reassign to different staff"}
+                    </AppText>
+                  </TouchableOpacity>
+                )}
               </View>
             </AppCard>
           </ScrollView>
         )
+      )}
+
+      {isAdmin && (
+        <StaffPickerModal
+          visible={staffPickerOpen}
+          staff={staffOptions}
+          current={profileOwnership?.staffId ?? null}
+          onSelect={(s) => reassignStaff(s.staff_id)}
+          onClose={() => setStaffPickerOpen(false)}
+        />
       )}
 
       {/* FAB */}
@@ -1180,6 +1223,12 @@ const styles = StyleSheet.create({
   profileCardBody: { gap: spacing[3] },
   profileRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   profilePill: { paddingHorizontal: spacing[2], paddingVertical: 2, borderRadius: 4 },
+  reassignBtn: {
+    alignItems: "center",
+    paddingVertical: spacing[3],
+    borderTopWidth: StyleSheet.hairlineWidth,
+    marginTop: spacing[1],
+  },
   profileHint: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: spacing[2], marginTop: spacing[1] },
   profileStatRow: { flexDirection: "row", justifyContent: "space-around" },
   profileStat: { alignItems: "center", gap: 2 },

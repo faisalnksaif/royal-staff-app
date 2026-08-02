@@ -1,7 +1,7 @@
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { View, Pressable, ScrollView, StyleSheet, Platform, StatusBar, Modal, Animated, TouchableWithoutFeedback } from "react-native"
 import { Stack, useRouter, usePathname } from "expo-router"
-import { MessageCircleMore, CalendarCheck, CalendarClock, ShieldCheck, Trophy, Award, Users, Settings, LogOut, UsersRound, Bell, ChevronLeft, ChevronRight, IdCard, Radar } from "lucide-react-native"
+import { MessageCircleMore, CalendarCheck, CalendarClock, ShieldCheck, Trophy, Award, Users, Settings, LogOut, UsersRound, Bell, ChevronLeft, ChevronRight, IdCard, Radar, ListChecks } from "lucide-react-native"
 import { AdminDrawerContext } from "../../contexts/adminDrawer"
 import { useQuery } from "@tanstack/react-query"
 import AppText from "../../components/ui/AppText"
@@ -29,13 +29,14 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Customers",           href: "/(admin)/customers-with-debt",     icon: UsersRound,        matchExact: false, roles: ["superAdmin", "manager"] },
   { label: "Attendance",          href: "/(admin)/attendance",        icon: CalendarCheck,     matchExact: false },
   { label: "Staff",               href: "/(admin)/staff",             icon: IdCard,            matchExact: false, roles: ["superAdmin", "manager", "hr"] },
-  { label: "Leaves",              href: "/(admin)/leaves",            icon: CalendarClock,     matchExact: false },
+  { label: "Leaves",              href: "/(admin)/team-leaves",       icon: CalendarClock,     matchExact: false },
+  { label: "Todo",                href: "/(admin)/team-todo",         icon: ListChecks,        matchExact: false, roles: ["superAdmin", "manager", "hr"] },
   { label: "Scores",              href: "/(admin)/scores",            icon: Trophy,            matchExact: false, roles: ["superAdmin", "manager"] },
-  { label: "Extra Performance",   href: "/(admin)/extra-performance", icon: Award,             matchExact: false, roles: ["superAdmin", "manager"] },
+  { label: "Extra Performance",   href: "/(admin)/team-extra-performance", icon: Award,        matchExact: false, roles: ["superAdmin", "manager"] },
   { label: "Mappings",            href: "/(admin)/mappings",          icon: Users,             matchExact: false, roles: ["superAdmin", "manager"] },
   { label: "Appearance",          href: "/(admin)/appearance",        icon: ShieldCheck,       matchExact: false, roles: ["superAdmin"] },
   { label: "Scanning Devices",    href: "/(admin)/scanning-devices",  icon: Radar,             matchExact: false, roles: ["superAdmin"] },
-  { label: "Settings",            href: "/(admin)/settings",          icon: Settings,          matchExact: false, roles: ["superAdmin", "manager", "hr"] },
+  { label: "Settings",            href: "/(admin)/team-settings",     icon: Settings,          matchExact: false, roles: ["superAdmin", "manager", "hr"] },
   { label: "Notifications",       href: "/notifications",             icon: Bell,              matchExact: false, roles: ["superAdmin", "manager"] },
 ]
 
@@ -287,26 +288,30 @@ function MobileDrawer({ open, onClose }: { open: boolean; onClose: () => void })
 export default function AdminLayout() {
   const { isTablet } = useTablet()
   const { colors } = useTheme()
+  const { role } = useRole()
+  const router = useRouter()
   const [drawerOpen, setDrawerOpen] = useState(false)
 
-  if (!isTablet) {
-    return (
-      <AdminDrawerContext.Provider value={{ openDrawer: () => setDrawerOpen(true) }}>
-        <View style={{ flex: 1, backgroundColor: colors.background.primary as string }}>
-          <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
-          <Stack screenOptions={{ headerShown: false, animation: "none" }} />
-        </View>
-      </AdminDrawerContext.Provider>
-    )
-  }
+  const canAccessAdmin = role === "superAdmin" || role === "manager" || role === "hr"
+
+  useEffect(() => {
+    if (role && !canAccessAdmin) router.replace("/")
+  }, [role, canAccessAdmin])
+
+  if (!canAccessAdmin) return null
 
   return (
-    <View style={[styles.row, { backgroundColor: colors.background.primary }]}>
-      <Sidebar />
-      <View style={styles.main}>
-        <Stack screenOptions={{ headerShown: false, animation: "none" }} />
+    <AdminDrawerContext.Provider value={{ openDrawer: () => setDrawerOpen(true) }}>
+      <View style={[styles.row, { backgroundColor: colors.background.primary }]}>
+        {isTablet
+          ? <Sidebar />
+          : <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
+        }
+        <View style={styles.main}>
+          <Stack screenOptions={{ headerShown: false, animation: "none" }} />
+        </View>
       </View>
-    </View>
+    </AdminDrawerContext.Provider>
   )
 }
 

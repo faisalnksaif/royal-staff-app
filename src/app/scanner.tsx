@@ -169,7 +169,7 @@ export default function ScannerScreen() {
   const { colors } = useTheme()
   const { isTablet } = useTablet()
   const router = useRouter()
-  const { isScanner } = useRole()
+  const { role, isScanner } = useRole()
   const { logout } = useAuthStore()
   const [modalOpen, setModalOpen] = useState(false)
   const [sheetOpen, setSheetOpen] = useState(false)
@@ -206,6 +206,10 @@ export default function ScannerScreen() {
       },
     })
   ).current
+
+  useEffect(() => {
+    if (role && !isScanner) router.replace("/")
+  }, [role, isScanner])
 
   if (!isScanner) return null
 
