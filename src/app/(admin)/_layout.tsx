@@ -1,7 +1,7 @@
 import { useState, useRef } from "react"
 import { View, Pressable, ScrollView, StyleSheet, Platform, StatusBar, Modal, Animated, TouchableWithoutFeedback } from "react-native"
 import { Stack, useRouter, usePathname } from "expo-router"
-import { MessageCircleMore, CalendarCheck, CalendarClock, ShieldCheck, Trophy, Award, Users, Settings, LogOut, UsersRound, Bell, ChevronLeft, ChevronRight } from "lucide-react-native"
+import { MessageCircleMore, CalendarCheck, CalendarClock, ShieldCheck, Trophy, Award, Users, Settings, LogOut, UsersRound, Bell, ChevronLeft, ChevronRight, IdCard, Radar } from "lucide-react-native"
 import { AdminDrawerContext } from "../../contexts/adminDrawer"
 import { useQuery } from "@tanstack/react-query"
 import AppText from "../../components/ui/AppText"
@@ -25,16 +25,18 @@ type NavItem = {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { label: "Follow Up Dashboard", href: "/(admin)",                   icon: MessageCircleMore, matchExact: true  },
-  { label: "Customers",           href: "/(admin)/customers-with-debt",     icon: UsersRound,        matchExact: false },
+  { label: "Follow Up Dashboard", href: "/(admin)",                   icon: MessageCircleMore, matchExact: true,  roles: ["superAdmin", "manager"] },
+  { label: "Customers",           href: "/(admin)/customers-with-debt",     icon: UsersRound,        matchExact: false, roles: ["superAdmin", "manager"] },
   { label: "Attendance",          href: "/(admin)/attendance",        icon: CalendarCheck,     matchExact: false },
+  { label: "Staff",               href: "/(admin)/staff",             icon: IdCard,            matchExact: false, roles: ["superAdmin", "manager", "hr"] },
   { label: "Leaves",              href: "/(admin)/leaves",            icon: CalendarClock,     matchExact: false },
-  { label: "Scores",              href: "/(admin)/scores",            icon: Trophy,            matchExact: false },
-  { label: "Extra Performance",   href: "/(admin)/extra-performance", icon: Award,             matchExact: false },
+  { label: "Scores",              href: "/(admin)/scores",            icon: Trophy,            matchExact: false, roles: ["superAdmin", "manager"] },
+  { label: "Extra Performance",   href: "/(admin)/extra-performance", icon: Award,             matchExact: false, roles: ["superAdmin", "manager"] },
   { label: "Mappings",            href: "/(admin)/mappings",          icon: Users,             matchExact: false, roles: ["superAdmin", "manager"] },
   { label: "Appearance",          href: "/(admin)/appearance",        icon: ShieldCheck,       matchExact: false, roles: ["superAdmin"] },
-  { label: "Settings",            href: "/(admin)/settings",          icon: Settings,          matchExact: false, roles: ["superAdmin", "manager"] },
-  { label: "Notifications",       href: "/notifications",             icon: Bell,              matchExact: false },
+  { label: "Scanning Devices",    href: "/(admin)/scanning-devices",  icon: Radar,             matchExact: false, roles: ["superAdmin"] },
+  { label: "Settings",            href: "/(admin)/settings",          icon: Settings,          matchExact: false, roles: ["superAdmin", "manager", "hr"] },
+  { label: "Notifications",       href: "/notifications",             icon: Bell,              matchExact: false, roles: ["superAdmin", "manager"] },
 ]
 
 function Sidebar() {

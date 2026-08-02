@@ -6,15 +6,15 @@ import {
   StyleSheet,
   Pressable,
   TouchableOpacity,
-  Modal,
   TextInput,
   ScrollView,
 } from "react-native"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { Plus, Calendar, X, Award, Clock, RefreshCw } from "lucide-react-native"
+import { Plus, Calendar, Award, Clock, RefreshCw } from "lucide-react-native"
 import BackButton from "../../components/shared/BackButton"
 import AnimatedListItem from "../../components/shared/AnimatedListItem"
 import DatePickerField from "../../components/shared/DatePickerField"
+import Popup from "../../components/shared/Popup"
 import moment from "moment"
 import AppText from "../../components/ui/AppText"
 import AppCard from "../../components/ui/AppCard"
@@ -137,93 +137,84 @@ function SubmitModal({
     mutation.mutate()
   }
 
+  if (!visible) return null
+
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.modalBackdrop}>
-        <View style={[styles.modalSheet, { backgroundColor: colors.background.primary }]}>
-          <View style={styles.modalHeader}>
-            <AppText variant="heading3">Add Extra Performance</AppText>
-            <Pressable onPress={onClose} hitSlop={8}>
-              <X size={22} color={colors.text.secondary} strokeWidth={2} />
-            </Pressable>
-          </View>
-
-          <ScrollView showsVerticalScrollIndicator={false}>
-            {/* Category */}
-            <AppText variant="caption" color="tertiary" style={styles.fieldLabel}>Category</AppText>
-            <View style={styles.typeRow}>
-              {CATEGORIES.map((c) => (
-                <Pressable
-                  key={c}
-                  onPress={() => setCategory(c)}
-                  style={[
-                    styles.typeChip,
-                    {
-                      borderColor: category === c ? colors.accent : colors.border,
-                      backgroundColor: category === c ? colors.accent + "18" : "transparent",
-                    },
-                  ]}
-                >
-                  <AppText
-                    variant={category === c ? "bodyMedium" : "body"}
-                    style={{ color: category === c ? colors.accent : colors.text.secondary }}
-                  >
-                    {c}
-                  </AppText>
-                </Pressable>
-              ))}
-            </View>
-
-            {/* Title */}
-            <AppText variant="caption" color="tertiary" style={styles.fieldLabel}>Title</AppText>
-            <TextInput
-              style={[styles.input, { borderColor: colors.border, color: colors.text.primary, backgroundColor: colors.background.secondary, outline: "none" } as any]}
-              placeholder="e.g. Led customer training session"
-              placeholderTextColor={colors.text.tertiary}
-              value={title}
-              onChangeText={setTitle}
-            />
-
-            {/* Date */}
-            <View style={styles.fieldLabel}>
-              <DatePickerField
-                label="Date"
-                value={date}
-                onChange={setDate}
-                placeholder="Select date"
-              />
-            </View>
-
-            {/* Description */}
-            <AppText variant="caption" color="tertiary" style={styles.fieldLabel}>Description</AppText>
-            <TextInput
-              style={[styles.input, styles.textArea, { borderColor: colors.border, color: colors.text.primary, backgroundColor: colors.background.secondary, outline: "none" } as any]}
-              placeholder="Describe what you accomplished..."
-              placeholderTextColor={colors.text.tertiary}
-              value={description}
-              onChangeText={setDescription}
-              multiline
-              numberOfLines={3}
-              textAlignVertical="top"
-            />
-
-            {error ? (
-              <AppText variant="caption" style={{ color: palette.error.default, marginBottom: spacing[3] }}>
-                {error}
+    <Popup title="Add Extra Performance" onClose={onClose}>
+      <ScrollView showsVerticalScrollIndicator={false}>
+        {/* Category */}
+        <AppText variant="caption" color="tertiary" style={styles.fieldLabel}>Category</AppText>
+        <View style={styles.typeRow}>
+          {CATEGORIES.map((c) => (
+            <Pressable
+              key={c}
+              onPress={() => setCategory(c)}
+              style={[
+                styles.typeChip,
+                {
+                  borderColor: category === c ? colors.accent : colors.border,
+                  backgroundColor: category === c ? colors.accent + "18" : "transparent",
+                },
+              ]}
+            >
+              <AppText
+                variant={category === c ? "bodyMedium" : "body"}
+                style={{ color: category === c ? colors.accent : colors.text.secondary }}
+              >
+                {c}
               </AppText>
-            ) : null}
-
-            <AppButton
-              label={mutation.isPending ? "Submitting…" : "Submit for Approval"}
-              onPress={handleSubmit}
-              disabled={mutation.isPending}
-              style={{ marginTop: spacing[4] }}
-            />
-            <View style={{ height: spacing[6] }} />
-          </ScrollView>
+            </Pressable>
+          ))}
         </View>
-      </View>
-    </Modal>
+
+        {/* Title */}
+        <AppText variant="caption" color="tertiary" style={styles.fieldLabel}>Title</AppText>
+        <TextInput
+          style={[styles.input, { borderColor: colors.border, color: colors.text.primary, backgroundColor: colors.background.secondary, outline: "none" } as any]}
+          placeholder="e.g. Led customer training session"
+          placeholderTextColor={colors.text.tertiary}
+          value={title}
+          onChangeText={setTitle}
+        />
+
+        {/* Date */}
+        <View style={styles.fieldLabel}>
+          <DatePickerField
+            label="Date"
+            value={date}
+            onChange={setDate}
+            placeholder="Select date"
+          />
+        </View>
+
+        {/* Description */}
+        <AppText variant="caption" color="tertiary" style={styles.fieldLabel}>Description</AppText>
+        <TextInput
+          style={[styles.input, styles.textArea, { borderColor: colors.border, color: colors.text.primary, backgroundColor: colors.background.secondary, outline: "none" } as any]}
+          placeholder="Describe what you accomplished..."
+          placeholderTextColor={colors.text.tertiary}
+          value={description}
+          onChangeText={setDescription}
+          multiline
+          numberOfLines={3}
+          textAlignVertical="top"
+        />
+
+        {error ? (
+          <AppText variant="caption" style={{ color: palette.error.default, marginBottom: spacing[3] }}>
+            {error}
+          </AppText>
+        ) : null}
+
+        <AppButton
+          label={mutation.isPending ? "Submitting…" : "Submit for Approval"}
+          onPress={handleSubmit}
+          disabled={mutation.isPending}
+          style={{ marginTop: spacing[4] }}
+        />
+        <View style={{ height: spacing[6] }} />
+      </ScrollView>
+    </Popup>
   )
 }
 
@@ -457,23 +448,6 @@ const styles = StyleSheet.create({
   },
   metaRow: { flexDirection: "row", alignItems: "center", gap: spacing[2] },
 
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "flex-end",
-  },
-  modalSheet: {
-    maxHeight: "85%",
-    borderTopLeftRadius: radii.xl,
-    borderTopRightRadius: radii.xl,
-    padding: spacing[5],
-  },
-  modalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: spacing[5],
-  },
   fieldLabel: { marginTop: spacing[1], marginBottom: spacing[2] },
   typeRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing[2], marginBottom: spacing[1] },
   typeChip: {

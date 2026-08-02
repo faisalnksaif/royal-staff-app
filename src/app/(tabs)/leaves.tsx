@@ -6,7 +6,6 @@ import {
   StyleSheet,
   Pressable,
   TouchableOpacity,
-  Modal,
   TextInput,
   ScrollView,
   Animated,
@@ -16,10 +15,11 @@ import {
   UIManager,
 } from "react-native"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { Plus, Calendar, Clock, X, Trash2 } from "lucide-react-native"
+import { Plus, Calendar, Clock, Trash2 } from "lucide-react-native"
 import BackButton from "../../components/shared/BackButton"
 import AnimatedListItem from "../../components/shared/AnimatedListItem"
 import DatePickerField from "../../components/shared/DatePickerField"
+import Popup from "../../components/shared/Popup"
 import moment from "moment"
 import AppText from "../../components/ui/AppText"
 import AppCard from "../../components/ui/AppCard"
@@ -155,105 +155,96 @@ function RequestModal({
 
   const TYPES: LeaveType[] = ["Personal", "Medical"]
 
+  if (!visible) return null
+
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.modalBackdrop}>
-        <View style={[styles.modalSheet, { backgroundColor: colors.background.primary }]}>
-          <View style={styles.modalHeader}>
-            <AppText variant="heading3">Request Leave</AppText>
-            <Pressable onPress={onClose} hitSlop={8}>
-              <X size={22} color={colors.text.secondary} strokeWidth={2} />
-            </Pressable>
-          </View>
-
-          <ScrollView showsVerticalScrollIndicator={false}>
-            {/* Leave type */}
-            <AppText variant="caption" color="tertiary" style={styles.fieldLabel}>Leave Type</AppText>
-            <View style={styles.typeRow}>
-              {TYPES.map((t) => (
-                <Pressable
-                  key={t}
-                  onPress={() => setLeaveType(t)}
-                  style={[
-                    styles.typeChip,
-                    {
-                      borderColor: leaveType === t ? colors.accent : colors.border,
-                      backgroundColor: leaveType === t ? colors.accent + "18" : "transparent",
-                    },
-                  ]}
-                >
-                  <AppText
-                    variant={leaveType === t ? "bodyMedium" : "body"}
-                    style={{ color: leaveType === t ? colors.accent : colors.text.secondary }}
-                  >
-                    {t}
-                  </AppText>
-                </Pressable>
-              ))}
-            </View>
-
-            {/* Start date */}
-            <View style={styles.fieldLabel}>
-              <DatePickerField
-                label="Start Date"
-                value={startDate}
-                onChange={setStartDate}
-                placeholder="Select start date"
-              />
-            </View>
-
-            {/* End date */}
-            <View style={styles.fieldLabel}>
-              <DatePickerField
-                label="End Date"
-                value={endDate}
-                onChange={setEndDate}
-                placeholder="Select end date"
-              />
-            </View>
-
-            {/* Day count */}
-            {startDate && endDate && !moment(endDate).isBefore(moment(startDate), "day") && (
-              <View style={[styles.dayCount, { backgroundColor: colors.accentSubtle }]}>
-                <AppText variant="bodyMedium" style={{ color: colors.accent }}>
-                  {moment(endDate).diff(moment(startDate), "days") + 1} day{moment(endDate).diff(moment(startDate), "days") + 1 !== 1 ? "s" : ""}
-                </AppText>
-                <AppText variant="caption" color="secondary">
-                  {moment(startDate).format("D MMM")} – {moment(endDate).format("D MMM YYYY")}
-                </AppText>
-              </View>
-            )}
-
-            {/* Reason */}
-            <AppText variant="caption" color="tertiary" style={styles.fieldLabel}>Reason</AppText>
-            <TextInput
-              style={[styles.input, styles.textArea, { borderColor: colors.border, color: colors.text.primary, backgroundColor: colors.background.secondary, outline: "none" } as any]}
-              placeholder="Briefly describe your reason..."
-              placeholderTextColor={colors.text.tertiary}
-              value={reason}
-              onChangeText={setReason}
-              multiline
-              numberOfLines={3}
-              textAlignVertical="top"
-            />
-
-            {error ? (
-              <AppText variant="caption" style={{ color: palette.error.default, marginBottom: spacing[3] }}>
-                {error}
+    <Popup title="Request Leave" onClose={onClose}>
+      <ScrollView showsVerticalScrollIndicator={false}>
+        {/* Leave type */}
+        <AppText variant="caption" color="tertiary" style={styles.fieldLabel}>Leave Type</AppText>
+        <View style={styles.typeRow}>
+          {TYPES.map((t) => (
+            <Pressable
+              key={t}
+              onPress={() => setLeaveType(t)}
+              style={[
+                styles.typeChip,
+                {
+                  borderColor: leaveType === t ? colors.accent : colors.border,
+                  backgroundColor: leaveType === t ? colors.accent + "18" : "transparent",
+                },
+              ]}
+            >
+              <AppText
+                variant={leaveType === t ? "bodyMedium" : "body"}
+                style={{ color: leaveType === t ? colors.accent : colors.text.secondary }}
+              >
+                {t}
               </AppText>
-            ) : null}
-
-            <AppButton
-              label={mutation.isPending ? "Submitting…" : "Submit Request"}
-              onPress={handleSubmit}
-              disabled={mutation.isPending}
-              style={{ marginTop: spacing[4] }}
-            />
-            <View style={{ height: spacing[6] }} />
-          </ScrollView>
+            </Pressable>
+          ))}
         </View>
-      </View>
-    </Modal>
+
+        {/* Start date */}
+        <View style={styles.fieldLabel}>
+          <DatePickerField
+            label="Start Date"
+            value={startDate}
+            onChange={setStartDate}
+            placeholder="Select start date"
+          />
+        </View>
+
+        {/* End date */}
+        <View style={styles.fieldLabel}>
+          <DatePickerField
+            label="End Date"
+            value={endDate}
+            onChange={setEndDate}
+            placeholder="Select end date"
+          />
+        </View>
+
+        {/* Day count */}
+        {startDate && endDate && !moment(endDate).isBefore(moment(startDate), "day") && (
+          <View style={[styles.dayCount, { backgroundColor: colors.accentSubtle }]}>
+            <AppText variant="bodyMedium" style={{ color: colors.accent }}>
+              {moment(endDate).diff(moment(startDate), "days") + 1} day{moment(endDate).diff(moment(startDate), "days") + 1 !== 1 ? "s" : ""}
+            </AppText>
+            <AppText variant="caption" color="secondary">
+              {moment(startDate).format("D MMM")} – {moment(endDate).format("D MMM YYYY")}
+            </AppText>
+          </View>
+        )}
+
+        {/* Reason */}
+        <AppText variant="caption" color="tertiary" style={styles.fieldLabel}>Reason</AppText>
+        <TextInput
+          style={[styles.input, styles.textArea, { borderColor: colors.border, color: colors.text.primary, backgroundColor: colors.background.secondary, outline: "none" } as any]}
+          placeholder="Briefly describe your reason..."
+          placeholderTextColor={colors.text.tertiary}
+          value={reason}
+          onChangeText={setReason}
+          multiline
+          numberOfLines={3}
+          textAlignVertical="top"
+        />
+
+        {error ? (
+          <AppText variant="caption" style={{ color: palette.error.default, marginBottom: spacing[3] }}>
+            {error}
+          </AppText>
+        ) : null}
+
+        <AppButton
+          label={mutation.isPending ? "Submitting…" : "Submit Request"}
+          onPress={handleSubmit}
+          disabled={mutation.isPending}
+          style={{ marginTop: spacing[4] }}
+        />
+        <View style={{ height: spacing[6] }} />
+      </ScrollView>
+    </Popup>
   )
 }
 
@@ -588,20 +579,6 @@ const styles = StyleSheet.create({
   },
   metaRow: { flexDirection: "row", alignItems: "center", gap: spacing[2] },
 
-  // Modal
-  modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" },
-  modalSheet: {
-    borderTopLeftRadius: radii.xl,
-    borderTopRightRadius: radii.xl,
-    padding: spacing[5],
-    maxHeight: "90%",
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: spacing[5],
-  },
   fieldLabel: { marginBottom: spacing[2], marginTop: spacing[4] },
   typeRow: { flexDirection: "row", gap: spacing[3] },
   typeChip: {

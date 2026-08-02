@@ -1,5 +1,5 @@
 import { useRef, useState } from "react"
-import { View, StyleSheet, Pressable, Platform } from "react-native"
+import { View, StyleSheet, Pressable } from "react-native"
 import { CameraView, useCameraPermissions } from "expo-camera"
 import { Camera } from "lucide-react-native"
 import AppText from "../ui/AppText"
@@ -9,14 +9,7 @@ import { spacing } from "../../constants/theme"
 interface FaceCameraProps {
   onCapture: (photoUri: string) => void
   isBusy?: boolean
-}
-
-function FaceGuide() {
-  return (
-    <View style={styles.guideWrap} pointerEvents="none">
-      <View style={styles.guideOval} />
-    </View>
-  )
+  targetPose?: "straight" | "left" | "right"
 }
 
 export default function FaceCamera({ onCapture, isBusy }: FaceCameraProps) {
@@ -66,11 +59,9 @@ export default function FaceCamera({ onCapture, isBusy }: FaceCameraProps) {
         onCameraReady={() => {
           // expo-camera's web implementation can fire onCameraReady slightly
           // before the underlying <video> element has actual frame data.
-          const delay = Platform.OS === "web" ? 400 : 0
-          setTimeout(() => setIsCameraReady(true), delay)
+          setTimeout(() => setIsCameraReady(true), 400)
         }}
       />
-      <FaceGuide />
       <View style={styles.shutterRow}>
         {!isCameraReady && (
           <AppText variant="caption" style={{ color: "rgba(255,255,255,0.7)", marginBottom: spacing[3] }}>
@@ -110,19 +101,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     alignItems: "center",
-  },
-  guideWrap: {
-    ...StyleSheet.absoluteFill,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  guideOval: {
-    width: 220,
-    height: 290,
-    borderRadius: 140,
-    borderWidth: 2.5,
-    borderColor: "rgba(255,255,255,0.55)",
-    borderStyle: "dashed",
   },
   shutterBtn: {
     width: 76,

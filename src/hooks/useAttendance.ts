@@ -6,5 +6,6 @@ export function useAttendance(date: string) {
   return useQuery<AttendanceDayResponse>({
     queryKey: ["attendance", date],
     queryFn: () => attendanceService.getAttendance(date),
+    refetchInterval: 60000,
   })
 }

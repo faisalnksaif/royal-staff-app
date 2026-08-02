@@ -10,6 +10,47 @@
  * ---------------------------------------------------------------
  */
 
+export interface ShiftResponse {
+  /** @example "6a6eb4734de5019c90374faf" */
+  _id?: string;
+  /** @example "General" */
+  name: string;
+  /**
+   * 24hr "HH:mm" in the configured timezone (Asia/Kolkata)
+   * @example "08:30"
+   */
+  startTime: string;
+  /**
+   * Normal shift end - checking out at/before this is not overtime
+   * @example "18:30"
+   */
+  endTime1: string;
+  /**
+   * Overtime threshold - checking out after this counts as overtime. Commonly equal to endTime1 (no OT grace window).
+   * @example "19:00"
+   */
+  endTime2: string;
+  /** @example true */
+  isDefault?: boolean;
+  /** @format date-time */
+  createdAt?: string;
+  /** @format date-time */
+  updatedAt?: string;
+}
+
+export interface DepartmentResponse {
+  /** @example "6a6f3ad24de5019c90375d7c" */
+  _id?: string;
+  /** @example "Store" */
+  name: string;
+  /** @example true */
+  isDefault?: boolean;
+  /** @format date-time */
+  createdAt?: string;
+  /** @format date-time */
+  updatedAt?: string;
+}
+
 /** A rowbest customer ledger, as synced into LedgerCustomer */
 export interface LedgerCustomerResponse {
   /**
@@ -149,7 +190,7 @@ export interface UserResponse {
   /** @example 3027 */
   user_id?: number | null;
   /** @example "staff" */
-  role: "staff" | "manager" | "superAdmin" | "hr";
+  role: "staff" | "manager" | "superAdmin" | "hr" | "scanner";
   /** @example true */
   isActive: boolean;
 }
@@ -172,6 +213,21 @@ export interface StaffResponse {
   sales_target?: number | null;
   /** @example null */
   collection_target?: number | null;
+  /**
+   * When false, this staff member is excluded from attendance tracking, summaries, and dashboards (e.g. management/stale records)
+   * @example true
+   */
+  isEligibleForAttendance?: boolean;
+  /**
+   * MongoDB ID of the assigned Department (see /departments)
+   * @example "6a6f3ad24de5019c90375d7c"
+   */
+  departmentId?: string | null;
+  /**
+   * MongoDB ID of the assigned Shift (see /shifts). Null/unset falls back to the default shift.
+   * @example "6a6eb4734de5019c90374faf"
+   */
+  shiftId?: string | null;
   /**
    * Whether the staff member has at least one enrolled face photo
    * @example false
@@ -1145,6 +1201,57 @@ export class Api<SecurityDataType extends unknown> {
         path: `/staff/${id}`,
         method: "GET",
         secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Update a staff member's department and/or shift assignment. Manager/HR/superAdmin only.
+     *
+     * @tags Staff
+     * @name StaffPartialUpdate
+     * @summary Update staff department/shift
+     * @request PATCH:/staff/{id}
+     * @secure
+     */
+    staffPartialUpdate: (
+      id: number,
+      data: {
+        /**
+         * MongoDB ID of an existing Department document (see /departments)
+         * @example "6a6f3ad24de5019c90375d7c"
+         */
+        departmentId?: string;
+        /**
+         * MongoDB ID of an existing Shift document
+         * @example "6a6eb4734de5019c90374faf"
+         */
+        shiftId?: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          data?: {
+            /** @example 2645 */
+            id?: number;
+            /** @example "ANAS" */
+            name?: string;
+            /** @example "6a6f3ad24de5019c90375d7c" */
+            departmentId?: string;
+            /** @example "6a6eb4734de5019c90374faf" */
+            shiftId?: string;
+          };
+        },
+        ErrorResponse
+      >({
+        path: `/staff/${id}`,
+        method: "PATCH",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
         format: "json",
         ...params,
       }),
@@ -3319,7 +3426,62 @@ export class Api<SecurityDataType extends unknown> {
             totalWorkHours?: number | null;
             totalBreakTime?: number | null;
             overtimeHours?: number | null;
-            status?: "present" | "absent" | "late";
+            /**
+             * Early-arrival (>=15 min before shift start) plus late-checkout (past the shift's overtime threshold) minutes, combined
+             * @example 20
+             */
+            overtimeMinutes?: number;
+            /**
+             * Minutes late vs the staff's assigned shift start time (0 if on-time or early)
+             * @example 0
+             */
+            lateMinutes?: number;
+            /** The session gap (if any) starting within the 10:00-11:30 window */
+            teaBreak?: {
+              /**
+               * Checkout time of the session before the break; null if no gap fell in the tea-break window that day
+               * @format date-time
+               * @example "2026-06-22T03:30:00.000Z"
+               */
+              startTime?: string | null;
+              /**
+               * Check-in time of the session after the break; null if no gap fell in the tea-break window that day
+               * @format date-time
+               * @example "2026-06-22T03:45:00.000Z"
+               */
+              endTime?: string | null;
+              /**
+               * Measured gap length; null if no gap fell in the tea-break window that day
+               * @example 15
+               */
+              minutes?: number | null;
+              /** @example 10 */
+              allowanceMinutes?: number;
+              /** @example 5 */
+              excessMinutes?: number;
+            };
+            /** The session gap (if any) starting at/after 11:30. Allowance is 120 minutes on Friday, 30 minutes other days. */
+            lunchBreak?: {
+              /**
+               * Checkout time of the session before the break; null if no gap fell in the lunch-break window that day
+               * @format date-time
+               * @example "2026-06-22T08:31:00.000Z"
+               */
+              startTime?: string | null;
+              /**
+               * Check-in time of the session after the break; null if no gap fell in the lunch-break window that day
+               * @format date-time
+               * @example "2026-06-22T08:56:00.000Z"
+               */
+              endTime?: string | null;
+              /** @example 45 */
+              minutes?: number | null;
+              /** @example 30 */
+              allowanceMinutes?: number;
+              /** @example 15 */
+              excessMinutes?: number;
+            };
+            status?: "present" | "absent" | "late" | "half-day";
             isOnLeave?: boolean;
             leaveType?: string | null;
           }[];
@@ -3330,6 +3492,55 @@ export class Api<SecurityDataType extends unknown> {
         method: "GET",
         query: query,
         secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Overwrites a day's check-in/check-out sessions (e.g. staff forgot to check in/out) and recomputes totals, lateness, overtime, and break-excess for that day. Every edit is appended to the record's audit trail (editor, role, timestamp, before/after snapshot, reason). Permissions (nobody may edit their own session, regardless of role): - manager/HR may edit STAFF sessions only (not each other's, not their own) - superAdmin may edit STAFF, MANAGER, and HR sessions (not their own)
+     *
+     * @tags Attendance
+     * @name SessionsPartialUpdate
+     * @summary Manually edit a staff member's sessions for a day
+     * @request PATCH:/attendance/{staffId}/{date}/sessions
+     * @secure
+     */
+    sessionsPartialUpdate: (
+      staffId: number,
+      date: string,
+      data: {
+        /** Full replacement list of sessions for the day, sorted by checkIn automatically */
+        sessions: {
+          /**
+           * @format date-time
+           * @example "2026-06-29T02:55:00.000Z"
+           */
+          checkIn: string;
+          /**
+           * @format date-time
+           * @example "2026-06-29T13:00:00.000Z"
+           */
+          checkOut?: string | null;
+        }[];
+        /** @example "Forgot to check out - corrected by manager" */
+        reason?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          /** The recomputed attendance record for that day (same shape as an item in GET /attendance's data array) */
+          data?: object;
+        },
+        ErrorResponse
+      >({
+        path: `/attendance/${staffId}/${date}/sessions`,
+        method: "PATCH",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
         format: "json",
         ...params,
       }),
@@ -3437,6 +3648,11 @@ export class Api<SecurityDataType extends unknown> {
               totalPresent?: number;
               /** @example 80 */
               totalLate?: number;
+              /**
+               * Days converted to a half-day leave (4th+ occurrence in a month of arriving >=30 min late)
+               * @example 6
+               */
+              totalHalfDay?: number;
               /** @example 150 */
               totalAbsent?: number;
               /** @example 70 */
@@ -3447,7 +3663,7 @@ export class Api<SecurityDataType extends unknown> {
                */
               overallAttendanceRate?: number;
             };
-            /** Daily attendance counts and rate across the range */
+            /** Daily attendance counts and rate across the range. Sundays are excluded entirely (weekly holiday). */
             trend?: {
               /** @example "2026-06-01" */
               date?: string;
@@ -3455,6 +3671,8 @@ export class Api<SecurityDataType extends unknown> {
               present?: number;
               /** @example 2 */
               late?: number;
+              /** @example 1 */
+              halfDay?: number;
               /** @example 1 */
               absent?: number;
               /** @example 2 */
@@ -3475,6 +3693,8 @@ export class Api<SecurityDataType extends unknown> {
               presentDays?: number;
               /** @example 3 */
               lateDays?: number;
+              /** @example 1 */
+              halfDayDays?: number;
               /** @example 2 */
               absentDays?: number;
               /** @example 3 */
@@ -3489,6 +3709,12 @@ export class Api<SecurityDataType extends unknown> {
                * @example 4.5
                */
               totalOvertimeHours?: number;
+              /** @example 270 */
+              totalOvertimeMinutes?: number;
+              /** @example 30 */
+              totalTeaBreakExcessMinutes?: number;
+              /** @example 90 */
+              totalLunchBreakExcessMinutes?: number;
               /**
                * Days where a session was auto-closed by the stale-session cleanup job due to a missing checkout
                * @example 1
@@ -3541,6 +3767,15 @@ export class Api<SecurityDataType extends unknown> {
                 /** @example 2 */
                 missedCheckoutDays?: number;
               }[];
+              /** Staff with 60 or more combined tea+lunch break excess minutes in the range */
+              excessiveBreaks?: {
+                /** @example 12 */
+                staffId?: number;
+                /** @example "Jane Doe" */
+                staffName?: string;
+                /** @example 120 */
+                totalBreakExcessMinutes?: number;
+              }[];
             };
           };
         },
@@ -3592,7 +3827,12 @@ export class Api<SecurityDataType extends unknown> {
               presentDays?: number;
               absentDays?: number;
               lateDays?: number;
+              halfDayDays?: number;
               totalWorkHours?: number;
+              totalBreakTime?: number;
+              totalOvertimeMinutes?: number;
+              totalTeaBreakExcessMinutes?: number;
+              totalLunchBreakExcessMinutes?: number;
             };
             records?: {
               date?: string;
@@ -3602,7 +3842,13 @@ export class Api<SecurityDataType extends unknown> {
               sessions?: object[];
               totalWorkHours?: number;
               totalBreakTime?: number;
-              status?: string;
+              lateMinutes?: number;
+              overtimeMinutes?: number;
+              teaBreakMinutes?: number | null;
+              teaBreakExcessMinutes?: number;
+              lunchBreakMinutes?: number | null;
+              lunchBreakExcessMinutes?: number;
+              status?: "present" | "absent" | "late" | "half-day";
             }[];
           };
         },
@@ -3612,6 +3858,261 @@ export class Api<SecurityDataType extends unknown> {
         method: "GET",
         query: query,
         secure: true,
+        format: "json",
+        ...params,
+      }),
+  };
+  shifts = {
+    /**
+     * @description Retrieve all defined shifts (name, startTime/endTime1/endTime2). Manager/HR/superAdmin only.
+     *
+     * @tags Shifts
+     * @name ShiftsList
+     * @summary List all shifts
+     * @request GET:/shifts
+     * @secure
+     */
+    shiftsList: (params: RequestParams = {}) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          /** @example 7 */
+          count?: number;
+          data?: ShiftResponse[];
+        },
+        ErrorResponse
+      >({
+        path: `/shifts`,
+        method: "GET",
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Create a new shift definition. Manager/HR/superAdmin only.
+     *
+     * @tags Shifts
+     * @name ShiftsCreate
+     * @summary Create a shift
+     * @request POST:/shifts
+     * @secure
+     */
+    shiftsCreate: (
+      data: {
+        /** @example "Morning Shift" */
+        name: string;
+        /**
+         * 24hr "HH:mm"
+         * @example "08:30"
+         */
+        startTime: string;
+        /** @example "17:30" */
+        endTime1: string;
+        /** @example "17:30" */
+        endTime2: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          data?: ShiftResponse;
+        },
+        ErrorResponse
+      >({
+        path: `/shifts`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @tags Shifts
+     * @name ShiftsDetail
+     * @summary Get a shift by ID
+     * @request GET:/shifts/{id}
+     * @secure
+     */
+    shiftsDetail: (id: string, params: RequestParams = {}) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          data?: ShiftResponse;
+        },
+        ErrorResponse
+      >({
+        path: `/shifts/${id}`,
+        method: "GET",
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Update a shift's name and/or hours. Applies to every staff member currently assigned to this shift.
+     *
+     * @tags Shifts
+     * @name ShiftsPartialUpdate
+     * @summary Update a shift
+     * @request PATCH:/shifts/{id}
+     * @secure
+     */
+    shiftsPartialUpdate: (
+      id: string,
+      data: {
+        /** @example "Morning Shift" */
+        name?: string;
+        /** @example "08:30" */
+        startTime?: string;
+        /** @example "17:30" */
+        endTime1?: string;
+        /** @example "17:30" */
+        endTime2?: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          data?: ShiftResponse;
+        },
+        ErrorResponse
+      >({
+        path: `/shifts/${id}`,
+        method: "PATCH",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+  };
+  departments = {
+    /**
+     * @description Retrieve all defined departments. Manager/HR/superAdmin only.
+     *
+     * @tags Departments
+     * @name DepartmentsList
+     * @summary List all departments
+     * @request GET:/departments
+     * @secure
+     */
+    departmentsList: (params: RequestParams = {}) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          /** @example 3 */
+          count?: number;
+          data?: DepartmentResponse[];
+        },
+        ErrorResponse
+      >({
+        path: `/departments`,
+        method: "GET",
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Create a new department. Manager/HR/superAdmin only.
+     *
+     * @tags Departments
+     * @name DepartmentsCreate
+     * @summary Create a department
+     * @request POST:/departments
+     * @secure
+     */
+    departmentsCreate: (
+      data: {
+        /** @example "Packing" */
+        name: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          data?: DepartmentResponse;
+        },
+        ErrorResponse
+      >({
+        path: `/departments`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @tags Departments
+     * @name DepartmentsDetail
+     * @summary Get a department by ID
+     * @request GET:/departments/{id}
+     * @secure
+     */
+    departmentsDetail: (id: string, params: RequestParams = {}) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          data?: DepartmentResponse;
+        },
+        ErrorResponse
+      >({
+        path: `/departments/${id}`,
+        method: "GET",
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Rename a department. Applies to every staff member currently assigned to it.
+     *
+     * @tags Departments
+     * @name DepartmentsPartialUpdate
+     * @summary Update a department
+     * @request PATCH:/departments/{id}
+     * @secure
+     */
+    departmentsPartialUpdate: (
+      id: string,
+      data: {
+        /** @example "Packing" */
+        name?: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          data?: DepartmentResponse;
+        },
+        ErrorResponse
+      >({
+        path: `/departments/${id}`,
+        method: "PATCH",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
         format: "json",
         ...params,
       }),

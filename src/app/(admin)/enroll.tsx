@@ -165,14 +165,16 @@ function EnrollFace({
         </View>
       ) : (
         <View style={styles.cameraFill}>
-          <View style={styles.poseHintWrap}>
+          <View style={styles.poseHintWrap} pointerEvents="none">
             <nextPose.Icon size={28} color="#fff" strokeWidth={2} />
             <AppText variant="bodyMedium" style={{ color: "#fff" }}>
               {nextPose.instruction}
             </AppText>
           </View>
           <FaceCamera
+            targetPose={nextPose.key}
             onCapture={(uri) => { setLastError(""); setCapturedUri(uri) }}
+            onClose={onClose}
           />
         </View>
       )}

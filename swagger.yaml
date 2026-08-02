@@ -247,6 +247,169 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /auth/scanning-devices:
+    post:
+      tags:
+        - Authentication
+      summary: Create a department's scanning-device login (admin)
+      description: |
+        Creates a role=scanner login for a department's physical attendance-scanning device. The
+        device logs in via /auth/login with these credentials and sends the resulting bearer token
+        on every POST /attendance/scan call. lat/lng/radiusMeters define the device's expected
+        physical location, used to flag scans made outside that radius.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+                - departmentId
+                - lat
+                - lng
+                - radiusMeters
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: scan-kitchen@rowbest.com
+                password:
+                  type: string
+                  minLength: 4
+                  example: "s3cret"
+                name:
+                  type: string
+                  nullable: true
+                  example: Kitchen scanner
+                departmentId:
+                  type: string
+                  example: 507f1f77bcf86cd799439022
+                lat:
+                  type: number
+                  example: 11.2588
+                lng:
+                  type: number
+                  example: 75.7804
+                radiusMeters:
+                  type: number
+                  example: 100
+      responses:
+        '201':
+          description: Scanning device created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Scanning device created successfully
+                  data:
+                    $ref: '#/components/schemas/ScanningDeviceResponse'
+        '400':
+          description: Missing/invalid fields, or a device with this email already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden - admin role required
+        '404':
+          description: Department not found
+    get:
+      tags:
+        - Authentication
+      summary: List department scanning-device logins (admin)
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of scanning devices
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  count:
+                    type: integer
+                    example: 3
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ScanningDeviceResponse'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden - admin role required
+
+  /auth/scanning-devices/{id}:
+    patch:
+      tags:
+        - Authentication
+      summary: Update a scanning device's department/location/active state (admin)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: 507f1f77bcf86cd799439099
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: All fields optional - only provided fields are updated. lat/lng/radiusMeters merge with the device's existing location.
+              properties:
+                departmentId:
+                  type: string
+                lat:
+                  type: number
+                lng:
+                  type: number
+                radiusMeters:
+                  type: number
+                isActive:
+                  type: boolean
+                name:
+                  type: string
+      responses:
+        '200':
+          description: Scanning device updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/ScanningDeviceResponse'
+        '400':
+          description: Invalid location fields
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden - admin role required
+        '404':
+          description: Scanning device or department not found
+
   /staff:
     get:
       tags:
@@ -323,6 +486,81 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
           description: Forbidden - staff can only access their own record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Staff not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    patch:
+      tags:
+        - Staff
+      summary: Update staff department/shift
+      description: Update a staff member's department and/or shift assignment. Manager/HR/superAdmin only.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Staff ID
+          schema:
+            type: integer
+            example: 2645
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                departmentId:
+                  type: string
+                  description: MongoDB ID of an existing Department document (see /departments)
+                  example: 6a6f3ad24de5019c90375d7c
+                shiftId:
+                  type: string
+                  description: MongoDB ID of an existing Shift document
+                  example: 6a6eb4734de5019c90374faf
+      responses:
+        '200':
+          description: Staff updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        example: 2645
+                      name:
+                        type: string
+                        example: ANAS
+                      departmentId:
+                        type: string
+                        example: 6a6f3ad24de5019c90375d7c
+                      shiftId:
+                        type: string
+                        example: 6a6eb4734de5019c90374faf
+        '400':
+          description: Invalid departmentId or shiftId (no matching Department/Shift)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - insufficient permissions (manager/HR/superAdmin required)
           content:
             application/json:
               schema:
@@ -3193,12 +3431,19 @@ paths:
         - Attendance
       summary: Scan a face photo for attendance (check-in/check-out)
       description: |
-        Public endpoint (no auth required) - camera-first, no staff pre-selected. Runs face recognition
-        against all enrolled staff (open-set search) to identify the closest match, then automatically
-        toggles check-in/check-out based on that staff member's existing sessions for the day.
+        Requires a department scanning-device login (role scanner - see POST /auth/scanning-devices),
+        camera-first, no staff pre-selected. Runs face recognition against staff belonging to the
+        scanner's department (plus any staff flagged canScanAnyDepartment, e.g. drivers) to identify
+        the closest match, then automatically toggles check-in/check-out based on that staff member's
+        existing sessions for the day.
+        lat/lng are mandatory and are compared against the scanning device's configured location -
+        scans outside its allowed radius are still recorded (not blocked) but returned/stored with
+        locationVerified: false for fraud review.
         Duplicate/too-soon scans are rejected server-side using the existing fraud-prevention gap
         (MIN_GAP_FOR_CHECKOUT / MIN_GAP_FOR_NEW_SESSION) - in that case the response has matched: true
         but success: false with an error message, and no action/attendance fields.
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -3208,6 +3453,8 @@ paths:
               required:
                 - photo
                 - timestamp
+                - lat
+                - lng
               properties:
                 photo:
                   type: string
@@ -3217,6 +3464,14 @@ paths:
                   type: string
                   format: date-time
                   description: ISO timestamp of the scan
+                lat:
+                  type: number
+                  description: Current GPS latitude reported by the scanning device
+                  example: 11.2588
+                lng:
+                  type: number
+                  description: Current GPS longitude reported by the scanning device
+                  example: 75.7804
       responses:
         '200':
           description: Scan result (check response body for success/matched, not just HTTP status)
@@ -3250,6 +3505,9 @@ paths:
                     type: string
                     enum: [checkIn, checkOut]
                     description: Present when matched is true and the scan was accepted
+                  locationVerified:
+                    type: boolean
+                    description: Present when matched is true and the scan was accepted - false if the scan's lat/lng was outside the scanning device's configured radius (not blocked, only flagged)
                   attendance:
                     type: object
                     description: Present when matched is true and the scan was accepted - that staff member's updated day summary
@@ -3300,9 +3558,75 @@ paths:
                         type: string
                         nullable: true
         '400':
-          description: Missing photo/timestamp, or unsupported photo format
+          description: Missing photo/timestamp/lat/lng, or unsupported photo format
+        '401':
+          description: Unauthorized - no token or invalid token
+        '403':
+          description: Forbidden - requires a scanner-role login
         '500':
           description: Scan failed
+
+  /attendance/scans/recent:
+    get:
+      tags:
+        - Attendance
+      summary: Recent scans recorded by the calling scanning device's department
+      description: |
+        Requires a scanner-role login (see POST /auth/scanning-devices). Returns the most recent
+        check-in/check-out events recorded today by this device's department, newest first - lets
+        the staff member standing at the device confirm their scan just registered correctly.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+          description: Max number of events to return
+      responses:
+        '200':
+          description: Recent scan events, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  count:
+                    type: integer
+                    example: 5
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        staffId:
+                          type: integer
+                        staffName:
+                          type: string
+                        action:
+                          type: string
+                          enum: [checkIn, checkOut]
+                        timestamp:
+                          type: string
+                          format: date-time
+                        confidence:
+                          type: number
+                          description: 0-1 face-match similarity score for this scan
+                        locationVerified:
+                          type: boolean
+                          description: False if this scan's lat/lng was outside the device's configured radius
+        '400':
+          description: Scanning device has no department assigned
+        '401':
+          description: Unauthorized - no token or invalid token
+        '403':
+          description: Forbidden - requires a scanner-role login
 
   /attendance/enroll/{staffId}:
     post:
@@ -3481,9 +3805,70 @@ paths:
                         overtimeHours:
                           type: number
                           nullable: true
+                        overtimeMinutes:
+                          type: integer
+                          description: Early-arrival (>=15 min before shift start) plus late-checkout (past the shift's overtime threshold) minutes, combined
+                          example: 20
+                        lateMinutes:
+                          type: integer
+                          description: Minutes late vs the staff's assigned shift start time (0 if on-time or early)
+                          example: 0
+                        teaBreak:
+                          type: object
+                          description: The session gap (if any) starting within the 10:00-11:30 window
+                          properties:
+                            startTime:
+                              type: string
+                              format: date-time
+                              nullable: true
+                              description: Checkout time of the session before the break; null if no gap fell in the tea-break window that day
+                              example: 2026-06-22T03:30:00.000Z
+                            endTime:
+                              type: string
+                              format: date-time
+                              nullable: true
+                              description: Check-in time of the session after the break; null if no gap fell in the tea-break window that day
+                              example: 2026-06-22T03:45:00.000Z
+                            minutes:
+                              type: integer
+                              nullable: true
+                              description: Measured gap length; null if no gap fell in the tea-break window that day
+                              example: 15
+                            allowanceMinutes:
+                              type: integer
+                              example: 10
+                            excessMinutes:
+                              type: integer
+                              example: 5
+                        lunchBreak:
+                          type: object
+                          description: The session gap (if any) starting at/after 11:30. Allowance is 120 minutes on Friday, 30 minutes other days.
+                          properties:
+                            startTime:
+                              type: string
+                              format: date-time
+                              nullable: true
+                              description: Checkout time of the session before the break; null if no gap fell in the lunch-break window that day
+                              example: 2026-06-22T08:31:00.000Z
+                            endTime:
+                              type: string
+                              format: date-time
+                              nullable: true
+                              description: Check-in time of the session after the break; null if no gap fell in the lunch-break window that day
+                              example: 2026-06-22T08:56:00.000Z
+                            minutes:
+                              type: integer
+                              nullable: true
+                              example: 45
+                            allowanceMinutes:
+                              type: integer
+                              example: 30
+                            excessMinutes:
+                              type: integer
+                              example: 15
                         status:
                           type: string
-                          enum: [present, absent, late]
+                          enum: [present, absent, late, half-day]
                         isOnLeave:
                           type: boolean
                         leaveType:
@@ -3493,6 +3878,98 @@ paths:
           description: Invalid date format
         '403':
           description: Forbidden
+
+  /attendance/{staffId}/{date}/sessions:
+    patch:
+      tags:
+        - Attendance
+      summary: Manually edit a staff member's sessions for a day
+      description: |
+        Overwrites a day's check-in/check-out sessions (e.g. staff forgot to check in/out) and recomputes totals, lateness, overtime, and break-excess for that day.
+        Every edit is appended to the record's audit trail (editor, role, timestamp, before/after snapshot, reason).
+
+        Permissions (nobody may edit their own session, regardless of role):
+        - manager/HR may edit STAFF sessions only (not each other's, not their own)
+        - superAdmin may edit STAFF, MANAGER, and HR sessions (not their own)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          description: Staff ID of the session owner (not the editor)
+          schema:
+            type: integer
+            example: 2645
+        - name: date
+          in: path
+          required: true
+          schema:
+            type: string
+            format: date
+            example: 2026-06-29
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - sessions
+              properties:
+                sessions:
+                  type: array
+                  description: Full replacement list of sessions for the day, sorted by checkIn automatically
+                  items:
+                    type: object
+                    required:
+                      - checkIn
+                    properties:
+                      checkIn:
+                        type: string
+                        format: date-time
+                        example: 2026-06-29T02:55:00.000Z
+                      checkOut:
+                        type: string
+                        format: date-time
+                        nullable: true
+                        example: 2026-06-29T13:00:00.000Z
+                reason:
+                  type: string
+                  nullable: true
+                  example: Forgot to check out - corrected by manager
+      responses:
+        '200':
+          description: Sessions updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    description: The recomputed attendance record for that day (same shape as an item in GET /attendance's data array)
+        '400':
+          description: Missing/invalid sessions, or checkOut not after checkIn
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - self-edits and peer-role edits are blocked (see permission rules above)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Target staff not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /attendance/summary/{date}:
     get:
@@ -3628,6 +4105,10 @@ paths:
                           totalLate:
                             type: integer
                             example: 80
+                          totalHalfDay:
+                            type: integer
+                            description: Days converted to a half-day leave (4th+ occurrence in a month of arriving >=30 min late)
+                            example: 6
                           totalAbsent:
                             type: integer
                             example: 150
@@ -3640,7 +4121,7 @@ paths:
                             example: 92.5
                       trend:
                         type: array
-                        description: Daily attendance counts and rate across the range
+                        description: Daily attendance counts and rate across the range. Sundays are excluded entirely (weekly holiday).
                         items:
                           type: object
                           properties:
@@ -3653,6 +4134,9 @@ paths:
                             late:
                               type: integer
                               example: 2
+                            halfDay:
+                              type: integer
+                              example: 1
                             absent:
                               type: integer
                               example: 1
@@ -3681,6 +4165,9 @@ paths:
                             lateDays:
                               type: integer
                               example: 3
+                            halfDayDays:
+                              type: integer
+                              example: 1
                             absentDays:
                               type: integer
                               example: 2
@@ -3695,6 +4182,15 @@ paths:
                               type: number
                               format: float
                               example: 4.5
+                            totalOvertimeMinutes:
+                              type: integer
+                              example: 270
+                            totalTeaBreakExcessMinutes:
+                              type: integer
+                              example: 30
+                            totalLunchBreakExcessMinutes:
+                              type: integer
+                              example: 90
                             missedCheckoutDays:
                               type: integer
                               description: Days where a session was auto-closed by the stale-session cleanup job due to a missing checkout
@@ -3768,6 +4264,21 @@ paths:
                                 missedCheckoutDays:
                                   type: integer
                                   example: 2
+                          excessiveBreaks:
+                            type: array
+                            description: Staff with 60 or more combined tea+lunch break excess minutes in the range
+                            items:
+                              type: object
+                              properties:
+                                staffId:
+                                  type: integer
+                                  example: 12
+                                staffName:
+                                  type: string
+                                  example: Jane Doe
+                                totalBreakExcessMinutes:
+                                  type: integer
+                                  example: 120
         '400':
           description: Missing startDate/endDate, or startDate after endDate
         '403':
@@ -3831,8 +4342,18 @@ paths:
                             type: integer
                           lateDays:
                             type: integer
+                          halfDayDays:
+                            type: integer
                           totalWorkHours:
                             type: number
+                          totalBreakTime:
+                            type: number
+                          totalOvertimeMinutes:
+                            type: integer
+                          totalTeaBreakExcessMinutes:
+                            type: integer
+                          totalLunchBreakExcessMinutes:
+                            type: integer
                       records:
                         type: array
                         items:
@@ -3852,8 +4373,393 @@ paths:
                               type: number
                             totalBreakTime:
                               type: number
+                            lateMinutes:
+                              type: integer
+                            overtimeMinutes:
+                              type: integer
+                            teaBreakMinutes:
+                              type: integer
+                              nullable: true
+                            teaBreakExcessMinutes:
+                              type: integer
+                            lunchBreakMinutes:
+                              type: integer
+                              nullable: true
+                            lunchBreakExcessMinutes:
+                              type: integer
                             status:
                               type: string
+                              enum: [present, absent, late, half-day]
+
+  /shifts:
+    get:
+      tags:
+        - Shifts
+      summary: List all shifts
+      description: Retrieve all defined shifts (name, startTime/endTime1/endTime2). Manager/HR/superAdmin only.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of shifts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  count:
+                    type: integer
+                    example: 7
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ShiftResponse'
+        '403':
+          description: Forbidden - insufficient permissions (manager/HR/superAdmin required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags:
+        - Shifts
+      summary: Create a shift
+      description: Create a new shift definition. Manager/HR/superAdmin only.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - startTime
+                - endTime1
+                - endTime2
+              properties:
+                name:
+                  type: string
+                  example: Morning Shift
+                startTime:
+                  type: string
+                  description: 24hr "HH:mm"
+                  example: '08:30'
+                endTime1:
+                  type: string
+                  example: '17:30'
+                endTime2:
+                  type: string
+                  example: '17:30'
+      responses:
+        '201':
+          description: Shift created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/ShiftResponse'
+        '400':
+          description: Missing/invalid fields, or a shift with that name already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - insufficient permissions (manager/HR/superAdmin required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /shifts/{id}:
+    get:
+      tags:
+        - Shifts
+      summary: Get a shift by ID
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            example: 6a6eb4734de5019c90374faf
+      responses:
+        '200':
+          description: Shift details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/ShiftResponse'
+        '403':
+          description: Forbidden - insufficient permissions (manager/HR/superAdmin required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Shift not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    patch:
+      tags:
+        - Shifts
+      summary: Update a shift
+      description: Update a shift's name and/or hours. Applies to every staff member currently assigned to this shift.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            example: 6a6eb4734de5019c90374faf
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: Morning Shift
+                startTime:
+                  type: string
+                  example: '08:30'
+                endTime1:
+                  type: string
+                  example: '17:30'
+                endTime2:
+                  type: string
+                  example: '17:30'
+      responses:
+        '200':
+          description: Shift updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/ShiftResponse'
+        '400':
+          description: Invalid field format, or another shift already uses the requested name
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - insufficient permissions (manager/HR/superAdmin required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Shift not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /departments:
+    get:
+      tags:
+        - Departments
+      summary: List all departments
+      description: Retrieve all defined departments. Manager/HR/superAdmin only.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of departments
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  count:
+                    type: integer
+                    example: 3
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DepartmentResponse'
+        '403':
+          description: Forbidden - insufficient permissions (manager/HR/superAdmin required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags:
+        - Departments
+      summary: Create a department
+      description: Create a new department. Manager/HR/superAdmin only.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  example: Packing
+      responses:
+        '201':
+          description: Department created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/DepartmentResponse'
+        '400':
+          description: Missing name, or a department with that name already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - insufficient permissions (manager/HR/superAdmin required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /departments/{id}:
+    get:
+      tags:
+        - Departments
+      summary: Get a department by ID
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            example: 6a6f3ad24de5019c90375d7c
+      responses:
+        '200':
+          description: Department details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/DepartmentResponse'
+        '403':
+          description: Forbidden - insufficient permissions (manager/HR/superAdmin required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Department not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    patch:
+      tags:
+        - Departments
+      summary: Update a department
+      description: Rename a department. Applies to every staff member currently assigned to it.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            example: 6a6f3ad24de5019c90375d7c
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: Packing
+      responses:
+        '200':
+          description: Department updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/DepartmentResponse'
+        '400':
+          description: Another department already uses the requested name
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - insufficient permissions (manager/HR/superAdmin required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Department not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /leaves/request:
     post:
@@ -5227,6 +6133,63 @@ components:
       description: JWT token obtained from /auth/login
 
   schemas:
+    ShiftResponse:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: 6a6eb4734de5019c90374faf
+        name:
+          type: string
+          example: General
+        startTime:
+          type: string
+          description: 24hr "HH:mm" in the configured timezone (Asia/Kolkata)
+          example: '08:30'
+        endTime1:
+          type: string
+          description: Normal shift end - checking out at/before this is not overtime
+          example: '18:30'
+        endTime2:
+          type: string
+          description: Overtime threshold - checking out after this counts as overtime. Commonly equal to endTime1 (no OT grace window).
+          example: '19:00'
+        isDefault:
+          type: boolean
+          example: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - name
+        - startTime
+        - endTime1
+        - endTime2
+
+    DepartmentResponse:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: 6a6f3ad24de5019c90375d7c
+        name:
+          type: string
+          example: Store
+        isDefault:
+          type: boolean
+          example: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - name
+
     LedgerCustomerResponse:
       type: object
       description: A rowbest customer ledger, as synced into LedgerCustomer
@@ -5434,6 +6397,7 @@ components:
             - manager
             - superAdmin
             - hr
+            - scanner
           example: staff
         isActive:
           type: boolean
@@ -5443,6 +6407,43 @@ components:
         - email
         - role
         - isActive
+
+    ScanningDeviceResponse:
+      type: object
+      description: A department's scanning-device login (role scanner)
+      properties:
+        id:
+          type: string
+          example: 507f1f77bcf86cd799439099
+        email:
+          type: string
+          format: email
+          example: scan-kitchen@rowbest.com
+        name:
+          type: string
+          nullable: true
+          example: Kitchen scanner
+        isActive:
+          type: boolean
+          example: true
+        departmentId:
+          type: string
+          description: Department ID, or the populated department object on GET/list responses
+          example: 507f1f77bcf86cd799439022
+        location:
+          type: object
+          nullable: true
+          properties:
+            lat:
+              type: number
+              example: 11.2588
+            lng:
+              type: number
+              example: 75.7804
+            radiusMeters:
+              type: number
+              description: Allowed distance (meters) from this point for a scan to be considered location-verified
+              example: 100
 
     StaffResponse:
       type: object
@@ -5472,6 +6473,20 @@ components:
           type: number
           nullable: true
           example: null
+        isEligibleForAttendance:
+          type: boolean
+          description: When false, this staff member is excluded from attendance tracking, summaries, and dashboards (e.g. management/stale records)
+          example: true
+        departmentId:
+          type: string
+          nullable: true
+          description: MongoDB ID of the assigned Department (see /departments)
+          example: 6a6f3ad24de5019c90375d7c
+        shiftId:
+          type: string
+          nullable: true
+          description: MongoDB ID of the assigned Shift (see /shifts). Null/unset falls back to the default shift.
+          example: 6a6eb4734de5019c90374faf
         hasPhoto:
           type: boolean
           description: Whether the staff member has at least one enrolled face photo
@@ -6090,6 +7105,10 @@ tags:
     description: User authentication and profile management
   - name: Staff
     description: Staff management (view staff information)
+  - name: Shifts
+    description: Working-hour shift definitions (start/end times) that staff are assigned to for lateness/overtime/break calculations
+  - name: Departments
+    description: Departments that staff are assigned to (e.g. Store, Godown, Driver)
   - name: Ledger
     description: Rowbest ledger customers, transactions, and staff attribution
   - name: Follow-ups

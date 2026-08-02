@@ -8,12 +8,15 @@ import {
   Pressable,
   Modal,
   TextInput,
+  ScrollView,
 } from "react-native"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { Check, X, Calendar, Clock, RefreshCw } from "lucide-react-native"
+import { Check, X, Calendar, Clock, RefreshCw, Plus, Trash2 } from "lucide-react-native"
 import BackButton from "../../components/shared/BackButton"
 import StaffAvatar from "../../components/shared/StaffAvatar"
 import AnimatedListItem from "../../components/shared/AnimatedListItem"
+import DatePickerField from "../../components/shared/DatePickerField"
+import Popup from "../../components/shared/Popup"
 import moment from "moment"
 import AppText from "../../components/ui/AppText"
 import AppCard from "../../components/ui/AppCard"
@@ -22,7 +25,8 @@ import { useTheme } from "../../providers/ThemeProvider"
 import { useTablet } from "../../hooks/useTablet"
 import { spacing, colors as palette, radii } from "../../constants/theme"
 import { leaveService } from "../../services/leaveService"
-import type { LeaveRequest, LeaveStatus } from "../../types"
+import useAuthStore from "../../stores/useAuthStore"
+import type { LeaveRequest, LeaveStatus, LeaveType } from "../../types"
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -288,6 +292,331 @@ function LeaveCard({
   )
 }
 
+// ─── MyBalanceCard ────────────────────────────────────────────────────────────
+
+function MyBalanceCard({ staffId }: { staffId?: number }) {
+  const { colors } = useTheme()
+  const { data, isLoading } = useQuery({
+    queryKey: ["leave-balance", staffId],
+    queryFn: () => leaveService.getLeaveBalance(staffId!),
+    enabled: staffId != null,
+  })
+
+  const balance = data?.data
+  const used = balance?.leaveUsedThisYear ?? 0
+  const total = balance?.totalLeavePerYear ?? 12
+  const remaining = balance?.leaveBalance ?? 0
+  const fillRatio = total > 0 ? Math.min(used / total, 1) : 0
+  const pct = Math.round(fillRatio * 100)
+  const barColor = fillRatio > 0.8 ? palette.error.default : fillRatio > 0.5 ? palette.warning.default : palette.success.default
+
+  return (
+    <View style={[styles.myBalanceCard, { borderBottomColor: colors.border }]}>
+      {isLoading ? (
+        <ActivityIndicator size="small" color={colors.accent} />
+      ) : (
+        <>
+          <View style={styles.myBalanceStatsRow}>
+            <View style={styles.myBalanceStat}>
+              <AppText variant="heading2" style={{ color: colors.accent }}>{remaining}</AppText>
+              <AppText variant="caption" color="tertiary">Remaining</AppText>
+            </View>
+            <View style={[styles.myBalanceStatDivider, { backgroundColor: colors.border }]} />
+            <View style={styles.myBalanceStat}>
+              <AppText variant="heading2" color="primary">{used}</AppText>
+              <AppText variant="caption" color="tertiary">Used (year)</AppText>
+            </View>
+          </View>
+          <View style={styles.myBalanceBarWrap}>
+            <View style={[styles.myBalanceTrack, { backgroundColor: colors.border }]}>
+              <View style={[styles.myBalanceFill, { backgroundColor: barColor, width: `${pct}%` }]} />
+            </View>
+            <AppText variant="caption" style={{ color: barColor, fontSize: 11 }}>{pct}%</AppText>
+          </View>
+        </>
+      )}
+    </View>
+  )
+}
+
+// ─── MyRequestModal ───────────────────────────────────────────────────────────
+
+function MyRequestModal({
+  visible,
+  onClose,
+  onSuccess,
+}: {
+  visible: boolean
+  onClose: () => void
+  onSuccess: () => void
+}) {
+  const { colors } = useTheme()
+  const [startDate, setStartDate] = useState<Date | null>(null)
+  const [endDate, setEndDate] = useState<Date | null>(null)
+  const [leaveType, setLeaveType] = useState<LeaveType>("Personal")
+  const [reason, setReason] = useState("")
+  const [error, setError] = useState("")
+
+  const mutation = useMutation({
+    mutationFn: () => leaveService.requestLeave({
+      startDate: moment(startDate).format("YYYY-MM-DD"),
+      endDate: moment(endDate).format("YYYY-MM-DD"),
+      leaveType,
+      reason,
+    }),
+    onSuccess: () => { onSuccess(); onClose(); reset() },
+    onError: (e) => setError((e as Error).message ?? "Request failed"),
+  })
+
+  function reset() {
+    setStartDate(null); setEndDate(null); setLeaveType("Personal"); setReason(""); setError("")
+  }
+
+  function validate() {
+    if (!startDate) return "Please select a start date"
+    if (!endDate) return "Please select an end date"
+    if (moment(endDate).isBefore(moment(startDate), "day")) return "End date must be after start date"
+    if (!reason.trim()) return "Please provide a reason"
+    return null
+  }
+
+  function handleSubmit() {
+    const err = validate()
+    if (err) { setError(err); return }
+    setError("")
+    mutation.mutate()
+  }
+
+  const TYPES: LeaveType[] = ["Personal", "Medical"]
+
+  if (!visible) return null
+
+  return (
+    <Popup title="Request Leave" onClose={onClose}>
+      <ScrollView showsVerticalScrollIndicator={false}>
+        <AppText variant="caption" color="tertiary" style={styles.myFieldLabel}>Leave Type</AppText>
+        <View style={styles.myTypeRow}>
+          {TYPES.map((t) => (
+            <Pressable
+              key={t}
+              onPress={() => setLeaveType(t)}
+              style={[
+                styles.myTypeChip,
+                {
+                  borderColor: leaveType === t ? colors.accent : colors.border,
+                  backgroundColor: leaveType === t ? colors.accent + "18" : "transparent",
+                },
+              ]}
+            >
+              <AppText
+                variant={leaveType === t ? "bodyMedium" : "body"}
+                style={{ color: leaveType === t ? colors.accent : colors.text.secondary }}
+              >
+                {t}
+              </AppText>
+            </Pressable>
+          ))}
+        </View>
+
+        <View style={styles.myFieldLabel}>
+          <DatePickerField label="Start Date" value={startDate} onChange={setStartDate} placeholder="Select start date" />
+        </View>
+
+        <View style={styles.myFieldLabel}>
+          <DatePickerField label="End Date" value={endDate} onChange={setEndDate} placeholder="Select end date" />
+        </View>
+
+        {startDate && endDate && !moment(endDate).isBefore(moment(startDate), "day") && (
+          <View style={[styles.myDayCount, { backgroundColor: colors.accentSubtle }]}>
+            <AppText variant="bodyMedium" style={{ color: colors.accent }}>
+              {moment(endDate).diff(moment(startDate), "days") + 1} day{moment(endDate).diff(moment(startDate), "days") + 1 !== 1 ? "s" : ""}
+            </AppText>
+            <AppText variant="caption" color="secondary">
+              {moment(startDate).format("D MMM")} – {moment(endDate).format("D MMM YYYY")}
+            </AppText>
+          </View>
+        )}
+
+        <AppText variant="caption" color="tertiary" style={styles.myFieldLabel}>Reason</AppText>
+        <TextInput
+          style={[styles.myInput, styles.myTextArea, { borderColor: colors.border, color: colors.text.primary, backgroundColor: colors.background.secondary, outline: "none" } as any]}
+          placeholder="Briefly describe your reason..."
+          placeholderTextColor={colors.text.tertiary}
+          value={reason}
+          onChangeText={setReason}
+          multiline
+          numberOfLines={3}
+          textAlignVertical="top"
+        />
+
+        {error ? (
+          <AppText variant="caption" style={{ color: palette.error.default, marginBottom: spacing[3] }}>
+            {error}
+          </AppText>
+        ) : null}
+
+        <AppButton
+          label={mutation.isPending ? "Submitting…" : "Submit Request"}
+          onPress={handleSubmit}
+          disabled={mutation.isPending}
+          style={{ marginTop: spacing[4] }}
+        />
+        <View style={{ height: spacing[6] }} />
+      </ScrollView>
+    </Popup>
+  )
+}
+
+// ─── MyLeaveCard ──────────────────────────────────────────────────────────────
+
+function MyLeaveCard({
+  item,
+  onDelete,
+  isDeleting,
+}: {
+  item: LeaveRequest
+  onDelete: () => void
+  isDeleting: boolean
+}) {
+  const { colors } = useTheme()
+  const status = STATUS_CONFIG[item.status]
+  return (
+    <AppCard elevation="sm" style={styles.card}>
+      <View style={styles.cardTop}>
+        <View style={{ flex: 1, gap: spacing[1] }}>
+          <View style={{ flexDirection: "row", gap: spacing[2] }}>
+            <View style={[styles.typeBadge, { backgroundColor: colors.accentSubtle }]}>
+              <AppText variant="caption" style={{ color: colors.accent, fontSize: 11 }}>{item.leaveType}</AppText>
+            </View>
+            <View style={[styles.typeBadge, { backgroundColor: status.color + "22" }]}>
+              <AppText variant="caption" style={{ color: status.color, fontSize: 11 }}>{status.label}</AppText>
+            </View>
+          </View>
+          {item.reason ? (
+            <AppText variant="caption" color="tertiary" numberOfLines={2}>{item.reason}</AppText>
+          ) : null}
+        </View>
+      </View>
+      <View style={[styles.cardMeta, { borderTopColor: colors.border }]}>
+        <View style={styles.metaRow}>
+          <Calendar size={14} color={colors.text.tertiary} strokeWidth={1.5} />
+          <AppText variant="caption" color="secondary">
+            {moment(item.startDate).format("D MMM")} – {moment(item.endDate).format("D MMM YYYY")}
+          </AppText>
+        </View>
+        <View style={styles.metaRow}>
+          <Clock size={14} color={colors.text.tertiary} strokeWidth={1.5} />
+          <AppText variant="caption" color="secondary">
+            {item.numberOfDays} day{item.numberOfDays !== 1 ? "s" : ""}
+          </AppText>
+        </View>
+      </View>
+      {item.status === "pending" && (
+        <View style={[styles.cardActions, { borderTopColor: colors.border }]}>
+          <Pressable
+            onPress={onDelete}
+            disabled={isDeleting}
+            style={({ pressed }) => [
+              styles.actionBtn,
+              { backgroundColor: palette.error.default + "15", opacity: pressed ? 0.7 : 1 },
+            ]}
+          >
+            {isDeleting ? (
+              <ActivityIndicator size="small" color={palette.error.default} />
+            ) : (
+              <>
+                <Trash2 size={16} color={palette.error.default} strokeWidth={2} />
+                <AppText variant="caption" style={{ color: palette.error.default }}>Cancel</AppText>
+              </>
+            )}
+          </Pressable>
+        </View>
+      )}
+    </AppCard>
+  )
+}
+
+// ─── MyLeavesTab ──────────────────────────────────────────────────────────────
+
+function MyLeavesTab() {
+  const { colors } = useTheme()
+  const queryClient = useQueryClient()
+  const user = useAuthStore((s) => s.user)
+  const [filter, setFilter] = useState<LeaveStatus | "all">("all")
+  const [requestOpen, setRequestOpen] = useState(false)
+
+  const { data, isLoading, refetch, isRefetching } = useQuery({
+    queryKey: ["my-leaves", filter],
+    queryFn: () => leaveService.getMyLeaves(filter === "all" ? undefined : filter),
+  })
+
+  const leaves = data?.data?.leaves ?? []
+
+  const deleteMutation = useMutation({
+    mutationFn: (leaveId: string) => leaveService.deleteLeave(leaveId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["my-leaves"] })
+      queryClient.invalidateQueries({ queryKey: ["leave-balance"] })
+    },
+  })
+
+  function onRequestSuccess() {
+    queryClient.invalidateQueries({ queryKey: ["my-leaves"] })
+    queryClient.invalidateQueries({ queryKey: ["leave-balance"] })
+  }
+
+  return (
+    <View style={{ flex: 1 }}>
+      <View style={[styles.myHeader, { borderBottomColor: colors.border }]}>
+        <AppText variant="bodyMedium" color="secondary" style={{ flex: 1 }}>
+          {data?.data?.count ?? 0} of your requests
+        </AppText>
+        <Pressable onPress={() => setRequestOpen(true)} style={[styles.myRequestBtn, { backgroundColor: colors.accent }]}>
+          <Plus size={16} color="#fff" strokeWidth={2.5} />
+          <AppText variant="caption" style={{ color: "#fff" }}>Request</AppText>
+        </Pressable>
+      </View>
+
+      <MyBalanceCard staffId={user?.user_id ?? undefined} />
+
+      <FilterTabs active={filter} onChange={setFilter} />
+
+      <FlatList
+        data={leaves}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item, index }) => (
+          <AnimatedListItem index={index}>
+            <MyLeaveCard
+              item={item}
+              onDelete={() => deleteMutation.mutate(item.id)}
+              isDeleting={deleteMutation.isPending && deleteMutation.variables === item.id}
+            />
+          </AnimatedListItem>
+        )}
+        contentContainerStyle={styles.list}
+        ItemSeparatorComponent={() => <View style={{ height: spacing[3] }} />}
+        refreshing={isRefetching}
+        onRefresh={refetch}
+        ListEmptyComponent={
+          isLoading ? (
+            <ActivityIndicator size="large" color={colors.accent} style={styles.center} />
+          ) : (
+            <View style={styles.center}>
+              <AppText color="tertiary">No leave requests yet</AppText>
+            </View>
+          )
+        }
+      />
+
+      <MyRequestModal
+        visible={requestOpen}
+        onClose={() => setRequestOpen(false)}
+        onSuccess={onRequestSuccess}
+      />
+    </View>
+  )
+}
+
 // ─── LeavesScreen ─────────────────────────────────────────────────────────────
 
 export default function LeavesScreen() {
@@ -295,6 +624,7 @@ export default function LeavesScreen() {
   const { isTablet } = useTablet()
   const queryClient = useQueryClient()
 
+  const [view, setView] = useState<"team" | "mine">("team")
   const [filter, setFilter] = useState<LeaveStatus | "all">("all")
   const [rejectTarget, setRejectTarget] = useState<string | null>(null)
   const [actionId, setActionId] = useState<string | null>(null)
@@ -340,17 +670,45 @@ export default function LeavesScreen() {
         <View style={{ flex: 1 }}>
           <AppText variant="heading3">Leave Requests</AppText>
           <AppText variant="caption" color="tertiary">
-            {leavesData?.data?.count ?? 0} total
+            {view === "team" ? `${leavesData?.data?.count ?? 0} total` : "Your requests"}
           </AppText>
         </View>
-        <Pressable onPress={() => refetch()} hitSlop={8} style={{ padding: spacing[2] }}>
-          {isRefetching
-            ? <ActivityIndicator size="small" color={colors.accent} />
-            : <RefreshCw size={18} color={colors.text.tertiary} strokeWidth={1.75} />
-          }
-        </Pressable>
+        {view === "team" && (
+          <Pressable onPress={() => refetch()} hitSlop={8} style={{ padding: spacing[2] }}>
+            {isRefetching
+              ? <ActivityIndicator size="small" color={colors.accent} />
+              : <RefreshCw size={18} color={colors.text.tertiary} strokeWidth={1.75} />
+            }
+          </Pressable>
+        )}
       </View>
 
+      {/* Team / Mine toggle */}
+      <View style={[styles.viewToggleRow, { borderBottomColor: colors.border }]}>
+        {(["team", "mine"] as const).map((v) => {
+          const isActive = v === view
+          return (
+            <Pressable key={v} onPress={() => setView(v)} style={styles.filterTab}>
+              <AppText
+                variant={isActive ? "bodyMedium" : "body"}
+                style={{
+                  color: isActive ? colors.accent : colors.text.tertiary,
+                  paddingBottom: spacing[2],
+                  borderBottomWidth: isActive ? 2 : 0,
+                  borderBottomColor: colors.accent,
+                }}
+              >
+                {v === "team" ? "Team Requests" : "My Leave"}
+              </AppText>
+            </Pressable>
+          )
+        })}
+      </View>
+
+      {view === "mine" ? (
+        <MyLeavesTab />
+      ) : (
+        <>
       {/* Stats */}
       <StatsBar
         isLoading={statsLoading}
@@ -408,6 +766,8 @@ export default function LeavesScreen() {
         }}
         isLoading={rejectMutation.isPending}
       />
+        </>
+      )}
     </View>
   )
 }
@@ -424,6 +784,67 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[4],
     borderBottomWidth: StyleSheet.hairlineWidth,
     gap: spacing[3],
+  },
+
+  viewToggleRow: {
+    flexDirection: "row",
+    paddingHorizontal: spacing[4],
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: spacing[6],
+  },
+
+  myHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3],
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  myRequestBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[2],
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+    borderRadius: radii.full,
+  },
+  myBalanceCard: {
+    paddingHorizontal: spacing[5],
+    paddingTop: spacing[4],
+    paddingBottom: spacing[3],
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: spacing[3],
+  },
+  myBalanceStatsRow: { flexDirection: "row", alignItems: "center" },
+  myBalanceStat: { flex: 1, alignItems: "center", gap: spacing[1] },
+  myBalanceStatDivider: { width: StyleSheet.hairlineWidth, height: 40 },
+  myBalanceBarWrap: { flexDirection: "row", alignItems: "center", gap: spacing[2] },
+  myBalanceTrack: { flex: 1, height: 6, borderRadius: 3, overflow: "hidden" },
+  myBalanceFill: { height: 6, borderRadius: 3 },
+
+  myFieldLabel: { marginBottom: spacing[2], marginTop: spacing[4] },
+  myTypeRow: { flexDirection: "row", gap: spacing[3] },
+  myTypeChip: {
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[2],
+    borderRadius: radii.full,
+    borderWidth: 1.5,
+  },
+  myInput: {
+    borderWidth: 1,
+    borderRadius: radii.md,
+    padding: spacing[3],
+    fontSize: 14,
+    marginBottom: spacing[1],
+  },
+  myTextArea: { minHeight: 80, textAlignVertical: "top" },
+  myDayCount: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: spacing[3],
+    borderRadius: radii.md,
+    marginTop: spacing[3],
   },
 
   statsBar: {

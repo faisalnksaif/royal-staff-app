@@ -9,9 +9,9 @@ export interface User {
   updatedAt: string
 }
 
-export type UserRole = "superAdmin" | "manager" | "staff" | "hr"
+export type UserRole = "superAdmin" | "manager" | "staff" | "hr" | "scanner"
 
-export type AttendanceStatus = "present" | "late" | "absent"
+export type AttendanceStatus = "present" | "late" | "absent" | "half-day"
 
 export interface StaffResponse {
   id: number
@@ -21,6 +21,9 @@ export interface StaffResponse {
   phone: string | null
   sales_target: number | null
   collection_target: number | null
+  isEligibleForAttendance?: boolean
+  departmentId?: string | null
+  shiftId?: string | null
   hasPhoto?: boolean
   photoCount?: number
   createdAt: string
@@ -31,6 +34,56 @@ export interface StaffListResponse {
   success: boolean
   count: number
   data: StaffResponse[]
+}
+
+export interface ShiftResponse {
+  _id: string
+  name: string
+  startTime: string
+  endTime1: string
+  endTime2: string
+  isDefault?: boolean
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface ShiftListResponse {
+  success: boolean
+  count: number
+  data: ShiftResponse[]
+}
+
+export interface DepartmentResponse {
+  _id: string
+  name: string
+  isDefault?: boolean
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface DepartmentListResponse {
+  success: boolean
+  count: number
+  data: DepartmentResponse[]
+}
+
+export interface ScanningDeviceResponse {
+  id: string
+  email: string
+  name: string | null
+  isActive: boolean
+  departmentId: string | DepartmentResponse
+  location: {
+    lat: number
+    lng: number
+    radiusMeters: number
+  } | null
+}
+
+export interface ScanningDeviceListResponse {
+  success: boolean
+  count: number
+  data: ScanningDeviceResponse[]
 }
 
 
@@ -392,6 +445,21 @@ export interface AttendanceScanResponse {
   }
 }
 
+export interface RecentScanEvent {
+  staffId: number
+  staffName: string
+  action: "checkIn" | "checkOut"
+  timestamp: string
+  confidence: number
+  locationVerified: boolean
+}
+
+export interface RecentScansResponse {
+  success: boolean
+  count: number
+  data: RecentScanEvent[]
+}
+
 export type EnrollmentPose = "straight" | "left" | "right"
 
 export interface FaceEnrollResponse {
@@ -405,6 +473,14 @@ export interface FaceEnrollResponse {
   readyForAttendance: boolean
 }
 
+export interface BreakWindow {
+  startTime: string | null
+  endTime: string | null
+  minutes: number | null
+  allowanceMinutes: number
+  excessMinutes: number
+}
+
 export interface AttendanceRecord {
   staffId: number
   staffName: string
@@ -412,6 +488,10 @@ export interface AttendanceRecord {
   sessions: AttendanceSession[]
   totalWorkHours: number | null
   totalBreakTime: number | null
+  overtimeMinutes?: number
+  lateMinutes?: number
+  teaBreak?: BreakWindow
+  lunchBreak?: BreakWindow
   status: AttendanceStatus
 }
 
@@ -445,6 +525,7 @@ export interface AttendanceDashboardResponse {
     summary: {
       totalPresent: number;
       totalLate: number;
+      totalHalfDay: number;
       totalAbsent: number;
       totalOnLeave: number;
       overallAttendanceRate: number;
@@ -453,6 +534,7 @@ export interface AttendanceDashboardResponse {
       date: string;
       present: number;
       late: number;
+      halfDay: number;
       absent: number;
       onLeave: number;
       attendanceRate: number;
@@ -462,10 +544,14 @@ export interface AttendanceDashboardResponse {
       staffName: string;
       presentDays: number;
       lateDays: number;
+      halfDayDays: number;
       absentDays: number;
       onLeaveDays: number;
       totalWorkHours: number;
       totalOvertimeHours: number;
+      totalOvertimeMinutes: number;
+      totalTeaBreakExcessMinutes: number;
+      totalLunchBreakExcessMinutes: number;
       missedCheckoutDays: number;
       attendanceRate: number;
     }>;
@@ -474,6 +560,7 @@ export interface AttendanceDashboardResponse {
       excessiveOvertime: Array<{ staffId: number; staffName: string; totalOvertimeHours: number }>;
       frequentAbsentees: Array<{ staffId: number; staffName: string; absentDays: number }>;
       missedCheckouts: Array<{ staffId: number; staffName: string; missedCheckoutDays: number }>;
+      excessiveBreaks: Array<{ staffId: number; staffName: string; totalBreakExcessMinutes: number }>;
     };
   };
 }

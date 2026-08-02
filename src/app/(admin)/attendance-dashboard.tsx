@@ -76,7 +76,7 @@ function StaffRow({ entry }: { entry: AttendanceDashboardResponse["data"]["staff
       <View style={{ flex: 1 }}>
         <AppText variant="bodyMedium" numberOfLines={1}>{entry.staffName}</AppText>
         <AppText variant="caption" color="tertiary">
-          {entry.presentDays}P · {entry.lateDays}L · {entry.absentDays}A · {entry.onLeaveDays}OL
+          {entry.presentDays}P · {entry.lateDays}L · {entry.halfDayDays}HD · {entry.absentDays}A · {entry.onLeaveDays}OL
         </AppText>
       </View>
       <View style={{ alignItems: "flex-end" }}>
@@ -85,6 +85,11 @@ function StaffRow({ entry }: { entry: AttendanceDashboardResponse["data"]["staff
         {entry.missedCheckoutDays > 0 && (
           <AppText variant="caption" style={{ color: palette.error.default }}>
             {entry.missedCheckoutDays} missed checkout{entry.missedCheckoutDays > 1 ? "s" : ""}
+          </AppText>
+        )}
+        {(entry.totalTeaBreakExcessMinutes + entry.totalLunchBreakExcessMinutes) > 0 && (
+          <AppText variant="caption" style={{ color: palette.warning.default }}>
+            {entry.totalTeaBreakExcessMinutes + entry.totalLunchBreakExcessMinutes}m over break
           </AppText>
         )}
       </View>
@@ -101,6 +106,7 @@ function FlagsCard({ flags }: { flags: AttendanceDashboardResponse["data"]["flag
     { key: "excessiveOvertime", label: "Excessive Overtime", color: palette.info.default, items: flags.excessiveOvertime, suffix: (v: number) => `${v.toFixed(1)}h OT` },
     { key: "frequentAbsentees", label: "Frequent Absentees", color: palette.error.default, items: flags.frequentAbsentees, suffix: (v: number) => `${v}d absent` },
     { key: "missedCheckouts", label: "Missed Checkouts", color: palette.error.default, items: flags.missedCheckouts, suffix: (v: number) => `${v}d missed` },
+    { key: "excessiveBreaks", label: "Excessive Breaks", color: palette.warning.default, items: flags.excessiveBreaks, suffix: (v: number) => `${v}m over` },
   ] as const
 
   const anyFlags = sections.some((s) => s.items.length > 0)
@@ -117,7 +123,7 @@ function FlagsCard({ flags }: { flags: AttendanceDashboardResponse["data"]["flag
               {s.items.map((item: any) => (
                 <View key={item.staffId} style={[styles.pill, { backgroundColor: s.color + "18", borderColor: colors.border }]}>
                   <AppText variant="caption" style={{ color: s.color, fontSize: 11 }}>
-                    {item.staffName} · {s.suffix(item.lateDays ?? item.totalOvertimeHours ?? item.absentDays ?? item.missedCheckoutDays)}
+                    {item.staffName} · {s.suffix(item.lateDays ?? item.totalOvertimeHours ?? item.absentDays ?? item.missedCheckoutDays ?? item.totalBreakExcessMinutes)}
                   </AppText>
                 </View>
               ))}
@@ -175,6 +181,7 @@ export default function AttendanceDashboardScreen() {
             <View style={styles.statRow}>
               <StatTile label="Present" value={String(dash.summary.totalPresent)} color={palette.success.default} />
               <StatTile label="Late" value={String(dash.summary.totalLate)} color={palette.warning.default} />
+              <StatTile label="Half-day" value={String(dash.summary.totalHalfDay)} color={palette.info.default} />
               <StatTile label="Absent" value={String(dash.summary.totalAbsent)} color={palette.error.default} />
               <StatTile label="On Leave" value={String(dash.summary.totalOnLeave)} color={palette.neutral[500]} />
             </View>

@@ -1,18 +1,25 @@
+import { Platform } from "react-native"
 import api from "./apiClient"
 import { ContentType } from "./generated/Api"
-import type { AttendanceScanResponse, AttendanceDayResponse, AttendanceSummaryResponse, AttendanceDashboardResponse, StaffListResponse, FaceEnrollResponse, EnrollmentPose } from "../types"
+import type { AttendanceScanResponse, AttendanceDayResponse, AttendanceSummaryResponse, AttendanceDashboardResponse, StaffListResponse, FaceEnrollResponse, EnrollmentPose, AttendanceRecord, RecentScansResponse } from "../types"
 
-async function photoToFormFile(photoUri: string): Promise<Blob> {
-  const response = await fetch(photoUri)
-  return await response.blob()
+// Web's FormData needs a real Blob; React Native's FormData needs a plain
+// { uri, name, type } descriptor — fetch().blob() on a file:// URI is what's
+// unsupported on Android/Hermes, not on web.
+async function photoToFormFile(photoUri: string): Promise<{ uri: string; name: string; type: string } | Blob> {
+  if (Platform.OS === "web") {
+    const response = await fetch(photoUri)
+    return await response.blob()
+  }
+  return { uri: photoUri, name: "photo.jpg", type: "image/jpeg" }
 }
 
-async function scanFace(photoUri: string, timestamp: string): Promise<AttendanceScanResponse> {
-  const photoBlob = await photoToFormFile(photoUri)
+async function scanFace(photoUri: string, timestamp: string, lat: number, lng: number): Promise<AttendanceScanResponse> {
+  const photo = await photoToFormFile(photoUri)
   const { data } = await api.http.request<AttendanceScanResponse>({
     path: "/attendance/scan",
     method: "POST",
-    body: { photo: photoBlob, timestamp },
+    body: { photo, timestamp, lat, lng },
     type: ContentType.FormData,
     secure: true,
     format: "json",
@@ -20,12 +27,23 @@ async function scanFace(photoUri: string, timestamp: string): Promise<Attendance
   return data
 }
 
+async function getRecentScans(limit?: number): Promise<RecentScansResponse> {
+  const qs = limit != null ? `?limit=${limit}` : ""
+  const { data } = await api.http.request<RecentScansResponse>({
+    path: `/attendance/scans/recent${qs}`,
+    method: "GET",
+    secure: true,
+    format: "json",
+  })
+  return data
+}
+
 async function enrollFace(staffId: number, photoUri: string, pose: EnrollmentPose): Promise<FaceEnrollResponse> {
-  const photoBlob = await photoToFormFile(photoUri)
+  const photo = await photoToFormFile(photoUri)
   const { data } = await api.http.request<FaceEnrollResponse>({
     path: `/attendance/enroll/${staffId}`,
     method: "POST",
-    body: { photo: photoBlob, pose },
+    body: { photo, pose },
     type: ContentType.FormData,
     secure: true,
     format: "json",
@@ -83,4 +101,21 @@ async function getStaff(): Promise<StaffListResponse> {
   return data
 }
 
-export const attendanceService = { scanFace, enrollFace, deleteFaceEnrollment, getAttendance, getAttendanceSummary, getAttendanceDashboard, getStaff }
+async function editSessions(
+  staffId: number,
+  date: string,
+  sessions: { checkIn: string; checkOut: string | null }[],
+  reason?: string
+): Promise<{ success: boolean; data: AttendanceRecord }> {
+  const { data } = await api.http.request<{ success: boolean; data: AttendanceRecord }>({
+    path: `/attendance/${staffId}/${date}/sessions`,
+    method: "PATCH",
+    body: { sessions, reason },
+    type: ContentType.Json,
+    secure: true,
+    format: "json",
+  })
+  return data
+}
+
+export const attendanceService = { scanFace, getRecentScans, enrollFace, deleteFaceEnrollment, getAttendance, getAttendanceSummary, getAttendanceDashboard, getStaff, editSessions }

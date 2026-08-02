@@ -12,11 +12,16 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ios: {
     supportsTablet: true,
     bundleIdentifier: appConstants.bundleId,
+    infoPlist: {
+      NSCameraUsageDescription: "Allow $(PRODUCT_NAME) to access your camera to capture attendance photos.",
+      NSLocationWhenInUseUsageDescription: "Allow $(PRODUCT_NAME) to access your location to verify attendance scans.",
+    },
   },
   android: {
     package: appConstants.bundleId,
     googleServicesFile: "./google-services.json",
     usesCleartextTraffic: true,
+    permissions: ["android.permission.CAMERA", "android.permission.ACCESS_COARSE_LOCATION", "android.permission.ACCESS_FINE_LOCATION"],
     adaptiveIcon: {
       foregroundImage: "./assets/android-icon-foreground.png",
       monochromeImage: "./assets/android-icon-monochrome.png",
@@ -47,6 +52,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       "expo-camera",
       {
         cameraPermission: "Allow $(PRODUCT_NAME) to access your camera to capture attendance photos.",
+      },
+    ],
+    [
+      "expo-location",
+      {
+        locationWhenInUsePermission: "Allow $(PRODUCT_NAME) to access your location to verify attendance scans.",
       },
     ],
     [
