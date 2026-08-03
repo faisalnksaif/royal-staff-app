@@ -9,6 +9,8 @@ import {
   ScrollView,
   Animated,
   Easing,
+  Modal,
+  TextInput,
 } from "react-native"
 import { useRouter, useLocalSearchParams } from "expo-router"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
@@ -28,10 +30,12 @@ import {
   TrendingDown,
   BellRing,
   Lock,
+  LockOpen,
 } from "lucide-react-native"
 import { Linking } from "react-native"
 import AppText from "../../../components/ui/AppText"
 import AppCard from "../../../components/ui/AppCard"
+import AppButton from "../../../components/ui/AppButton"
 import { useTheme } from "../../../providers/ThemeProvider"
 import { spacing, colors as palette } from "../../../constants/theme"
 import useAuthStore from "../../../stores/useAuthStore"
@@ -54,6 +58,91 @@ import Svg, { Path, Defs, LinearGradient, Stop, Circle, Line as SvgLine, Text as
 // ─── helpers ────────────────────────────────────────────────────────────────
 
 
+
+// ─── HoldModal ────────────────────────────────────────────────────────────────
+
+function HoldModal({
+  visible,
+  onClose,
+  onConfirm,
+  isLoading,
+}: {
+  visible: boolean
+  onClose: () => void
+  onConfirm: (reason: string) => void
+  isLoading: boolean
+}) {
+  const { colors } = useTheme()
+  const [reason, setReason] = useState("")
+
+  function handleConfirm() {
+    if (!reason.trim()) return
+    onConfirm(reason.trim())
+  }
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={holdModalStyles.backdrop} onPress={onClose}>
+        <Pressable style={[holdModalStyles.box, { backgroundColor: colors.background.primary }]}>
+          <AppText variant="heading3" style={{ marginBottom: spacing[2] }}>Hold Customer</AppText>
+          <AppText variant="body" color="secondary" style={{ marginBottom: spacing[4] }}>
+            Provide a reason for placing this customer on hold (required)
+          </AppText>
+          <TextInput
+            style={[holdModalStyles.input, {
+              borderColor: colors.border,
+              color: colors.text.primary,
+              backgroundColor: colors.background.secondary,
+            }]}
+            placeholder="e.g. Repeated payment defaults"
+            placeholderTextColor={colors.text.tertiary}
+            value={reason}
+            onChangeText={setReason}
+            multiline
+            numberOfLines={3}
+            textAlignVertical="top"
+          />
+          <View style={holdModalStyles.actions}>
+            <AppButton label="Cancel" variant="ghost" onPress={onClose} />
+            <AppButton
+              label={isLoading ? "Holding…" : "Hold"}
+              onPress={handleConfirm}
+              disabled={!reason.trim() || isLoading}
+            />
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  )
+}
+
+const holdModalStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: spacing[5],
+  },
+  box: {
+    width: "100%",
+    maxWidth: 420,
+    borderRadius: 16,
+    padding: spacing[5],
+  },
+  input: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 10,
+    padding: spacing[3],
+    minHeight: 80,
+  },
+  actions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: spacing[3],
+    marginTop: spacing[4],
+  },
+})
 
 // ─── follow-up helpers ───────────────────────────────────────────────────────
 
@@ -471,6 +560,7 @@ export default function CustomerDetailScreen() {
   )
   const [chartContainerWidth, setChartContainerWidth] = useState(0)
   const [staffPickerOpen, setStaffPickerOpen] = useState(false)
+  const [holdModalOpen, setHoldModalOpen] = useState(false)
 
   const isStaff = user?.role === "staff"
   const { isAdmin } = useRole()
@@ -488,6 +578,14 @@ export default function CustomerDetailScreen() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["customer-ledger", customerId] })
       setStaffPickerOpen(false)
+    },
+  })
+
+  const { mutate: setHold, isPending: isHolding } = useMutation({
+    mutationFn: (payload: { hold: boolean; reason?: string }) => mappingService.holdCustomer(Number(customerId), payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["customer-ledger", customerId] })
+      setHoldModalOpen(false)
     },
   })
 
@@ -964,6 +1062,38 @@ export default function CustomerDetailScreen() {
                 )}
               </View>
             </AppCard>
+
+            {/* Account Status */}
+            {isAdmin && (
+              <AppCard elevation="sm" style={styles.profileCard}>
+                <AppText variant="label" color="tertiary" style={styles.profileSectionLabel}>ACCOUNT STATUS</AppText>
+                <View style={styles.profileCardBody}>
+                  <View style={styles.profileRow}>
+                    <AppText variant="caption" color="secondary">Status</AppText>
+                    <View style={[styles.profilePill, { backgroundColor: isHeld ? palette.error.default + "22" : colors.background.secondary }]}>
+                      <AppText variant="caption" style={{ fontSize: 12, color: isHeld ? palette.error.default : colors.text.secondary }}>
+                        {isHeld ? "On hold" : "Active"}
+                      </AppText>
+                    </View>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => (isHeld ? setHold({ hold: false }) : setHoldModalOpen(true))}
+                    style={[styles.reassignBtn, { borderColor: colors.border }]}
+                    activeOpacity={0.7}
+                    disabled={isHolding}
+                  >
+                    {isHeld ? (
+                      <LockOpen size={14} color={colors.accent} strokeWidth={2} />
+                    ) : (
+                      <Lock size={14} color={palette.error.default} strokeWidth={2} />
+                    )}
+                    <AppText variant="caption" style={{ color: isHeld ? colors.accent : palette.error.default }}>
+                      {isHolding ? "Updating…" : isHeld ? "Unhold customer" : "Hold customer"}
+                    </AppText>
+                  </TouchableOpacity>
+                </View>
+              </AppCard>
+            )}
           </ScrollView>
         )
       )}
@@ -975,6 +1105,15 @@ export default function CustomerDetailScreen() {
           current={profileOwnership?.staffId ?? null}
           onSelect={(s) => reassignStaff(s.staff_id)}
           onClose={() => setStaffPickerOpen(false)}
+        />
+      )}
+
+      {isAdmin && (
+        <HoldModal
+          visible={holdModalOpen}
+          onClose={() => setHoldModalOpen(false)}
+          onConfirm={(reason) => setHold({ hold: true, reason })}
+          isLoading={isHolding}
         />
       )}
 
@@ -1224,7 +1363,10 @@ const styles = StyleSheet.create({
   profileRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   profilePill: { paddingHorizontal: spacing[2], paddingVertical: 2, borderRadius: 4 },
   reassignBtn: {
+    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
+    gap: spacing[2],
     paddingVertical: spacing[3],
     borderTopWidth: StyleSheet.hairlineWidth,
     marginTop: spacing[1],

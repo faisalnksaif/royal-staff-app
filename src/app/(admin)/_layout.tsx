@@ -32,7 +32,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Leaves",              href: "/(admin)/team-leaves",       icon: CalendarClock,     matchExact: false },
   { label: "Todo",                href: "/(admin)/team-todo",         icon: ListChecks,        matchExact: false, roles: ["superAdmin", "manager", "hr"] },
   { label: "Scores",              href: "/(admin)/scores",            icon: Trophy,            matchExact: false, roles: ["superAdmin", "manager"] },
-  { label: "Extra Performance",   href: "/(admin)/team-extra-performance", icon: Award,        matchExact: false, roles: ["superAdmin", "manager"] },
+  { label: "Extra Performance",   href: "/(admin)/team-extra-performance", icon: Award,        matchExact: false, roles: ["superAdmin", "manager", "hr"] },
   { label: "Mappings",            href: "/(admin)/mappings",          icon: Users,             matchExact: false, roles: ["superAdmin", "manager"] },
   { label: "Appearance",          href: "/(admin)/appearance",        icon: ShieldCheck,       matchExact: false, roles: ["superAdmin"] },
   { label: "Scanning Devices",    href: "/(admin)/scanning-devices",  icon: Radar,             matchExact: false, roles: ["superAdmin"] },

@@ -22,6 +22,7 @@ import AttendanceListSkeleton from "../../components/shared/AttendanceListSkelet
 import StaffAvatar from "../../components/shared/StaffAvatar"
 import Popup from "../../components/shared/Popup"
 import ConfirmModal from "../../components/shared/ConfirmModal"
+import Collapsible from "../../components/shared/Collapsible"
 import moment from "moment"
 import AppText from "../../components/ui/AppText"
 import AppButton from "../../components/ui/AppButton"
@@ -76,7 +77,7 @@ function StatCard({
 }) {
   const { colors } = useTheme()
   return (
-    <View style={[styles.statCard, { backgroundColor: colors.background.secondary, borderColor: colors.border as string }]}>
+    <View style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.border as string }]}>
       <View style={[styles.statCardIcon, { backgroundColor: color + "1a" }]}>
         <Icon size={18} color={color} strokeWidth={2} />
       </View>
@@ -537,14 +538,12 @@ function AttendanceRow({
   const hasSessions = record.sessions?.length > 0
   const hasOpenSession = record.sessions?.some((s) => !s.checkOut && !s.autoClosed)
   const breakExcessMinutes = (record.teaBreak?.excessMinutes ?? 0) + (record.lunchBreak?.excessMinutes ?? 0)
-  const flagged = needsAttention(record)
 
   return (
     <View
       style={[
         styles.row,
-        { borderBottomColor: colors.border as string },
-        flagged && { borderLeftWidth: 3, borderLeftColor: palette.warning.default },
+        { backgroundColor: colors.surface, borderBottomColor: colors.border as string },
       ]}
     >
       <Pressable
@@ -556,7 +555,7 @@ function AttendanceRow({
         <View>
           <StaffAvatar name={record.staffName} color={color} bgColor={color + "22"} />
           {hasOpenSession && (
-            <View style={[styles.onlineDot, { borderColor: colors.background.primary as string }]} />
+            <View style={[styles.onlineDot, { borderColor: colors.surface as string }]} />
           )}
         </View>
 
@@ -628,7 +627,11 @@ function AttendanceRow({
         </View>
       )}
 
-      {expanded && hasSessions && <SessionTimeline record={record} color={color} />}
+      {hasSessions && (
+        <Collapsible expanded={expanded}>
+          <SessionTimeline record={record} color={color} />
+        </Collapsible>
+      )}
     </View>
   )
 }
@@ -768,21 +771,19 @@ function StaffCardDesktop({
   const hasSessions = record.sessions?.length > 0
   const hasOpenSession = record.sessions?.some((s) => !s.checkOut && !s.autoClosed)
   const breakExcessMinutes = (record.teaBreak?.excessMinutes ?? 0) + (record.lunchBreak?.excessMinutes ?? 0)
-  const flagged = needsAttention(record)
 
   return (
     <View
       style={[
         styles.deskCard,
-        { backgroundColor: colors.background.secondary, borderColor: colors.border as string },
-        flagged && { borderLeftWidth: 3, borderLeftColor: palette.warning.default },
+        { backgroundColor: colors.surface, borderColor: colors.border as string },
       ]}
     >
       <View style={styles.deskCardHeader}>
         <View>
           <StaffAvatar name={record.staffName} color={color} bgColor={color + "22"} />
           {hasOpenSession && (
-            <View style={[styles.onlineDot, { borderColor: colors.background.secondary as string }]} />
+            <View style={[styles.onlineDot, { borderColor: colors.surface as string }]} />
           )}
         </View>
         <View style={{ flex: 1 }}>
@@ -834,8 +835,8 @@ function StaffCardDesktop({
 
       {hasSessions && <SessionProgressBar record={record} color={color} />}
 
-      {expanded && (
-        <>
+      <Collapsible expanded={expanded}>
+        <View>
           <View style={[styles.deskCardDivider, { backgroundColor: colors.border as string }]} />
 
           {hasSessions ? (
@@ -845,8 +846,8 @@ function StaffCardDesktop({
               <AppText variant="caption" color="tertiary">Not checked in</AppText>
             </View>
           )}
-        </>
-      )}
+        </View>
+      </Collapsible>
     </View>
   )
 }
