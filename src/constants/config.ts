@@ -7,13 +7,13 @@ export const APP_CONFIG = appConstants as {
   readonly bundleId: string
 }
 
-const DEV_API = "http://192.168.1.102:9999/api"
+const DEV_API = "http://192.168.0.183:9999/api"
 // const DEV_API = "http://localhost:9999/api"
 const PROD_API = "https://api.sulthanpages.com/project/royal/api"
 
 export const API_BASE_URL =
   process.env.EXPO_PUBLIC_API_BASE_URL ??
-  (__DEV__ ? DEV_API : PROD_API)
+  (__DEV__ ? PROD_API : PROD_API)
 
 export const FEATURE_FLAGS = {
   faceRecognition: true,

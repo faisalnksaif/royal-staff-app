@@ -461,6 +461,7 @@ export interface RecentScansResponse {
 }
 
 export type TodoStatus = "planned" | "done" | "cancelled"
+export type TodoPriority = "low" | "normal" | "high"
 
 export interface TodoResponse {
   _id: string
@@ -468,8 +469,10 @@ export interface TodoResponse {
   title: string
   notes: string | null
   plannedFor: string | null
+  priority: TodoPriority
   status: TodoStatus
   actionNote: string | null
+  reminderSentAt?: string | null
   createdAt?: string
   updatedAt?: string
 }

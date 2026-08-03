@@ -11,6 +11,7 @@ import {
   Modal,
 } from "react-native"
 import { useRouter } from "expo-router"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { LogOut, LogIn, CheckCircle, AlertTriangle, ScanFace, ChevronUp, ChevronDown, History } from "lucide-react-native"
 import moment from "moment"
 import AppText from "../components/ui/AppText"
@@ -35,13 +36,13 @@ const SHEET_PEEK = 88
 function LiveClock({ color }: { color: string }) {
   const [now, setNow] = useState(new Date())
   useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 1000 * 15)
+    const id = setInterval(() => setNow(new Date()), 1000)
     return () => clearInterval(id)
   }, [])
   return (
     <View style={{ alignItems: "center" }}>
       <AppText variant="heading1" style={{ color, fontVariant: ["tabular-nums"] }}>
-        {moment(now).format("h:mm A")}
+        {moment(now).format("h:mm:ss A")}
       </AppText>
       <AppText variant="body" style={{ color, opacity: 0.6, marginTop: spacing[1] }}>
         {moment(now).format("dddd, D MMMM")}
@@ -177,11 +178,13 @@ export default function ScannerScreen() {
 
   const { data, isLoading, refetch } = useRecentScans()
   const events = data?.data ?? []
+  const insets = useSafeAreaInsets()
 
   const screenHeight = Dimensions.get("window").height
-  const sheetTranslate = useRef(new Animated.Value(screenHeight - SHEET_PEEK)).current
+  const sheetPeek = SHEET_PEEK + insets.bottom
+  const sheetTranslate = useRef(new Animated.Value(screenHeight - sheetPeek)).current
   const openY = 0
-  const closedY = screenHeight - SHEET_PEEK
+  const closedY = screenHeight - sheetPeek
 
   function animateSheet(open: boolean) {
     Animated.spring(sheetTranslate, {
@@ -235,7 +238,7 @@ export default function ScannerScreen() {
           <Pressable
             onPress={() => setLogoutConfirmOpen(true)}
             hitSlop={8}
-            style={[styles.logoutRow, { borderTopColor: colors.border }]}
+            style={[styles.logoutRow, { borderTopColor: colors.border, paddingBottom: spacing[4] + insets.bottom }]}
           >
             <LogOut size={16} color={colors.text.tertiary} strokeWidth={1.75} />
             <AppText variant="caption" color="tertiary">Logout</AppText>
@@ -296,7 +299,7 @@ export default function ScannerScreen() {
         <Pressable
           onPress={() => setLogoutConfirmOpen(true)}
           hitSlop={8}
-          style={[styles.logoutRow, { borderTopColor: colors.border }]}
+          style={[styles.logoutRow, { borderTopColor: colors.border, paddingBottom: spacing[4] + insets.bottom }]}
         >
           <LogOut size={16} color={colors.text.tertiary} strokeWidth={1.75} />
           <AppText variant="caption" color="tertiary">Logout</AppText>
@@ -326,6 +329,16 @@ export default function ScannerScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
+  pendingBadge: {
+    position: "absolute",
+    top: spacing[4],
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[1],
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[1],
+    borderRadius: radii.full,
+  },
   logoutRow: {
     flexDirection: "row",
     alignItems: "center",

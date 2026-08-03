@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useRef, useState } from "react"
 import {
   View,
   FlatList,
@@ -9,13 +9,14 @@ import {
   ScrollView,
 } from "react-native"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { Plus, Calendar, Check, X, Trash2, Pencil } from "lucide-react-native"
+import { Plus, Calendar, Check, X, Trash2, Pencil, MoreVertical } from "lucide-react-native"
 import moment from "moment"
 import BackButton from "../../components/shared/BackButton"
 import AnimatedListItem from "../../components/shared/AnimatedListItem"
 import DatePickerField from "../../components/shared/DatePickerField"
 import Popup from "../../components/shared/Popup"
 import ConfirmModal from "../../components/shared/ConfirmModal"
+import ActionMenu, { ActionMenuAnchor } from "../../components/shared/ActionMenu"
 import AppText from "../../components/ui/AppText"
 import AppCard from "../../components/ui/AppCard"
 import AppButton from "../../components/ui/AppButton"
@@ -23,7 +24,7 @@ import { useTheme } from "../../providers/ThemeProvider"
 import { useTablet } from "../../hooks/useTablet"
 import { spacing, colors as palette, radii } from "../../constants/theme"
 import { todoService } from "../../services/todoService"
-import type { TodoResponse, TodoStatus } from "../../types"
+import type { TodoResponse, TodoStatus, TodoPriority } from "../../types"
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -33,12 +34,56 @@ const STATUS_CONFIG: Record<TodoStatus, { label: string; color: string }> = {
   cancelled: { label: "Cancelled", color: palette.error.default },
 }
 
-const FILTERS: Array<{ label: string; value: TodoStatus | "all" }> = [
+const PRIORITY_CONFIG: Record<TodoPriority, { label: string; color: string }> = {
+  low:    { label: "Low",    color: palette.neutral[400] },
+  normal: { label: "Normal", color: palette.warning.default },
+  high:   { label: "High",   color: palette.error.default },
+}
+
+const FILTERS: Array<{ label: string; value: TodoStatus | "all" | "overdue" }> = [
   { label: "All",     value: "all" },
   { label: "Planned", value: "planned" },
+  { label: "Overdue", value: "overdue" },
   { label: "Done",     value: "done" },
   { label: "Cancelled", value: "cancelled" },
 ]
+
+function PrioritySelector({
+  value,
+  onChange,
+}: {
+  value: TodoPriority
+  onChange: (p: TodoPriority) => void
+}) {
+  const { colors } = useTheme()
+  const options: TodoPriority[] = ["low", "normal", "high"]
+
+  return (
+    <View style={{ flexDirection: "row", gap: spacing[2] }}>
+      {options.map((p) => {
+        const isActive = p === value
+        const conf = PRIORITY_CONFIG[p]
+        return (
+          <Pressable
+            key={p}
+            onPress={() => onChange(p)}
+            style={[
+              styles.priorityOption,
+              {
+                borderColor: isActive ? conf.color : colors.border as string,
+                backgroundColor: isActive ? conf.color + "1a" : "transparent",
+              },
+            ]}
+          >
+            <AppText variant="caption" style={{ color: isActive ? conf.color : colors.text.secondary }}>
+              {conf.label}
+            </AppText>
+          </Pressable>
+        )
+      })}
+    </View>
+  )
+}
 
 // ─── NewTodoModal ─────────────────────────────────────────────────────────────
 
@@ -52,6 +97,7 @@ function NewTodoModal({
   const [title, setTitle] = useState("")
   const [notes, setNotes] = useState("")
   const [plannedFor, setPlannedFor] = useState<Date | null>(null)
+  const [priority, setPriority] = useState<TodoPriority>("normal")
   const { colors } = useTheme()
 
   const mutation = useMutation({
@@ -59,6 +105,7 @@ function NewTodoModal({
       title: title.trim(),
       notes: notes.trim() || undefined,
       plannedFor: plannedFor ? moment(plannedFor).format("YYYY-MM-DD") : undefined,
+      priority,
     }),
     onSuccess: () => { onCreated(); onClose() },
   })
@@ -101,6 +148,9 @@ function NewTodoModal({
           />
         </View>
 
+        <AppText variant="caption" color="tertiary" style={{ marginTop: spacing[4], marginBottom: spacing[2] }}>Priority</AppText>
+        <PrioritySelector value={priority} onChange={setPriority} />
+
         <AppButton
           label={mutation.isPending ? "Adding…" : "Add Todo"}
           onPress={handleCreate}
@@ -128,12 +178,14 @@ function EditTodoModal({
   const [title, setTitle] = useState(todo.title)
   const [notes, setNotes] = useState(todo.notes ?? "")
   const [plannedFor, setPlannedFor] = useState<Date | null>(todo.plannedFor ? moment(todo.plannedFor).toDate() : null)
+  const [priority, setPriority] = useState<TodoPriority>(todo.priority ?? "normal")
 
   const mutation = useMutation({
     mutationFn: () => todoService.updateTodo(todo._id, {
       title: title.trim(),
       notes: notes.trim() || null,
       plannedFor: plannedFor ? moment(plannedFor).format("YYYY-MM-DD") : null,
+      priority,
     }),
     onSuccess: () => { onSaved(); onClose() },
   })
@@ -166,6 +218,9 @@ function EditTodoModal({
             placeholder="No date set"
           />
         </View>
+
+        <AppText variant="caption" color="tertiary" style={{ marginTop: spacing[4], marginBottom: spacing[2] }}>Priority</AppText>
+        <PrioritySelector value={priority} onChange={setPriority} />
 
         <AppButton
           label={mutation.isPending ? "Saving…" : "Save Changes"}
@@ -241,6 +296,26 @@ function TodoCard({
   const { colors } = useTheme()
   const status = STATUS_CONFIG[item.status]
   const isPlanned = item.status === "planned"
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [menuAnchor, setMenuAnchor] = useState<ActionMenuAnchor | null>(null)
+  const menuBtnRef = useRef<View>(null)
+
+  function openMenu() {
+    menuBtnRef.current?.measureInWindow((x, y, width, height) => {
+      setMenuAnchor({ x, y, width, height })
+      setMenuOpen(true)
+    })
+  }
+
+  const menuItems = isPlanned
+    ? [
+        { label: "Edit", icon: <Pencil size={16} color={colors.text.secondary} strokeWidth={1.75} />, onPress: onEdit },
+        { label: "Mark Done", icon: <Check size={16} color={palette.success.default} strokeWidth={2.5} />, color: palette.success.default, onPress: onComplete },
+        { label: "Cancel", icon: <X size={16} color={palette.error.default} strokeWidth={2} />, color: palette.error.default, onPress: onCancel },
+      ]
+    : [
+        { label: "Delete", icon: <Trash2 size={16} color={palette.error.default} strokeWidth={1.75} />, color: palette.error.default, onPress: onDelete },
+      ]
 
   return (
     <AppCard elevation="sm" style={styles.card}>
@@ -259,6 +334,13 @@ function TodoCard({
             <View style={[styles.statusBadge, { backgroundColor: status.color + "22" }]}>
               <AppText variant="caption" style={{ color: status.color, fontSize: 11 }}>{status.label}</AppText>
             </View>
+            {item.priority && item.priority !== "normal" && (
+              <View style={[styles.statusBadge, { backgroundColor: PRIORITY_CONFIG[item.priority].color + "22" }]}>
+                <AppText variant="caption" style={{ color: PRIORITY_CONFIG[item.priority].color, fontSize: 11 }}>
+                  {PRIORITY_CONFIG[item.priority].label}
+                </AppText>
+              </View>
+            )}
             {item.plannedFor && (
               <View style={styles.metaRow}>
                 <Calendar size={12} color={colors.text.tertiary} strokeWidth={1.5} />
@@ -272,32 +354,14 @@ function TodoCard({
             </AppText>
           ) : null}
         </View>
+        <View ref={menuBtnRef} collapsable={false}>
+          <Pressable onPress={openMenu} hitSlop={8} style={styles.menuBtn}>
+            <MoreVertical size={18} color={colors.text.tertiary} strokeWidth={1.75} />
+          </Pressable>
+        </View>
       </View>
 
-      {isPlanned && (
-        <View style={[styles.cardActions, { borderTopColor: colors.border }]}>
-          <Pressable onPress={onEdit} style={styles.actionBtn} hitSlop={6}>
-            <Pencil size={15} color={colors.text.secondary} strokeWidth={1.75} />
-            <AppText variant="caption" color="secondary">Edit</AppText>
-          </Pressable>
-          <Pressable onPress={onCancel} style={styles.actionBtn} hitSlop={6}>
-            <X size={15} color={palette.error.default} strokeWidth={2} />
-            <AppText variant="caption" style={{ color: palette.error.default }}>Cancel</AppText>
-          </Pressable>
-          <Pressable onPress={onComplete} style={styles.actionBtn} hitSlop={6}>
-            <Check size={15} color={palette.success.default} strokeWidth={2.5} />
-            <AppText variant="caption" style={{ color: palette.success.default }}>Done</AppText>
-          </Pressable>
-        </View>
-      )}
-      {!isPlanned && (
-        <View style={[styles.cardActions, { borderTopColor: colors.border }]}>
-          <Pressable onPress={onDelete} style={styles.actionBtn} hitSlop={6}>
-            <Trash2 size={15} color={colors.text.tertiary} strokeWidth={1.75} />
-            <AppText variant="caption" color="tertiary">Delete</AppText>
-          </Pressable>
-        </View>
-      )}
+      <ActionMenu visible={menuOpen} onClose={() => setMenuOpen(false)} items={menuItems} anchor={menuAnchor} />
     </AppCard>
   )
 }
@@ -310,7 +374,7 @@ export default function TodoScreen() {
   const numColumns = isDesktop ? 2 : 1
   const queryClient = useQueryClient()
 
-  const [filter, setFilter] = useState<TodoStatus | "all">("all")
+  const [filter, setFilter] = useState<TodoStatus | "all" | "overdue">("all")
   const [createOpen, setCreateOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<TodoResponse | null>(null)
   const [completeTarget, setCompleteTarget] = useState<TodoResponse | null>(null)
@@ -319,7 +383,11 @@ export default function TodoScreen() {
 
   const { data, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ["todos", filter],
-    queryFn: () => todoService.getTodos(filter === "all" ? undefined : { status: filter }),
+    queryFn: () => {
+      if (filter === "all") return todoService.getTodos()
+      if (filter === "overdue") return todoService.getTodos({ overdue: true })
+      return todoService.getTodos({ status: filter })
+    },
   })
 
   const todos = data?.data ?? []
@@ -475,24 +543,21 @@ const styles = StyleSheet.create({
   },
 
   card: { padding: 0, overflow: "hidden" },
-  cardTop: { padding: spacing[4] },
+  cardTop: { padding: spacing[4], flexDirection: "row", alignItems: "flex-start" },
+  menuBtn: { padding: spacing[1] },
   statusBadge: {
     paddingHorizontal: spacing[2],
     paddingVertical: 2,
     borderRadius: radii.sm,
   },
   metaRow: { flexDirection: "row", alignItems: "center", gap: spacing[1] },
-  cardActions: {
-    flexDirection: "row",
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  actionBtn: {
+
+  priorityOption: {
     flex: 1,
-    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: spacing[2],
-    paddingVertical: spacing[3],
+    paddingVertical: spacing[2],
+    borderWidth: 1,
+    borderRadius: radii.md,
   },
 
   input: {

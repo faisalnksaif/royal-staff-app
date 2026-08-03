@@ -1,26 +1,29 @@
 import api from "./apiClient"
 import { ContentType } from "./generated/Api"
-import type { TodoListResponse, TodoResponse, TodoStatus } from "../types"
+import type { TodoListResponse, TodoResponse, TodoStatus, TodoPriority } from "../types"
 
 interface CreateTodoPayload {
   title: string
   notes?: string
   plannedFor?: string
+  priority?: TodoPriority
 }
 
 interface UpdateTodoPayload {
   title?: string
   notes?: string | null
   plannedFor?: string | null
+  priority?: TodoPriority
 }
 
 async function getTodos(
-  filters?: { status?: TodoStatus; plannedFor?: string; staffId?: number }
+  filters?: { status?: TodoStatus; plannedFor?: string; staffId?: number; overdue?: boolean }
 ): Promise<TodoListResponse> {
   const params = new URLSearchParams()
   if (filters?.staffId != null) params.set("staffId", String(filters.staffId))
   if (filters?.status) params.set("status", filters.status)
   if (filters?.plannedFor) params.set("plannedFor", filters.plannedFor)
+  if (filters?.overdue) params.set("overdue", "true")
   const qs = params.toString() ? `?${params.toString()}` : ""
   const { data } = await api.http.request<TodoListResponse>({
     path: `/todos${qs}`,

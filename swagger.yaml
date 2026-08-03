@@ -3472,6 +3472,12 @@ paths:
                   type: number
                   description: Current GPS longitude reported by the scanning device
                   example: 75.7804
+                deviceId:
+                  type: string
+                  description: Optional client-supplied identifier of the physical scanning device
+                deviceName:
+                  type: string
+                  description: Optional client-supplied human-readable name of the physical scanning device
       responses:
         '200':
           description: Scan result (check response body for success/matched, not just HTTP status)
@@ -4957,6 +4963,10 @@ paths:
                   nullable: true
                   description: YYYY-MM-DD
                   example: "2026-08-05"
+                priority:
+                  type: string
+                  enum: [low, normal, high]
+                  default: normal
       responses:
         '201':
           description: Todo created successfully
@@ -4973,11 +4983,9 @@ paths:
                   data:
                     $ref: '#/components/schemas/TodoResponse'
         '400':
-          description: Missing title, or plannedFor not in YYYY-MM-DD format
+          description: Missing title, invalid priority, or plannedFor not in YYYY-MM-DD format
         '401':
           description: Unauthorized
-
-  /todos:
     get:
       tags:
         - Todos
@@ -5003,6 +5011,11 @@ paths:
             type: string
             format: date
           description: Exact YYYY-MM-DD match
+        - name: overdue
+          in: query
+          schema:
+            type: boolean
+          description: If true, returns only still-planned todos with plannedFor before today (overrides status/plannedFor)
       responses:
         '200':
           description: List of todos
@@ -5061,7 +5074,7 @@ paths:
     put:
       tags:
         - Todos
-      summary: Update a todo's title/notes/plannedFor
+      summary: Update a todo's title/notes/plannedFor/priority
       description: For closing out a todo (marking it done/cancelled with what was actually done), use POST /todos/{id}/complete instead.
       security:
         - BearerAuth: []
@@ -5087,6 +5100,9 @@ paths:
                   type: string
                   format: date
                   nullable: true
+                priority:
+                  type: string
+                  enum: [low, normal, high]
       responses:
         '200':
           description: Todo updated successfully
@@ -5102,7 +5118,7 @@ paths:
                   data:
                     $ref: '#/components/schemas/TodoResponse'
         '400':
-          description: Empty title, or plannedFor not in YYYY-MM-DD format
+          description: Empty title, invalid priority, or plannedFor not in YYYY-MM-DD format
         '401':
           description: Unauthorized
         '403':
@@ -6687,6 +6703,10 @@ components:
           format: date
           description: YYYY-MM-DD the todo is intended for, or null if undated
           example: "2026-08-05"
+        priority:
+          type: string
+          enum: [low, normal, high]
+          example: normal
         status:
           type: string
           enum: [planned, done, cancelled]
@@ -6700,6 +6720,11 @@ components:
           type: string
           format: date-time
           nullable: true
+        reminderSentAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Set once the plannedFor-day push reminder has been sent, to avoid re-sending
         createdAt:
           type: string
           format: date-time

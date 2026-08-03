@@ -68,6 +68,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         imageWidth: 400,
       },
     ],
+    "./plugins/withReleaseSigning.js",
   ],
   scheme: appConstants.slug,
   extra: {

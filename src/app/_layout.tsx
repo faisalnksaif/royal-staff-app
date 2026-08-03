@@ -4,6 +4,7 @@ import { useFonts } from "expo-font"
 import * as SplashScreen from "expo-splash-screen"
 import { StatusBar } from "expo-status-bar"
 import Toast from "react-native-toast-message"
+import { SafeAreaProvider } from "react-native-safe-area-context"
 import { ThemeProvider, useTheme } from "../providers/ThemeProvider"
 import { QueryProvider } from "../providers/QueryProvider"
 import { toastConfig } from "../components/shared/ToastConfig"
@@ -55,11 +56,13 @@ export default function RootLayout() {
   if ((!fontsLoaded && !fontError) || !hasHydrated) return null
 
   return (
-    <QueryProvider>
-      <ThemeProvider>
-        <RootStack />
-        <Toast config={toastConfig} position="top" />
-      </ThemeProvider>
-    </QueryProvider>
+    <SafeAreaProvider>
+      <QueryProvider>
+        <ThemeProvider>
+          <RootStack />
+          <Toast config={toastConfig} position="top" />
+        </ThemeProvider>
+      </QueryProvider>
+    </SafeAreaProvider>
   )
 }

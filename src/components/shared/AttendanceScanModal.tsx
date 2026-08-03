@@ -10,7 +10,7 @@ import FaceCamera from "./FaceCamera"
 import { colors as palette, spacing } from "../../constants/theme"
 import { attendanceService } from "../../services/attendanceService"
 import { toTitleCase } from "../../utils/helpers"
-import type { AttendanceScanResponse } from "../../types"
+import type { AppError, AttendanceScanResponse } from "../../types"
 
 type ScanPhase = "camera" | "scanning" | "result" | "no_match" | "rejected" | "error"
 
@@ -73,20 +73,28 @@ export default function AttendanceScanModal({
 
   async function handleCapture(photoUri: string) {
     setPhase("scanning")
+    const { status } = await Location.requestForegroundPermissionsAsync()
+    if (status !== "granted") {
+      setErrorMsg("Location permission is required to scan attendance")
+      setPhase("error")
+      return
+    }
+
+    let lat: number
+    let lng: number
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync()
-      if (status !== "granted") {
-        setErrorMsg("Location permission is required to scan attendance")
-        setPhase("error")
-        return
-      }
       const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
-      const res = await attendanceService.scanFace(
-        photoUri,
-        new Date().toISOString(),
-        position.coords.latitude,
-        position.coords.longitude
-      )
+      lat = position.coords.latitude
+      lng = position.coords.longitude
+    } catch {
+      setErrorMsg("Couldn't get your location — try again")
+      setPhase("error")
+      return
+    }
+
+    const capturedAt = new Date().toISOString()
+    try {
+      const res = await attendanceService.scanFace(photoUri, capturedAt, lat, lng)
       setScanResult(res)
       if (res.matched && res.success) {
         setPhase("result")
@@ -101,7 +109,8 @@ export default function AttendanceScanModal({
         setPhase("no_match")
       }
     } catch (e) {
-      setErrorMsg((e as Error).message ?? "Scan failed")
+      const appError = e as AppError
+      setErrorMsg(appError.message ?? "Scan failed")
       setPhase("error")
     }
   }
