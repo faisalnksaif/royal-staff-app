@@ -1,4 +1,4 @@
-import { useRef, useState } from "react"
+import { useState } from "react"
 import {
   View,
   FlatList,
@@ -9,16 +9,16 @@ import {
   ScrollView,
 } from "react-native"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { Plus, Calendar, Check, X, Trash2, Pencil, MoreVertical } from "lucide-react-native"
+import { Plus, Calendar, Check, X, Trash2, Pencil } from "lucide-react-native"
 import moment from "moment"
 import BackButton from "../../components/shared/BackButton"
 import AnimatedListItem from "../../components/shared/AnimatedListItem"
 import DatePickerField from "../../components/shared/DatePickerField"
 import Popup from "../../components/shared/Popup"
 import ConfirmModal from "../../components/shared/ConfirmModal"
-import ActionMenu, { ActionMenuAnchor } from "../../components/shared/ActionMenu"
+import ListRow, { ListRowPill } from "../../components/shared/ListRow"
+import type { ActionMenuItem } from "../../components/shared/ActionMenu"
 import AppText from "../../components/ui/AppText"
-import AppCard from "../../components/ui/AppCard"
 import AppButton from "../../components/ui/AppButton"
 import { useTheme } from "../../providers/ThemeProvider"
 import { useTablet } from "../../hooks/useTablet"
@@ -282,32 +282,26 @@ function CompleteModal({
 
 function TodoCard({
   item,
+  index,
   onEdit,
   onComplete,
   onCancel,
   onDelete,
 }: {
   item: TodoResponse
+  index?: number
   onEdit: () => void
   onComplete: () => void
   onCancel: () => void
   onDelete: () => void
 }) {
-  const { colors } = useTheme()
+  const { colors, isDark } = useTheme()
   const status = STATUS_CONFIG[item.status]
   const isPlanned = item.status === "planned"
-  const [menuOpen, setMenuOpen] = useState(false)
-  const [menuAnchor, setMenuAnchor] = useState<ActionMenuAnchor | null>(null)
-  const menuBtnRef = useRef<View>(null)
+  const avatarColor = isDark ? colors.accent : palette.primary[700]
+  const avatarBgColor = isDark ? colors.accentSubtle : palette.primary[100]
 
-  function openMenu() {
-    menuBtnRef.current?.measureInWindow((x, y, width, height) => {
-      setMenuAnchor({ x, y, width, height })
-      setMenuOpen(true)
-    })
-  }
-
-  const menuItems = isPlanned
+  const menuItems: ActionMenuItem[] = isPlanned
     ? [
         { label: "Edit", icon: <Pencil size={16} color={colors.text.secondary} strokeWidth={1.75} />, onPress: onEdit },
         { label: "Mark Done", icon: <Check size={16} color={palette.success.default} strokeWidth={2.5} />, color: palette.success.default, onPress: onComplete },
@@ -317,52 +311,48 @@ function TodoCard({
         { label: "Delete", icon: <Trash2 size={16} color={palette.error.default} strokeWidth={1.75} />, color: palette.error.default, onPress: onDelete },
       ]
 
-  return (
-    <AppCard elevation="sm" style={styles.card}>
-      <View style={styles.cardTop}>
-        <View style={{ flex: 1, gap: spacing[1] }}>
-          <AppText
-            variant="bodyMedium"
-            style={item.status !== "planned" ? { textDecorationLine: "line-through", opacity: 0.6 } : undefined}
-          >
-            {item.title}
-          </AppText>
-          {item.notes ? (
-            <AppText variant="caption" color="tertiary" numberOfLines={2}>{item.notes}</AppText>
-          ) : null}
-          <View style={{ flexDirection: "row", alignItems: "center", gap: spacing[2], marginTop: spacing[1] }}>
-            <View style={[styles.statusBadge, { backgroundColor: status.color + "22" }]}>
-              <AppText variant="caption" style={{ color: status.color, fontSize: 11 }}>{status.label}</AppText>
-            </View>
-            {item.priority && item.priority !== "normal" && (
-              <View style={[styles.statusBadge, { backgroundColor: PRIORITY_CONFIG[item.priority].color + "22" }]}>
-                <AppText variant="caption" style={{ color: PRIORITY_CONFIG[item.priority].color, fontSize: 11 }}>
-                  {PRIORITY_CONFIG[item.priority].label}
-                </AppText>
-              </View>
-            )}
-            {item.plannedFor && (
-              <View style={styles.metaRow}>
-                <Calendar size={12} color={colors.text.tertiary} strokeWidth={1.5} />
-                <AppText variant="caption" color="tertiary">{moment(item.plannedFor).format("D MMM")}</AppText>
-              </View>
-            )}
-          </View>
-          {item.status === "done" && item.actionNote ? (
-            <AppText variant="caption" color="secondary" style={{ marginTop: spacing[1] }}>
-              {item.actionNote}
-            </AppText>
-          ) : null}
-        </View>
-        <View ref={menuBtnRef} collapsable={false}>
-          <Pressable onPress={openMenu} hitSlop={8} style={styles.menuBtn}>
-            <MoreVertical size={18} color={colors.text.tertiary} strokeWidth={1.75} />
-          </Pressable>
-        </View>
-      </View>
+  const pills: ListRowPill[] = [
+    { key: "status", label: status.label, color: status.color, bgColor: status.color + "22" },
+    ...(item.priority && item.priority !== "normal"
+      ? [{ key: "priority", label: PRIORITY_CONFIG[item.priority].label, color: PRIORITY_CONFIG[item.priority].color, bgColor: PRIORITY_CONFIG[item.priority].color + "22" }]
+      : []),
+  ]
 
-      <ActionMenu visible={menuOpen} onClose={() => setMenuOpen(false)} items={menuItems} anchor={menuAnchor} />
-    </AppCard>
+  return (
+    <ListRow
+      number={(index ?? 0) + 1}
+      avatarColor={avatarColor}
+      avatarBgColor={avatarBgColor}
+      title={item.title}
+      pills={pills}
+      menuItems={menuItems}
+      metaLines={[
+        ...(item.notes
+          ? [
+              <AppText key="notes" variant="bodySmall" numberOfLines={2} style={{ color: colors.text.secondary as string }}>
+                {item.notes}
+              </AppText>,
+            ]
+          : []),
+        ...(item.plannedFor
+          ? [
+              <View key="planned" style={styles.metaRow}>
+                <Calendar size={14} color={colors.text.tertiary} strokeWidth={1.5} />
+                <AppText variant="body" style={{ color: colors.text.secondary as string }}>
+                  {moment(item.plannedFor).format("D MMM")}
+                </AppText>
+              </View>,
+            ]
+          : []),
+        ...(item.status === "done" && item.actionNote
+          ? [
+              <AppText key="actionNote" variant="bodySmall" style={{ color: colors.text.secondary as string }}>
+                {item.actionNote}
+              </AppText>,
+            ]
+          : []),
+      ]}
+    />
   )
 }
 
@@ -370,8 +360,7 @@ function TodoCard({
 
 export default function TodoScreen() {
   const { colors } = useTheme()
-  const { isTablet, isDesktop } = useTablet()
-  const numColumns = isDesktop ? 2 : 1
+  const { isTablet } = useTablet()
   const queryClient = useQueryClient()
 
   const [filter, setFilter] = useState<TodoStatus | "all" | "overdue">("all")
@@ -441,15 +430,13 @@ export default function TodoScreen() {
       </View>
 
       <FlatList
-        key={`todo-grid-${numColumns}`}
         data={todos}
-        numColumns={numColumns}
-        columnWrapperStyle={numColumns > 1 ? styles.gridRow : undefined}
         keyExtractor={(item, index) => item._id ?? `todo-${index}`}
         renderItem={({ item, index }) => (
-          <AnimatedListItem index={index} style={numColumns > 1 ? styles.gridCell : undefined}>
+          <AnimatedListItem index={index}>
             <TodoCard
               item={item}
+              index={index}
               onEdit={() => setEditTarget(item)}
               onComplete={() => setCompleteTarget(item)}
               onCancel={() => setCancelTarget(item)}
@@ -457,8 +444,7 @@ export default function TodoScreen() {
             />
           </AnimatedListItem>
         )}
-        contentContainerStyle={[styles.list, isDesktop && styles.listDesktop]}
-        ItemSeparatorComponent={numColumns > 1 ? undefined : () => <View style={{ height: spacing[3] }} />}
+        contentContainerStyle={styles.rowList}
         refreshing={isRefetching}
         onRefresh={refetch}
         ListEmptyComponent={
@@ -528,28 +514,13 @@ const styles = StyleSheet.create({
   },
   filterTab: { paddingTop: spacing[3] },
 
-  list: { padding: spacing[4], paddingBottom: spacing[16] },
-  listDesktop: {
-    maxWidth: 960,
-    width: "100%",
-    alignSelf: "center",
-  },
-  gridRow: { gap: spacing[4], marginBottom: spacing[4] },
-  gridCell: { flex: 1 },
+  rowList: { paddingBottom: spacing[16] },
   center: {
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: spacing[16],
   },
 
-  card: { padding: 0, overflow: "hidden" },
-  cardTop: { padding: spacing[4], flexDirection: "row", alignItems: "flex-start" },
-  menuBtn: { padding: spacing[1] },
-  statusBadge: {
-    paddingHorizontal: spacing[2],
-    paddingVertical: 2,
-    borderRadius: radii.sm,
-  },
   metaRow: { flexDirection: "row", alignItems: "center", gap: spacing[1] },
 
   priorityOption: {

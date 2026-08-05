@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react"
+import { useState } from "react"
 import {
   View,
   FlatList,
@@ -8,21 +8,21 @@ import {
   TouchableOpacity,
   TextInput,
   ScrollView,
-  Animated,
-  PanResponder,
   LayoutAnimation,
   Platform,
   UIManager,
 } from "react-native"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { Plus, Calendar, Clock, Trash2 } from "lucide-react-native"
+import { Plus, Calendar, Trash2, ClipboardList, Share, UserCheck, XCircle } from "lucide-react-native"
 import BackButton from "../../components/shared/BackButton"
 import AnimatedListItem from "../../components/shared/AnimatedListItem"
 import DatePickerField from "../../components/shared/DatePickerField"
 import Popup from "../../components/shared/Popup"
+import ListRow, { ListRowPill } from "../../components/shared/ListRow"
+import FollowUpTimeline, { TimelineEvent } from "../../components/shared/FollowUpTimeline"
+import type { ActionMenuItem } from "../../components/shared/ActionMenu"
 import moment from "moment"
 import AppText from "../../components/ui/AppText"
-import AppCard from "../../components/ui/AppCard"
 import AppButton from "../../components/ui/AppButton"
 import { useTheme } from "../../providers/ThemeProvider"
 import { spacing, colors as palette, radii } from "../../constants/theme"
@@ -248,133 +248,104 @@ function RequestModal({
   )
 }
 
-// ─── LeaveCard ────────────────────────────────────────────────────────────────
+// ─── leave timeline events ─────────────────────────────────────────────────────
 
-function LeaveCard({ item }: { item: LeaveRequest }) {
-  const { colors } = useTheme()
-  const status = STATUS_CONFIG[item.status]
+function buildLeaveEvents(item: LeaveRequest): TimelineEvent[] {
+  const events: TimelineEvent[] = [
+    {
+      icon: <ClipboardList size={11} color={palette.neutral[400]} strokeWidth={1.75} />,
+      text: `Requested ${moment(item.createdAt).format("D MMM, h:mm A")}`,
+      color: palette.neutral[500],
+    },
+  ]
 
-  return (
-    <AppCard elevation="sm" style={styles.leaveCard}>
-      <View style={styles.leaveCardTop}>
-        <View style={{ flex: 1, gap: spacing[1] }}>
-          <View style={{ flexDirection: "row", gap: spacing[2] }}>
-            <View style={[styles.typeBadge, { backgroundColor: colors.accentSubtle }]}>
-              <AppText variant="caption" style={{ color: colors.accent, fontSize: 11 }}>{item.leaveType}</AppText>
-            </View>
-            <View style={[styles.typeBadge, { backgroundColor: status.color + "22" }]}>
-              <AppText variant="caption" style={{ color: status.color, fontSize: 11 }}>{status.label}</AppText>
-            </View>
-          </View>
-          <AppText variant="caption" color="tertiary" numberOfLines={1}>{item.reason}</AppText>
-        </View>
-        <AppText variant="bodyMedium" style={{ color: colors.text.secondary }}>
-          {item.numberOfDays}d
-        </AppText>
-      </View>
+  if (item.delegatedTo != null) {
+    events.push({
+      icon: <Share size={11} color={palette.primary[500]} strokeWidth={1.75} />,
+      text: `Delegated for approval${item.delegatedAt ? ` · ${moment(item.delegatedAt).format("D MMM, h:mm A")}` : ""}`,
+      color: palette.primary[600],
+    })
+  }
 
-      <View style={[styles.leaveCardMeta, { borderTopColor: colors.border }]}>
-        <View style={styles.metaRow}>
-          <Calendar size={13} color={colors.text.tertiary} strokeWidth={1.5} />
-          <AppText variant="caption" color="secondary">
-            {moment(item.startDate).format("D MMM")} – {moment(item.endDate).format("D MMM YYYY")}
-          </AppText>
-        </View>
-        <View style={styles.metaRow}>
-          <Clock size={13} color={colors.text.tertiary} strokeWidth={1.5} />
-          <AppText variant="caption" color="tertiary">
-            {moment(item.createdAt).fromNow()}
-          </AppText>
-        </View>
-      </View>
-    </AppCard>
-  )
+  if (item.status === "approved") {
+    events.push({
+      icon: <UserCheck size={11} color={palette.success.default} strokeWidth={1.75} />,
+      text: item.approvedByName
+        ? `Approved by ${item.approvedByName}${item.approvedAt ? ` · ${moment(item.approvedAt).format("D MMM, h:mm A")}` : ""}`
+        : `Approved${item.approvedAt ? ` · ${moment(item.approvedAt).format("D MMM, h:mm A")}` : ""}`,
+      color: palette.success.default,
+    })
+  } else if (item.status === "rejected") {
+    events.push({
+      icon: <XCircle size={11} color={palette.error.default} strokeWidth={1.75} />,
+      text: item.rejectionReason ? `Rejected · ${item.rejectionReason}` : "Rejected",
+      color: palette.error.default,
+    })
+  }
+
+  return events
 }
 
-// ─── SwipeableLeaveCard ───────────────────────────────────────────────────────
+// ─── LeaveCard ────────────────────────────────────────────────────────────────
 
-const DELETE_WIDTH = 80
-
-function SwipeableLeaveCard({
+function LeaveCard({
   item,
+  index,
   onDelete,
   isDeleting,
 }: {
   item: LeaveRequest
-  onDelete: (id: string) => void
-  isDeleting: boolean
+  index?: number
+  onDelete?: () => void
+  isDeleting?: boolean
 }) {
-  const translateX = useRef(new Animated.Value(0)).current
-  const isOpen = useRef(false)
-  const [deleteActive, setDeleteActive] = useState(false)
+  const { colors, isDark } = useTheme()
+  const status = STATUS_CONFIG[item.status]
+  const avatarColor = isDark ? colors.accent : palette.primary[700]
+  const avatarBgColor = isDark ? colors.accentSubtle : palette.primary[100]
 
-  // Slide card fully off screen when deletion is in progress
-  useEffect(() => {
-    if (isDeleting) {
-      Animated.timing(translateX, { toValue: -500, duration: 280, useNativeDriver: true }).start()
-    }
-  }, [isDeleting])
+  const pills: ListRowPill[] = [
+    { key: "type", label: item.leaveType, color: colors.accent, bgColor: colors.accentSubtle },
+    { key: "status", label: status.label, color: status.color, bgColor: status.color + "22" },
+  ]
 
-  const btnOpacity = translateX.interpolate({
-    inputRange: [-DELETE_WIDTH, -DELETE_WIDTH * 0.3, 0],
-    outputRange: [1, 0.5, 0],
-    extrapolate: "clamp",
-  })
-  const btnScale = translateX.interpolate({
-    inputRange: [-DELETE_WIDTH, 0],
-    outputRange: [1, 0.6],
-    extrapolate: "clamp",
-  })
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, { dx, dy }) =>
-        !isDeleting && Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 8,
-      onPanResponderMove: (_, { dx }) => {
-        const base = isOpen.current ? -DELETE_WIDTH : 0
-        translateX.setValue(Math.max(Math.min(base + dx, 0), -DELETE_WIDTH))
-      },
-      onPanResponderRelease: (_, { dx, vx }) => {
-        const offset = isOpen.current ? dx - DELETE_WIDTH : dx
-        const shouldOpen = offset < -DELETE_WIDTH / 3 || vx < -0.5
-        Animated.spring(translateX, {
-          toValue: shouldOpen ? -DELETE_WIDTH : 0,
-          useNativeDriver: true,
-          bounciness: 4,
-        }).start()
-        isOpen.current = shouldOpen
-        setDeleteActive(shouldOpen)
-      },
-    })
-  ).current
-
-  function handleDelete() {
-    isOpen.current = false
-    onDelete(item.id)
-  }
+  const menuItems: ActionMenuItem[] = item.status === "pending" && onDelete
+    ? [{ label: "Cancel", icon: <Trash2 size={16} color={palette.error.default} strokeWidth={1.75} />, color: palette.error.default, onPress: onDelete }]
+    : []
 
   return (
-    <View style={styles.swipeRow} {...panResponder.panHandlers}>
-      <Animated.View style={{ transform: [{ translateX }] }}>
-        <LeaveCard item={item} />
-      </Animated.View>
-      <Animated.View
-        pointerEvents={deleteActive || isDeleting ? "auto" : "none"}
-        style={[
-          styles.deleteAction,
-          isDeleting
-            ? { opacity: 1 }
-            : { opacity: btnOpacity, transform: [{ scale: btnScale }] },
-        ]}
-      >
-        <Pressable onPress={handleDelete} disabled={isDeleting} style={styles.deleteBtn}>
-          {isDeleting
-            ? <ActivityIndicator size="small" color="#fff" />
-            : <Trash2 size={18} color="#fff" strokeWidth={1.75} />
-          }
-        </Pressable>
-      </Animated.View>
-    </View>
+    <ListRow
+      number={(index ?? 0) + 1}
+      avatarColor={avatarColor}
+      avatarBgColor={avatarBgColor}
+      title={item.leaveType}
+      pills={pills}
+      trailing={
+        <AppText variant="caption" style={{ color: colors.text.tertiary, fontSize: 12 }}>
+          {item.numberOfDays}d
+        </AppText>
+      }
+      menuItems={menuItems}
+      isBusy={isDeleting}
+      metaLines={[
+        <View key="dates" style={styles.metaRow}>
+          <Calendar size={14} color={colors.text.tertiary} strokeWidth={1.5} />
+          <AppText variant="body" style={{ color: colors.text.secondary as string }}>
+            {moment(item.startDate).format("D MMM")} – {moment(item.endDate).format("D MMM YYYY")}
+          </AppText>
+        </View>,
+        ...(item.reason
+          ? [
+              <AppText key="reason" variant="bodySmall" numberOfLines={2} color="tertiary">
+                {item.reason}
+              </AppText>,
+            ]
+          : []),
+        <View key="timeline" style={styles.timelineWrap}>
+          <FollowUpTimeline events={buildLeaveEvents(item)} />
+        </View>,
+      ]}
+    />
   )
 }
 
@@ -460,19 +431,15 @@ export default function LeavesScreen() {
         keyExtractor={(item) => item.id}
         renderItem={({ item, index }) => (
           <AnimatedListItem index={index}>
-            {item.status === "pending" ? (
-              <SwipeableLeaveCard
-                item={item}
-                onDelete={deleteMutation.mutate}
-                isDeleting={deleteMutation.isPending && deleteMutation.variables === item.id}
-              />
-            ) : (
-              <LeaveCard item={item} />
-            )}
+            <LeaveCard
+              item={item}
+              index={index}
+              onDelete={() => deleteMutation.mutate(item.id)}
+              isDeleting={deleteMutation.isPending && deleteMutation.variables === item.id}
+            />
           </AnimatedListItem>
         )}
-        contentContainerStyle={styles.list}
-        ItemSeparatorComponent={() => <View style={{ height: spacing[3] }} />}
+        contentContainerStyle={styles.rowList}
         refreshing={isRefetching}
         onRefresh={refetch}
         ListEmptyComponent={
@@ -543,41 +510,11 @@ const styles = StyleSheet.create({
   },
   filterTab: { paddingTop: spacing[3] },
 
-  list: { padding: spacing[4], paddingBottom: spacing[16] },
+  rowList: { paddingBottom: spacing[16] },
   center: { alignItems: "center", justifyContent: "center", paddingVertical: spacing[16] },
 
-  swipeRow: { overflow: "hidden" },
-  deleteAction: {
-    position: "absolute",
-    right: spacing[3],
-    top: spacing[3],
-    bottom: spacing[3],
-    width: 52,
-    backgroundColor: palette.error.default,
-    borderRadius: radii.xl,
-  },
-  deleteBtn: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  leaveCard: { padding: 0, overflow: "hidden" },
-  leaveCardTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[3],
-    padding: spacing[4],
-  },
-  typeBadge: { paddingHorizontal: spacing[2], paddingVertical: 2, borderRadius: radii.sm },
-  leaveCardMeta: {
-    flexDirection: "row",
-    gap: spacing[5],
-    paddingHorizontal: spacing[4],
-    paddingVertical: spacing[3],
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
   metaRow: { flexDirection: "row", alignItems: "center", gap: spacing[2] },
+  timelineWrap: { flex: 1, paddingTop: spacing[1] },
 
   fieldLabel: { marginBottom: spacing[2], marginTop: spacing[4] },
   typeRow: { flexDirection: "row", gap: spacing[3] },

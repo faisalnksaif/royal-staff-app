@@ -10,13 +10,13 @@ import {
   TextInput,
 } from "react-native"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { Check, X, Calendar, ChevronLeft, ChevronRight, Award, Clock } from "lucide-react-native"
+import { Check, X, Calendar, ChevronLeft, ChevronRight, Award } from "lucide-react-native"
 import BackButton from "../../components/shared/BackButton"
-import StaffAvatar from "../../components/shared/StaffAvatar"
 import AnimatedListItem from "../../components/shared/AnimatedListItem"
+import ListRow from "../../components/shared/ListRow"
+import type { ActionMenuItem } from "../../components/shared/ActionMenu"
 import moment from "moment"
 import AppText from "../../components/ui/AppText"
-import AppCard from "../../components/ui/AppCard"
 import AppButton from "../../components/ui/AppButton"
 import { useTheme } from "../../providers/ThemeProvider"
 import { useTablet } from "../../hooks/useTablet"
@@ -90,124 +90,77 @@ function RejectModal({
 
 function PendingCard({
   item,
+  index,
   onApprove,
   onReject,
   isApproving,
   isRejecting,
 }: {
   item: ExtraPerformance
+  index?: number
   onApprove: () => void
   onReject: () => void
   isApproving: boolean
   isRejecting: boolean
 }) {
-  const { colors } = useTheme()
+  const { colors, isDark } = useTheme()
+  const avatarColor = isDark ? colors.accent : palette.primary[700]
+  const avatarBgColor = isDark ? colors.accentSubtle : palette.primary[100]
+
+  const menuItems: ActionMenuItem[] = [
+    { label: "Approve", icon: <Check size={16} color={palette.success.default} strokeWidth={2.5} />, color: palette.success.default, onPress: onApprove },
+    { label: "Reject", icon: <X size={16} color={palette.error.default} strokeWidth={2} />, color: palette.error.default, onPress: onReject },
+  ]
+
   return (
-    <AppCard elevation="sm" style={styles.card}>
-      <View style={styles.cardTop}>
-        <StaffAvatar name={item.staffName} color={colors.accent} bgColor={colors.accentSubtle} />
-        <View style={{ flex: 1, gap: spacing[1] }}>
-          <AppText variant="bodyMedium">{toTitleCase(item.staffName)}</AppText>
-          <View style={[styles.typeBadge, { backgroundColor: colors.accentSubtle, alignSelf: "flex-start" }]}>
-            <AppText variant="caption" style={{ color: colors.accent, fontSize: 11 }}>{item.category}</AppText>
-          </View>
-        </View>
-      </View>
-
-      <View style={{ paddingHorizontal: spacing[4], paddingBottom: spacing[3], gap: spacing[1] }}>
-        <AppText variant="bodyMedium">{item.title}</AppText>
-        <AppText variant="caption" color="tertiary">{item.description}</AppText>
-      </View>
-
-      <View style={[styles.cardMeta, { borderTopColor: colors.border }]}>
-        <View style={styles.metaRow}>
+    <ListRow
+      number={(index ?? 0) + 1}
+      avatarColor={avatarColor}
+      avatarBgColor={avatarBgColor}
+      title={toTitleCase(item.staffName)}
+      pills={[{ key: "category", label: item.category, color: colors.accent, bgColor: colors.accentSubtle }]}
+      menuItems={menuItems}
+      isBusy={isApproving || isRejecting}
+      metaLines={[
+        <AppText key="title" variant="body" style={{ color: colors.text.secondary as string }}>{item.title}</AppText>,
+        <AppText key="desc" variant="bodySmall" numberOfLines={2} style={{ color: colors.text.tertiary as string }}>{item.description}</AppText>,
+        <View key="date" style={styles.metaRow}>
           <Calendar size={14} color={colors.text.tertiary} strokeWidth={1.5} />
           <AppText variant="caption" color="secondary">{moment(item.date).format("D MMM YYYY")}</AppText>
-        </View>
-        <View style={styles.metaRow}>
-          <Clock size={14} color={colors.text.tertiary} strokeWidth={1.5} />
-          <AppText variant="caption" color="tertiary">{moment(item.createdAt).fromNow()}</AppText>
-        </View>
-      </View>
-
-      <View style={[styles.cardActions, { borderTopColor: colors.border }]}>
-        <Pressable
-          onPress={onReject}
-          disabled={isRejecting || isApproving}
-          style={({ pressed }) => [
-            styles.actionBtn,
-            { backgroundColor: palette.error.default + "15", opacity: pressed ? 0.7 : 1 },
-          ]}
-        >
-          {isRejecting ? (
-            <ActivityIndicator size="small" color={palette.error.default} />
-          ) : (
-            <>
-              <X size={16} color={palette.error.default} strokeWidth={2} />
-              <AppText variant="caption" style={{ color: palette.error.default }}>Reject</AppText>
-            </>
-          )}
-        </Pressable>
-
-        <Pressable
-          onPress={onApprove}
-          disabled={isApproving || isRejecting}
-          style={({ pressed }) => [
-            styles.actionBtn,
-            { backgroundColor: palette.success.default + "15", opacity: pressed ? 0.7 : 1 },
-          ]}
-        >
-          {isApproving ? (
-            <ActivityIndicator size="small" color={palette.success.default} />
-          ) : (
-            <>
-              <Check size={16} color={palette.success.default} strokeWidth={2.5} />
-              <AppText variant="caption" style={{ color: palette.success.default }}>Approve</AppText>
-            </>
-          )}
-        </Pressable>
-      </View>
-    </AppCard>
+          <AppText variant="caption" color="tertiary">· {moment(item.createdAt).fromNow()}</AppText>
+        </View>,
+      ]}
+    />
   )
 }
 
 // ─── ApprovedCard ─────────────────────────────────────────────────────────────
 
-function ApprovedCard({ item }: { item: ExtraPerformance }) {
+function ApprovedCard({ item, index }: { item: ExtraPerformance; index?: number }) {
   const { colors } = useTheme()
+
   return (
-    <AppCard elevation="sm" style={styles.card}>
-      <View style={styles.cardTop}>
-        <StaffAvatar name={item.staffName} color={palette.success.default} bgColor={palette.success.default + "18"} />
-        <View style={{ flex: 1, gap: spacing[1] }}>
-          <AppText variant="bodyMedium">{toTitleCase(item.staffName)}</AppText>
-          <View style={[styles.typeBadge, { backgroundColor: colors.accentSubtle, alignSelf: "flex-start" }]}>
-            <AppText variant="caption" style={{ color: colors.accent, fontSize: 11 }}>{item.category}</AppText>
-          </View>
-        </View>
+    <ListRow
+      number={(index ?? 0) + 1}
+      avatarColor={palette.success.default}
+      avatarBgColor={palette.success.default + "18"}
+      title={toTitleCase(item.staffName)}
+      pills={[{ key: "category", label: item.category, color: colors.accent, bgColor: colors.accentSubtle }]}
+      trailing={
         <AppText variant="bodyMedium" style={{ color: palette.success.default }}>+{item.points}</AppText>
-      </View>
-
-      <View style={{ paddingHorizontal: spacing[4], paddingBottom: spacing[3], gap: spacing[1] }}>
-        <AppText variant="bodyMedium">{item.title}</AppText>
-        <AppText variant="caption" color="tertiary">{item.description}</AppText>
-      </View>
-
-      <View style={[styles.cardMeta, { borderTopColor: colors.border }]}>
-        <View style={styles.metaRow}>
+      }
+      metaLines={[
+        <AppText key="title" variant="body" style={{ color: colors.text.secondary as string }}>{item.title}</AppText>,
+        <AppText key="desc" variant="bodySmall" numberOfLines={2} style={{ color: colors.text.tertiary as string }}>{item.description}</AppText>,
+        <View key="date" style={styles.metaRow}>
           <Calendar size={14} color={colors.text.tertiary} strokeWidth={1.5} />
           <AppText variant="caption" color="secondary">{moment(item.date).format("D MMM YYYY")}</AppText>
-        </View>
-        {item.approvedAt && (
-          <View style={styles.metaRow}>
-            <Check size={13} color={palette.success.default} strokeWidth={2} />
-            <AppText variant="caption" color="tertiary">
-              Approved {moment(item.approvedAt).fromNow()}
-            </AppText>
-          </View>
-        )}
-      </View>
-    </AppCard>
+          {item.approvedAt && (
+            <AppText variant="caption" color="tertiary">· Approved {moment(item.approvedAt).fromNow()}</AppText>
+          )}
+        </View>,
+      ]}
+    />
   )
 }
 
@@ -345,6 +298,7 @@ export default function ExtraPerformanceScreen() {
             <AnimatedListItem index={index}>
               <PendingCard
                 item={item}
+                index={index}
                 onApprove={() => {
                   setActionId(item._id)
                   approveMutation.mutate(item._id)
@@ -358,8 +312,7 @@ export default function ExtraPerformanceScreen() {
               />
             </AnimatedListItem>
           )}
-          contentContainerStyle={styles.list}
-          ItemSeparatorComponent={() => <View style={{ height: spacing[3] }} />}
+          contentContainerStyle={styles.rowList}
           refreshing={refetchingPending}
           onRefresh={refetchPending}
           ListEmptyComponent={
@@ -382,11 +335,10 @@ export default function ExtraPerformanceScreen() {
           keyExtractor={(item) => item._id}
           renderItem={({ item, index }) => (
             <AnimatedListItem index={index}>
-              <ApprovedCard item={item} />
+              <ApprovedCard item={item} index={index} />
             </AnimatedListItem>
           )}
-          contentContainerStyle={styles.list}
-          ItemSeparatorComponent={() => <View style={{ height: spacing[3] }} />}
+          contentContainerStyle={styles.rowList}
           refreshing={refetchingApproved}
           onRefresh={refetchApproved}
           ListEmptyComponent={
@@ -460,46 +412,14 @@ const styles = StyleSheet.create({
     marginBottom: spacing[2],
   },
 
-  list: { padding: spacing[4], paddingBottom: spacing[16] },
+  rowList: { paddingBottom: spacing[16] },
   center: {
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: spacing[16],
   },
 
-  // Card
-  card: { padding: 0, overflow: "hidden" },
-  cardTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[3],
-    padding: spacing[4],
-  },
-  typeBadge: {
-    paddingHorizontal: spacing[2],
-    paddingVertical: 2,
-    borderRadius: radii.sm,
-  },
-  cardMeta: {
-    flexDirection: "row",
-    gap: spacing[5],
-    paddingHorizontal: spacing[4],
-    paddingVertical: spacing[3],
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
   metaRow: { flexDirection: "row", alignItems: "center", gap: spacing[2] },
-  cardActions: {
-    flexDirection: "row",
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  actionBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: spacing[2],
-    paddingVertical: spacing[3],
-  },
 
   // Modal
   modalBackdrop: {

@@ -11,22 +11,30 @@ import {
   ScrollView,
 } from "react-native"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { Check, X, Calendar, Clock, RefreshCw, Plus, Trash2 } from "lucide-react-native"
+import { Check, X, Calendar, RefreshCw, Plus, Trash2, Share2, UserCheck, ClipboardList, XCircle, Share } from "lucide-react-native"
+import Toast from "react-native-toast-message"
 import BackButton from "../../components/shared/BackButton"
 import StaffAvatar from "../../components/shared/StaffAvatar"
 import AnimatedListItem from "../../components/shared/AnimatedListItem"
 import DatePickerField from "../../components/shared/DatePickerField"
 import Popup from "../../components/shared/Popup"
+import ListRow, { ListRowPill } from "../../components/shared/ListRow"
+import FollowUpTimeline, { TimelineEvent } from "../../components/shared/FollowUpTimeline"
+import type { ActionMenuItem } from "../../components/shared/ActionMenu"
 import moment from "moment"
 import AppText from "../../components/ui/AppText"
-import AppCard from "../../components/ui/AppCard"
 import AppButton from "../../components/ui/AppButton"
 import { useTheme } from "../../providers/ThemeProvider"
 import { useTablet } from "../../hooks/useTablet"
 import { spacing, colors as palette, radii } from "../../constants/theme"
 import { leaveService } from "../../services/leaveService"
+import { staffService } from "../../services/staffService"
 import useAuthStore from "../../stores/useAuthStore"
 import type { LeaveRequest, LeaveStatus, LeaveType } from "../../types"
+
+function leaveErrorMessage(e: unknown, fallback: string): string {
+  return (e as Error)?.message ?? fallback
+}
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -179,116 +187,208 @@ function RejectModal({
   )
 }
 
+// ─── DelegateModal ────────────────────────────────────────────────────────────
+
+function DelegateModal({
+  visible,
+  onClose,
+  onConfirm,
+  isLoading,
+}: {
+  visible: boolean
+  onClose: () => void
+  onConfirm: (userId: number) => void
+  isLoading: boolean
+}) {
+  const { colors } = useTheme()
+  const [selected, setSelected] = useState<number | null>(null)
+
+  const { data, isLoading: isLoadingStaff } = useQuery({
+    queryKey: ["staff"],
+    queryFn: () => staffService.getStaff(),
+    enabled: visible,
+  })
+
+  const delegates = (data?.data ?? []).filter((s) => s.role === "manager" || s.role === "superAdmin")
+
+  function handleConfirm() {
+    if (selected == null) return
+    onConfirm(selected)
+  }
+
+  if (!visible) return null
+
+  return (
+    <Popup title="Delegate Approval" onClose={onClose}>
+      <AppText variant="body" color="secondary" style={{ marginBottom: spacing[4] }}>
+        Choose a manager or super admin to handle this request
+      </AppText>
+      {isLoadingStaff ? (
+        <ActivityIndicator color={colors.accent} style={{ marginVertical: spacing[6] }} />
+      ) : (
+        <ScrollView style={{ maxHeight: 280 }} showsVerticalScrollIndicator={false}>
+          {delegates.map((d) => {
+            const isSelected = selected === d.user_id
+            return (
+              <Pressable
+                key={d.user_id}
+                onPress={() => setSelected(d.user_id)}
+                style={[
+                  styles.delegateRow,
+                  {
+                    borderColor: isSelected ? colors.accent : colors.border,
+                    backgroundColor: isSelected ? colors.accent + "18" : "transparent",
+                  },
+                ]}
+              >
+                <StaffAvatar name={d.name} color={colors.accent} bgColor={colors.accentSubtle} />
+                <View style={{ flex: 1 }}>
+                  <AppText variant="bodyMedium">{toTitleCase(d.name)}</AppText>
+                  <AppText variant="caption" color="tertiary">{toTitleCase(d.role ?? "")}</AppText>
+                </View>
+              </Pressable>
+            )
+          })}
+          {delegates.length === 0 && (
+            <AppText color="tertiary" style={{ textAlign: "center", paddingVertical: spacing[6] }}>
+              No eligible managers or super admins found
+            </AppText>
+          )}
+        </ScrollView>
+      )}
+      <View style={styles.modalActions}>
+        <AppButton label="Cancel" variant="ghost" onPress={onClose} />
+        <AppButton
+          label={isLoading ? "Delegating…" : "Delegate"}
+          onPress={handleConfirm}
+          disabled={selected == null || isLoading}
+        />
+      </View>
+    </Popup>
+  )
+}
+
+// ─── leave timeline events ─────────────────────────────────────────────────────
+
+function buildLeaveEvents(item: LeaveRequest): TimelineEvent[] {
+  const events: TimelineEvent[] = [
+    {
+      icon: <ClipboardList size={11} color={palette.neutral[400]} strokeWidth={1.75} />,
+      text: `Requested ${moment(item.createdAt).format("D MMM, h:mm A")}`,
+      color: palette.neutral[500],
+    },
+  ]
+
+  if (item.delegatedTo != null) {
+    events.push({
+      icon: <Share size={11} color={palette.primary[500]} strokeWidth={1.75} />,
+      text: `Delegated for approval${item.delegatedAt ? ` · ${moment(item.delegatedAt).format("D MMM, h:mm A")}` : ""}`,
+      color: palette.primary[600],
+    })
+  }
+
+  if (item.status === "approved") {
+    events.push({
+      icon: <UserCheck size={11} color={palette.success.default} strokeWidth={1.75} />,
+      text: item.approvedByName
+        ? `Approved by ${item.approvedByName}${item.approvedAt ? ` · ${moment(item.approvedAt).format("D MMM, h:mm A")}` : ""}`
+        : `Approved${item.approvedAt ? ` · ${moment(item.approvedAt).format("D MMM, h:mm A")}` : ""}`,
+      color: palette.success.default,
+    })
+  } else if (item.status === "rejected") {
+    events.push({
+      icon: <XCircle size={11} color={palette.error.default} strokeWidth={1.75} />,
+      text: item.rejectionReason ? `Rejected · ${item.rejectionReason}` : "Rejected",
+      color: palette.error.default,
+    })
+  }
+
+  return events
+}
+
 // ─── LeaveCard ────────────────────────────────────────────────────────────────
 
 function LeaveCard({
   item,
+  index,
   onApprove,
   onReject,
+  onDelegate,
   isApproving,
   isRejecting,
+  canDelegate,
 }: {
   item: LeaveRequest
+  index?: number
   onApprove: () => void
   onReject: () => void
+  onDelegate?: () => void
   isApproving: boolean
   isRejecting: boolean
+  canDelegate?: boolean
 }) {
-  const { colors } = useTheme()
+  const { colors, isDark } = useTheme()
   const status = STATUS_CONFIG[item.status]
   const typeColor = TYPE_CONFIG[item.leaveType]?.color ?? colors.accent
+  const avatarColor = isDark ? colors.accent : palette.primary[700]
+  const avatarBgColor = isDark ? colors.accentSubtle : palette.primary[100]
+  const isBusy = isApproving || isRejecting
+
+  const menuItems: ActionMenuItem[] = item.status === "pending"
+    ? [
+        ...(item.canApprove
+          ? [
+              { label: "Approve", icon: <Check size={16} color={palette.success.default} strokeWidth={2.5} />, color: palette.success.default, onPress: onApprove },
+              { label: "Reject", icon: <X size={16} color={palette.error.default} strokeWidth={2} />, color: palette.error.default, onPress: onReject },
+            ]
+          : []),
+        ...(canDelegate && onDelegate
+          ? [{ label: "Delegate", icon: <Share2 size={16} color={colors.accent} strokeWidth={1.75} />, color: colors.accent, onPress: onDelegate }]
+          : []),
+      ]
+    : []
+
+  const pills: ListRowPill[] = [
+    { key: "type", label: item.leaveType, color: typeColor, bgColor: typeColor + "22" },
+    { key: "status", label: status.label, color: status.color, bgColor: status.color + "22" },
+    ...(item.delegatedTo != null
+      ? [{ key: "delegated", label: "Delegated", color: colors.accent, bgColor: colors.accentSubtle }]
+      : []),
+  ]
+
   return (
-    <AppCard elevation="sm" style={styles.card}>
-      {/* Top row: avatar + name + type + status */}
-      <View style={styles.cardTop}>
-        <StaffAvatar name={item.staffName} color={colors.accent} bgColor={colors.accentSubtle} />
-
-        <View style={{ flex: 1, gap: spacing[1] }}>
-          <AppText variant="bodyMedium">{toTitleCase(item.staffName)}</AppText>
-          <View style={{ flexDirection: "row", gap: spacing[2], alignItems: "center" }}>
-            <View style={[styles.typeBadge, { backgroundColor: typeColor + "22" }]}>
-              <AppText variant="caption" style={{ color: typeColor, fontSize: 11 }}>
-                {item.leaveType}
-              </AppText>
-            </View>
-            <View style={[styles.typeBadge, { backgroundColor: status.color + "22" }]}>
-              <AppText variant="caption" style={{ color: status.color, fontSize: 11 }}>
-                {status.label}
-              </AppText>
-            </View>
-          </View>
-        </View>
-      </View>
-
-      {/* Date range + days */}
-      <View style={[styles.cardMeta, { borderTopColor: colors.border }]}>
-        <View style={styles.metaRow}>
+    <ListRow
+      number={(index ?? 0) + 1}
+      avatarColor={avatarColor}
+      avatarBgColor={avatarBgColor}
+      title={toTitleCase(item.staffName)}
+      pills={pills}
+      trailing={
+        <AppText variant="caption" style={{ color: colors.text.tertiary, fontSize: 12 }}>
+          {item.numberOfDays}d
+        </AppText>
+      }
+      menuItems={menuItems}
+      isBusy={isBusy}
+      metaLines={[
+        <View key="dates" style={styles.metaItem}>
           <Calendar size={14} color={colors.text.tertiary} strokeWidth={1.5} />
-          <AppText variant="caption" color="secondary">
+          <AppText variant="body" style={{ color: colors.text.secondary as string }}>
             {moment(item.startDate).format("D MMM")} – {moment(item.endDate).format("D MMM YYYY")}
           </AppText>
-        </View>
-        <View style={styles.metaRow}>
-          <Clock size={14} color={colors.text.tertiary} strokeWidth={1.5} />
-          <AppText variant="caption" color="secondary">
-            {item.numberOfDays} day{item.numberOfDays !== 1 ? "s" : ""}
-          </AppText>
-        </View>
-      </View>
-
-      {/* Reason */}
-      {item.reason ? (
-        <AppText
-          variant="caption"
-          color="tertiary"
-          style={{ paddingHorizontal: spacing[4], paddingBottom: spacing[3] }}
-          numberOfLines={2}
-        >
-          {item.reason}
-        </AppText>
-      ) : null}
-
-      {/* Approve / Reject actions — only for pending */}
-      {item.status === "pending" && (
-        <View style={[styles.cardActions, { borderTopColor: colors.border }]}>
-          <Pressable
-            onPress={onReject}
-            disabled={isRejecting || isApproving}
-            style={({ pressed }) => [
-              styles.actionBtn,
-              { backgroundColor: palette.error.default + "15", opacity: pressed ? 0.7 : 1 },
-            ]}
-          >
-            {isRejecting ? (
-              <ActivityIndicator size="small" color={palette.error.default} />
-            ) : (
-              <>
-                <X size={16} color={palette.error.default} strokeWidth={2} />
-                <AppText variant="caption" style={{ color: palette.error.default }}>Reject</AppText>
-              </>
-            )}
-          </Pressable>
-
-          <Pressable
-            onPress={onApprove}
-            disabled={isApproving || isRejecting}
-            style={({ pressed }) => [
-              styles.actionBtn,
-              { backgroundColor: palette.success.default + "15", opacity: pressed ? 0.7 : 1 },
-            ]}
-          >
-            {isApproving ? (
-              <ActivityIndicator size="small" color={palette.success.default} />
-            ) : (
-              <>
-                <Check size={16} color={palette.success.default} strokeWidth={2.5} />
-                <AppText variant="caption" style={{ color: palette.success.default }}>Approve</AppText>
-              </>
-            )}
-          </Pressable>
-        </View>
-      )}
-    </AppCard>
+        </View>,
+        ...(item.reason
+          ? [
+              <AppText key="reason" variant="bodySmall" numberOfLines={2} color="tertiary">
+                {item.reason}
+              </AppText>,
+            ]
+          : []),
+        <View key="timeline" style={styles.timelineWrap}>
+          <FollowUpTimeline events={buildLeaveEvents(item)} />
+        </View>,
+      ]}
+    />
   )
 }
 
@@ -471,68 +571,61 @@ function MyRequestModal({
 
 function MyLeaveCard({
   item,
+  index,
   onDelete,
   isDeleting,
 }: {
   item: LeaveRequest
+  index?: number
   onDelete: () => void
   isDeleting: boolean
 }) {
-  const { colors } = useTheme()
+  const { colors, isDark } = useTheme()
   const status = STATUS_CONFIG[item.status]
+  const avatarColor = isDark ? colors.accent : palette.primary[700]
+  const avatarBgColor = isDark ? colors.accentSubtle : palette.primary[100]
+
+  const pills: ListRowPill[] = [
+    { key: "status", label: status.label, color: status.color, bgColor: status.color + "22" },
+  ]
+
+  const menuItems: ActionMenuItem[] = item.status === "pending"
+    ? [{ label: "Cancel", icon: <Trash2 size={16} color={palette.error.default} strokeWidth={1.75} />, color: palette.error.default, onPress: onDelete }]
+    : []
+
   return (
-    <AppCard elevation="sm" style={styles.card}>
-      <View style={styles.cardTop}>
-        <View style={{ flex: 1, gap: spacing[1] }}>
-          <View style={{ flexDirection: "row", gap: spacing[2] }}>
-            <View style={[styles.typeBadge, { backgroundColor: colors.accentSubtle }]}>
-              <AppText variant="caption" style={{ color: colors.accent, fontSize: 11 }}>{item.leaveType}</AppText>
-            </View>
-            <View style={[styles.typeBadge, { backgroundColor: status.color + "22" }]}>
-              <AppText variant="caption" style={{ color: status.color, fontSize: 11 }}>{status.label}</AppText>
-            </View>
-          </View>
-          {item.reason ? (
-            <AppText variant="caption" color="tertiary" numberOfLines={2}>{item.reason}</AppText>
-          ) : null}
-        </View>
-      </View>
-      <View style={[styles.cardMeta, { borderTopColor: colors.border }]}>
-        <View style={styles.metaRow}>
+    <ListRow
+      number={(index ?? 0) + 1}
+      avatarColor={avatarColor}
+      avatarBgColor={avatarBgColor}
+      title={item.leaveType}
+      pills={pills}
+      trailing={
+        <AppText variant="caption" style={{ color: colors.text.tertiary, fontSize: 12 }}>
+          {item.numberOfDays}d
+        </AppText>
+      }
+      menuItems={menuItems}
+      isBusy={isDeleting}
+      metaLines={[
+        <View key="dates" style={styles.metaItem}>
           <Calendar size={14} color={colors.text.tertiary} strokeWidth={1.5} />
-          <AppText variant="caption" color="secondary">
+          <AppText variant="body" style={{ color: colors.text.secondary as string }}>
             {moment(item.startDate).format("D MMM")} – {moment(item.endDate).format("D MMM YYYY")}
           </AppText>
-        </View>
-        <View style={styles.metaRow}>
-          <Clock size={14} color={colors.text.tertiary} strokeWidth={1.5} />
-          <AppText variant="caption" color="secondary">
-            {item.numberOfDays} day{item.numberOfDays !== 1 ? "s" : ""}
-          </AppText>
-        </View>
-      </View>
-      {item.status === "pending" && (
-        <View style={[styles.cardActions, { borderTopColor: colors.border }]}>
-          <Pressable
-            onPress={onDelete}
-            disabled={isDeleting}
-            style={({ pressed }) => [
-              styles.actionBtn,
-              { backgroundColor: palette.error.default + "15", opacity: pressed ? 0.7 : 1 },
-            ]}
-          >
-            {isDeleting ? (
-              <ActivityIndicator size="small" color={palette.error.default} />
-            ) : (
-              <>
-                <Trash2 size={16} color={palette.error.default} strokeWidth={2} />
-                <AppText variant="caption" style={{ color: palette.error.default }}>Cancel</AppText>
-              </>
-            )}
-          </Pressable>
-        </View>
-      )}
-    </AppCard>
+        </View>,
+        ...(item.reason
+          ? [
+              <AppText key="reason" variant="bodySmall" numberOfLines={2} color="tertiary">
+                {item.reason}
+              </AppText>,
+            ]
+          : []),
+        <View key="timeline" style={styles.timelineWrap}>
+          <FollowUpTimeline events={buildLeaveEvents(item)} />
+        </View>,
+      ]}
+    />
   )
 }
 
@@ -588,13 +681,13 @@ function MyLeavesTab() {
           <AnimatedListItem index={index}>
             <MyLeaveCard
               item={item}
+              index={index}
               onDelete={() => deleteMutation.mutate(item.id)}
               isDeleting={deleteMutation.isPending && deleteMutation.variables === item.id}
             />
           </AnimatedListItem>
         )}
-        contentContainerStyle={styles.list}
-        ItemSeparatorComponent={() => <View style={{ height: spacing[3] }} />}
+        contentContainerStyle={styles.rowList}
         refreshing={isRefetching}
         onRefresh={refetch}
         ListEmptyComponent={
@@ -617,16 +710,16 @@ function MyLeavesTab() {
   )
 }
 
-// ─── LeavesScreen ─────────────────────────────────────────────────────────────
+// ─── TeamLeavesTab ────────────────────────────────────────────────────────────
 
-export default function LeavesScreen() {
+function TeamLeavesTab({ delegatedOnly }: { delegatedOnly?: boolean }) {
   const { colors } = useTheme()
-  const { isTablet } = useTablet()
   const queryClient = useQueryClient()
-
-  const [view, setView] = useState<"team" | "mine">("team")
+  const user = useAuthStore((s) => s.user)
+  const isHr = user?.role === "hr"
   const [filter, setFilter] = useState<LeaveStatus | "all">("all")
   const [rejectTarget, setRejectTarget] = useState<string | null>(null)
+  const [delegateTarget, setDelegateTarget] = useState<string | null>(null)
   const [actionId, setActionId] = useState<string | null>(null)
 
   const { data: leavesData, isLoading: leavesLoading, refetch, isRefetching } = useQuery({
@@ -646,6 +739,10 @@ export default function LeavesScreen() {
       queryClient.invalidateQueries({ queryKey: ["leave-stats"] })
       setActionId(null)
     },
+    onError: (e) => {
+      Toast.show({ type: "error", text1: leaveErrorMessage(e, "Failed to approve leave") })
+      setActionId(null)
+    },
   })
 
   const rejectMutation = useMutation({
@@ -657,58 +754,49 @@ export default function LeavesScreen() {
       setRejectTarget(null)
       setActionId(null)
     },
+    onError: (e) => {
+      Toast.show({ type: "error", text1: leaveErrorMessage(e, "Failed to reject leave") })
+      setActionId(null)
+    },
+  })
+
+  const delegateMutation = useMutation({
+    mutationFn: ({ id, userId }: { id: string; userId: number }) =>
+      leaveService.delegateLeave(id, userId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["leaves"] })
+      setDelegateTarget(null)
+    },
+    onError: (e) => {
+      Toast.show({ type: "error", text1: leaveErrorMessage(e, "Failed to delegate leave") })
+    },
   })
 
   const stats = statsData?.data
-  const leaves = leavesData?.data?.leaves ?? []
+  const allLeaves = leavesData?.data?.leaves ?? []
+  const leaves = delegatedOnly
+    ? allLeaves.filter((l) => l.delegatedTo != null && l.delegatedTo === user?.user_id)
+    : allLeaves
 
   return (
-    <View style={[styles.screen, { backgroundColor: colors.background.primary }]}>
-      {/* Header */}
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        {!isTablet && <BackButton />}
-        <View style={{ flex: 1 }}>
-          <AppText variant="heading3">Leave Requests</AppText>
-          <AppText variant="caption" color="tertiary">
-            {view === "team" ? `${leavesData?.data?.count ?? 0} total` : "Your requests"}
-          </AppText>
-        </View>
-        {view === "team" && (
-          <Pressable onPress={() => refetch()} hitSlop={8} style={{ padding: spacing[2] }}>
-            {isRefetching
-              ? <ActivityIndicator size="small" color={colors.accent} />
-              : <RefreshCw size={18} color={colors.text.tertiary} strokeWidth={1.75} />
-            }
-          </Pressable>
-        )}
+    <View style={{ flex: 1 }}>
+      <View style={styles.teamActionsRow}>
+        <View style={{ flex: 1 }} />
+        <Pressable
+          onPress={() => refetch()}
+          hitSlop={8}
+          accessibilityLabel="Refresh leave requests"
+          // @ts-expect-error web-only hover tooltip, ignored on native
+          title="Refresh"
+          style={{ padding: spacing[2] }}
+        >
+          {isRefetching
+            ? <ActivityIndicator size="small" color={colors.accent} />
+            : <RefreshCw size={18} color={colors.text.tertiary} strokeWidth={1.75} />
+          }
+        </Pressable>
       </View>
 
-      {/* Team / Mine toggle */}
-      <View style={[styles.viewToggleRow, { borderBottomColor: colors.border }]}>
-        {(["team", "mine"] as const).map((v) => {
-          const isActive = v === view
-          return (
-            <Pressable key={v} onPress={() => setView(v)} style={styles.filterTab}>
-              <AppText
-                variant={isActive ? "bodyMedium" : "body"}
-                style={{
-                  color: isActive ? colors.accent : colors.text.tertiary,
-                  paddingBottom: spacing[2],
-                  borderBottomWidth: isActive ? 2 : 0,
-                  borderBottomColor: colors.accent,
-                }}
-              >
-                {v === "team" ? "Team Requests" : "My Leave"}
-              </AppText>
-            </Pressable>
-          )
-        })}
-      </View>
-
-      {view === "mine" ? (
-        <MyLeavesTab />
-      ) : (
-        <>
       {/* Stats */}
       <StatsBar
         isLoading={statsLoading}
@@ -729,6 +817,7 @@ export default function LeavesScreen() {
           <AnimatedListItem index={index}>
             <LeaveCard
               item={item}
+              index={index}
               onApprove={() => {
                 setActionId(item.id)
                 approveMutation.mutate(item.id)
@@ -737,13 +826,14 @@ export default function LeavesScreen() {
                 setActionId(item.id)
                 setRejectTarget(item.id)
               }}
+              onDelegate={() => setDelegateTarget(item.id)}
+              canDelegate={isHr}
               isApproving={approveMutation.isPending && actionId === item.id}
               isRejecting={rejectMutation.isPending && actionId === item.id}
             />
           </AnimatedListItem>
         )}
-        contentContainerStyle={styles.list}
-        ItemSeparatorComponent={() => <View style={{ height: spacing[3] }} />}
+        contentContainerStyle={styles.rowList}
         refreshing={isRefetching}
         onRefresh={refetch}
         ListEmptyComponent={
@@ -751,7 +841,9 @@ export default function LeavesScreen() {
             <ActivityIndicator size="large" color={colors.accent} style={styles.center} />
           ) : (
             <View style={styles.center}>
-              <AppText color="tertiary">No leave requests found</AppText>
+              <AppText color="tertiary">
+                {delegatedOnly ? "No requests delegated to you" : "No leave requests found"}
+              </AppText>
             </View>
           )
         }
@@ -766,7 +858,86 @@ export default function LeavesScreen() {
         }}
         isLoading={rejectMutation.isPending}
       />
-        </>
+
+      {/* Delegate modal */}
+      <DelegateModal
+        visible={delegateTarget != null}
+        onClose={() => setDelegateTarget(null)}
+        onConfirm={(userId) => {
+          if (delegateTarget) delegateMutation.mutate({ id: delegateTarget, userId })
+        }}
+        isLoading={delegateMutation.isPending}
+      />
+    </View>
+  )
+}
+
+// ─── LeavesScreen ─────────────────────────────────────────────────────────────
+
+type LeavesView = "team" | "delegated" | "mine"
+
+export default function LeavesScreen() {
+  const { colors } = useTheme()
+  const { isTablet } = useTablet()
+  const user = useAuthStore((s) => s.user)
+  const isSuperAdmin = user?.role === "superAdmin"
+
+  const [view, setView] = useState<LeavesView>(isSuperAdmin ? "delegated" : "team")
+
+  const tabs: Array<{ label: string; value: LeavesView }> = isSuperAdmin
+    ? [
+        { label: "Delegated to Me", value: "delegated" },
+        { label: "Team Requests", value: "team" },
+        { label: "My Leave", value: "mine" },
+      ]
+    : [
+        { label: "Team Requests", value: "team" },
+        { label: "My Leave", value: "mine" },
+      ]
+
+  const headerSubtitle = view === "mine"
+    ? "Your requests"
+    : view === "delegated"
+      ? "Requests delegated to you"
+      : "Team requests"
+
+  return (
+    <View style={[styles.screen, { backgroundColor: colors.background.primary }]}>
+      {/* Header */}
+      <View style={[styles.header, { borderBottomColor: colors.border }]}>
+        {!isTablet && <BackButton />}
+        <View style={{ flex: 1 }}>
+          <AppText variant="heading3">Leave Requests</AppText>
+          <AppText variant="caption" color="tertiary">{headerSubtitle}</AppText>
+        </View>
+      </View>
+
+      {/* View toggle */}
+      <View style={[styles.viewToggleRow, { borderBottomColor: colors.border }]}>
+        {tabs.map((t) => {
+          const isActive = t.value === view
+          return (
+            <Pressable key={t.value} onPress={() => setView(t.value)} style={styles.filterTab}>
+              <AppText
+                variant={isActive ? "bodyMedium" : "body"}
+                style={{
+                  color: isActive ? colors.accent : colors.text.tertiary,
+                  paddingBottom: spacing[2],
+                  borderBottomWidth: isActive ? 2 : 0,
+                  borderBottomColor: colors.accent,
+                }}
+              >
+                {t.label}
+              </AppText>
+            </Pressable>
+          )
+        })}
+      </View>
+
+      {view === "mine" ? (
+        <MyLeavesTab />
+      ) : (
+        <TeamLeavesTab delegatedOnly={view === "delegated"} />
       )}
     </View>
   )
@@ -869,45 +1040,16 @@ const styles = StyleSheet.create({
   filterTab: { paddingTop: spacing[3] },
 
   list: { padding: spacing[4], paddingBottom: spacing[16] },
+  rowList: { paddingBottom: spacing[16] },
   center: {
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: spacing[16],
   },
 
-  // Card
-  card: { padding: 0, overflow: "hidden" },
-  cardTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[3],
-    padding: spacing[4],
-  },
-  typeBadge: {
-    paddingHorizontal: spacing[2],
-    paddingVertical: 2,
-    borderRadius: radii.sm,
-  },
-  cardMeta: {
-    flexDirection: "row",
-    gap: spacing[5],
-    paddingHorizontal: spacing[4],
-    paddingVertical: spacing[3],
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  metaRow: { flexDirection: "row", alignItems: "center", gap: spacing[2] },
-  cardActions: {
-    flexDirection: "row",
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  actionBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: spacing[2],
-    paddingVertical: spacing[3],
-  },
+  // Row meta
+  metaItem: { flexDirection: "row", alignItems: "center", gap: spacing[2] },
+  timelineWrap: { flex: 1, paddingTop: spacing[1] },
 
   // Modal
   modalBackdrop: {
@@ -935,5 +1077,19 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "flex-end",
     gap: spacing[3],
+  },
+  teamActionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: spacing[2],
+  },
+  delegateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[3],
+    padding: spacing[3],
+    borderRadius: radii.md,
+    borderWidth: 1.5,
+    marginBottom: spacing[2],
   },
 })

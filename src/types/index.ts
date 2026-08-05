@@ -26,6 +26,7 @@ export interface StaffResponse {
   shiftId?: string | null
   hasPhoto?: boolean
   photoCount?: number
+  role?: UserRole
   createdAt: string
   updatedAt: string
 }
@@ -695,7 +696,12 @@ export interface LeaveRequest {
   reason: string
   status: LeaveStatus
   approvedAt?: string | null
+  approvedBy?: string | null
+  approvedByName?: string | null
   rejectionReason?: string | null
+  delegatedTo?: number | null
+  delegatedAt?: string | null
+  canApprove: boolean
   createdAt: string
 }
 

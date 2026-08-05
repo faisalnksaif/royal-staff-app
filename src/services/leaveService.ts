@@ -33,6 +33,17 @@ async function rejectLeave(leaveId: string, rejectionReason: string): Promise<{ 
   return data as { success: boolean; data: { id: string; status: string } }
 }
 
+async function delegateLeave(leaveId: string, delegateToUserId: number): Promise<{ success: boolean; data: { id: string; delegatedTo: number; delegatedAt: string } }> {
+  const { data } = await api.http.request({
+    path: `/leaves/${leaveId}/delegate`,
+    method: "PUT",
+    body: { delegateToUserId },
+    secure: true,
+    format: "json",
+  })
+  return data as { success: boolean; data: { id: string; delegatedTo: number; delegatedAt: string } }
+}
+
 async function getLeaveStats(): Promise<{ success: boolean; data: LeaveStatsOverview }> {
   const { data } = await api.http.request({
     path: "/leaves/stats/overview",
@@ -93,4 +104,4 @@ async function deleteLeave(leaveId: string): Promise<{ success: boolean; data: {
   return data as { success: boolean; data: { id: string; message: string } }
 }
 
-export const leaveService = { getLeaves, getMyLeaves, approveLeave, rejectLeave, getLeaveStats, getLeaveBalance, requestLeave, deleteLeave }
+export const leaveService = { getLeaves, getMyLeaves, approveLeave, rejectLeave, delegateLeave, getLeaveStats, getLeaveBalance, requestLeave, deleteLeave }

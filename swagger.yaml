@@ -435,7 +435,15 @@ paths:
                   data:
                     type: array
                     items:
-                      $ref: '#/components/schemas/StaffResponse'
+                      allOf:
+                        - $ref: '#/components/schemas/StaffResponse'
+                        - type: object
+                          properties:
+                            role:
+                              type: string
+                              enum: [staff, manager, superAdmin, hr, scanner]
+                              description: Role of this staff member's linked User account
+                              example: manager
         '401':
           description: Unauthorized - no token
           content:
@@ -4884,6 +4892,14 @@ paths:
                               type: string
                             status:
                               type: string
+                            approvedBy:
+                              type: string
+                              nullable: true
+                              description: Mongo user ID of the approver/rejecter
+                            approvedByName:
+                              type: string
+                              nullable: true
+                              description: Name (or email fallback) of the approver/rejecter
                             approvedAt:
                               type: string
                               format: date-time
@@ -5254,6 +5270,25 @@ paths:
                               type: string
                             status:
                               type: string
+                            approvedBy:
+                              type: string
+                              nullable: true
+                              description: Mongo user ID of the manager/HR/superAdmin who approved/rejected this request
+                            approvedByName:
+                              type: string
+                              nullable: true
+                              description: Name (or email fallback) of the approver/rejecter
+                            delegatedTo:
+                              type: integer
+                              description: user_id of the manager/superAdmin this request was delegated to, if any
+                            delegatedAt:
+                              type: string
+                              format: date-time
+                              nullable: true
+                              description: Timestamp when this request was delegated, if any
+                            canApprove:
+                              type: boolean
+                              description: Whether the requesting user can approve/reject this specific leave (always false for non-pending leaves)
                             createdAt:
                               type: string
                               format: date-time
@@ -5264,8 +5299,12 @@ paths:
     put:
       tags:
         - Leaves
-      summary: Approve leave request (MANAGERS/SUPER ADMIN)
-      description: Approve a pending leave request. Automatically deducts from leave balance.
+      summary: Approve leave request (HR/SUPER ADMIN, or delegated/permitted MANAGER)
+      description: >
+        Approve a pending leave request. HR and superAdmin can always approve.
+        A manager can only approve if the `leave.managerCanApproveDirect`
+        setting is enabled, or if HR/superAdmin delegated this specific
+        request to them via POST /leaves/{leaveId}/delegate.
       security:
         - BearerAuth: []
       parameters:
@@ -5296,7 +5335,7 @@ paths:
                         type: string
                         format: date-time
         '403':
-          description: Forbidden - managers/superadmin only
+          description: Forbidden - HR/superadmin only, or manager without approval rights on this leave
         '400':
           description: Bad request - invalid status
 
@@ -5304,8 +5343,11 @@ paths:
     put:
       tags:
         - Leaves
-      summary: Reject leave request (MANAGERS/SUPER ADMIN)
-      description: Reject a pending leave request with reason
+      summary: Reject leave request (HR/SUPER ADMIN, or delegated/permitted MANAGER)
+      description: >
+        Reject a pending leave request with reason. Same permission rules as
+        approve - HR and superAdmin can always reject; a manager needs
+        `leave.managerCanApproveDirect` enabled or an explicit delegation.
       security:
         - BearerAuth: []
       parameters:
@@ -5345,9 +5387,65 @@ paths:
                         type: string
                         example: rejected
         '403':
-          description: Forbidden - managers/superadmin only
+          description: Forbidden - HR/superadmin only, or manager without approval rights on this leave
         '400':
           description: Bad request - invalid status
+
+  /leaves/{leaveId}/delegate:
+    put:
+      tags:
+        - Leaves
+      summary: Delegate approval authority for a leave request (HR/SUPER ADMIN)
+      description: >
+        Reassigns approval authority for a pending leave request to a
+        specific active manager or superAdmin. Once delegated, that user can
+        approve/reject this request regardless of the
+        `leave.managerCanApproveDirect` setting.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: leaveId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - delegateToUserId
+              properties:
+                delegateToUserId:
+                  type: integer
+                  description: user_id of the manager/superAdmin to delegate approval to
+                  example: 42
+      responses:
+        '200':
+          description: Leave delegated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      delegatedTo:
+                        type: integer
+                      delegatedAt:
+                        type: string
+                        format: date-time
+        '403':
+          description: Forbidden - HR/superadmin only
+        '400':
+          description: Bad request - invalid status, or delegate is not an active manager/superAdmin
 
   /leaves/{leaveId}:
     delete:
