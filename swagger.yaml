@@ -742,6 +742,12 @@ paths:
                       closing_dr_cr:
                         type: string
                         enum: [Dr, Cr]
+                      target_amount:
+                        type: number
+                        description: What the customer actually needs to pay - closing_balance with any hidden "SUSPENSE ACCOUNT" commission entries subtracted out, since those are a commission booked against the customer rather than real debt. Use this instead of closing_balance for collections/follow-up purposes.
+                      target_dr_cr:
+                        type: string
+                        enum: [Dr, Cr]
                   retention:
                     type: object
                     description: This customer's buying-recency classification - same logic as GET /ledger/retention, computed over full history regardless of from_date/to_date
@@ -1141,6 +1147,12 @@ paths:
                         outstanding_dr_cr:
                           type: string
                           enum: [Dr, Cr]
+                        target_amount:
+                          type: number
+                          description: What the customer actually needs to pay - outstanding_balance with any hidden "SUSPENSE ACCOUNT" commission entries subtracted out, since those are a commission booked against the customer rather than real debt. Use this instead of outstanding_balance for collections/follow-up purposes.
+                        target_dr_cr:
+                          type: string
+                          enum: [Dr, Cr]
                         ownership_source:
                           type: string
                           enum: [assigned, dynamic, unassigned]
@@ -1432,6 +1444,12 @@ paths:
                         outstanding_dr_cr:
                           type: string
                           enum: [Dr, Cr]
+                        target_amount:
+                          type: number
+                          description: What the customer actually needs to pay - outstanding_balance with any hidden "SUSPENSE ACCOUNT" commission entries subtracted out, since those are a commission booked against the customer rather than real debt. Use this instead of outstanding_balance for collections/follow-up purposes.
+                        target_dr_cr:
+                          type: string
+                          enum: [Dr, Cr]
                         follow_up:
                           type: object
                           properties:
@@ -1663,6 +1681,12 @@ paths:
                         outstanding_dr_cr:
                           type: string
                           enum: [Dr, Cr]
+                        target_amount:
+                          type: number
+                          description: What the customer actually needs to pay - outstanding_balance with any hidden "SUSPENSE ACCOUNT" commission entries subtracted out, since those are a commission booked against the customer rather than real debt. Use this instead of outstanding_balance for collections/follow-up purposes.
+                        target_dr_cr:
+                          type: string
+                          enum: [Dr, Cr]
                         is_new:
                           type: boolean
                           description: First synced from rowbest within the last `newDays` days
@@ -1876,6 +1900,12 @@ paths:
                           type: number
                           description: Current live balance, from LedgerCustomer
                         outstanding_dr_cr:
+                          type: string
+                          enum: [Dr, Cr]
+                        target_amount:
+                          type: number
+                          description: What the customer actually needs to pay - outstanding_balance with any hidden "SUSPENSE ACCOUNT" commission entries subtracted out, since those are a commission booked against the customer rather than real debt. Use this instead of outstanding_balance for collections/follow-up purposes.
+                        target_dr_cr:
                           type: string
                           enum: [Dr, Cr]
                         last_payment_date:
@@ -4780,7 +4810,14 @@ paths:
       tags:
         - Leaves
       summary: Request a leave
-      description: Staff requests a leave. Requires approval from a manager or superAdmin. Maximum 3 leaves per month, 12 per year.
+      description: >
+        Request a leave. Maximum 3 leaves per month, 12 per year. A
+        staff-originated request goes to HR (and managers, for visibility) for
+        approval. A manager- or HR-originated request escalates to superAdmin
+        - only superAdmin can approve/reject it. In that case `delegatedTo` is
+        automatically set to a specific active superAdmin as the point of
+        contact (informational only - any active superAdmin may still act on
+        it).
       security:
         - BearerAuth: []
       requestBody:
@@ -5280,12 +5317,12 @@ paths:
                               description: Name (or email fallback) of the approver/rejecter
                             delegatedTo:
                               type: integer
-                              description: user_id of the manager/superAdmin this request was delegated to, if any
-                            delegatedAt:
-                              type: string
-                              format: date-time
-                              nullable: true
-                              description: Timestamp when this request was delegated, if any
+                              description: >-
+                                user_id of the manager/superAdmin this request was delegated to, if any.
+                                For staff-originated requests this grants that user approval rights (see
+                                PUT /leaves/{leaveId}/delegate). For manager/HR-originated requests this
+                                is set automatically to a superAdmin as an informational point of
+                                contact only - it does not restrict approval to just that user.
                             canApprove:
                               type: boolean
                               description: Whether the requesting user can approve/reject this specific leave (always false for non-pending leaves)
@@ -5301,10 +5338,13 @@ paths:
         - Leaves
       summary: Approve leave request (HR/SUPER ADMIN, or delegated/permitted MANAGER)
       description: >
-        Approve a pending leave request. HR and superAdmin can always approve.
-        A manager can only approve if the `leave.managerCanApproveDirect`
-        setting is enabled, or if HR/superAdmin delegated this specific
-        request to them via POST /leaves/{leaveId}/delegate.
+        Approve a pending leave request. For a staff-originated request, HR
+        and superAdmin can always approve, and a manager can approve if the
+        `leave.managerCanApproveDirect` setting is enabled or if HR/superAdmin
+        delegated this specific request to them via PUT
+        /leaves/{leaveId}/delegate. For a manager- or HR-originated request
+        (self-requested leave), only superAdmin may approve - it escalates
+        automatically and cannot be delegated.
       security:
         - BearerAuth: []
       parameters:
@@ -5335,7 +5375,7 @@ paths:
                         type: string
                         format: date-time
         '403':
-          description: Forbidden - HR/superadmin only, or manager without approval rights on this leave
+          description: Forbidden - HR/superadmin only, manager without approval rights on this leave, or leave was requested by a manager/HR (superAdmin only)
         '400':
           description: Bad request - invalid status
 
@@ -5346,8 +5386,10 @@ paths:
       summary: Reject leave request (HR/SUPER ADMIN, or delegated/permitted MANAGER)
       description: >
         Reject a pending leave request with reason. Same permission rules as
-        approve - HR and superAdmin can always reject; a manager needs
-        `leave.managerCanApproveDirect` enabled or an explicit delegation.
+        approve - HR and superAdmin can always reject a staff-originated
+        request; a manager needs `leave.managerCanApproveDirect` enabled or an
+        explicit delegation. A manager- or HR-originated request can only be
+        rejected by superAdmin.
       security:
         - BearerAuth: []
       parameters:
@@ -5387,7 +5429,7 @@ paths:
                         type: string
                         example: rejected
         '403':
-          description: Forbidden - HR/superadmin only, or manager without approval rights on this leave
+          description: Forbidden - HR/superadmin only, manager without approval rights on this leave, or leave was requested by a manager/HR (superAdmin only)
         '400':
           description: Bad request - invalid status
 
@@ -5397,10 +5439,12 @@ paths:
         - Leaves
       summary: Delegate approval authority for a leave request (HR/SUPER ADMIN)
       description: >
-        Reassigns approval authority for a pending leave request to a
-        specific active manager or superAdmin. Once delegated, that user can
-        approve/reject this request regardless of the
-        `leave.managerCanApproveDirect` setting.
+        Reassigns approval authority for a pending, staff-originated leave
+        request to a specific active manager or superAdmin. Once delegated,
+        that user can approve/reject this request regardless of the
+        `leave.managerCanApproveDirect` setting. Manager- or HR-originated
+        requests cannot be delegated - they can only be approved by
+        superAdmin.
       security:
         - BearerAuth: []
       parameters:
@@ -5445,7 +5489,7 @@ paths:
         '403':
           description: Forbidden - HR/superadmin only
         '400':
-          description: Bad request - invalid status, or delegate is not an active manager/superAdmin
+          description: Bad request - invalid status, delegate is not an active manager/superAdmin, or leave was requested by a manager/HR (cannot be delegated)
 
   /leaves/{leaveId}:
     delete:
@@ -6589,6 +6633,16 @@ components:
           type: number
           description: dr - cr
           example: 8064269
+        suspense_amount:
+          type: number
+          nullable: true
+          description: Signed (Dr - Cr) sum of this customer's entries with particulars "SUSPENSE ACCOUNT" - a hidden commission, not real debt. Populated by the stats recompute job; null until first computed.
+        target_amount:
+          type: number
+          description: What the customer actually needs to pay - balance with suspense_amount subtracted out, since a "SUSPENSE ACCOUNT" entry is a hidden commission booked against the customer rather than real debt. Use this instead of balance for collections/follow-up purposes. Only present on GET /ledger/customers responses (computed from suspense_amount at request time, not stored).
+        target_dr_cr:
+          type: string
+          enum: [Dr, Cr]
         assigned_staff_id:
           type: integer
           nullable: true

@@ -1,17 +1,22 @@
 import { useState, useEffect, useMemo } from "react"
-import { View, FlatList, ActivityIndicator, StyleSheet, Pressable } from "react-native"
+import { View, FlatList, ActivityIndicator, StyleSheet, Pressable, useWindowDimensions } from "react-native"
 import { useQuery, useMutation } from "@tanstack/react-query"
-import { Check, X, AlertCircle, RefreshCw } from "lucide-react-native"
+import { Check, X, AlertCircle, RefreshCw, Search, XCircle } from "lucide-react-native"
 import moment from "moment"
 import BackButton from "../../components/shared/BackButton"
 import AppText from "../../components/ui/AppText"
 import AppCard from "../../components/ui/AppCard"
+import AppInput from "../../components/ui/AppInput"
 import { useTheme } from "../../providers/ThemeProvider"
 import { useTablet } from "../../hooks/useTablet"
 import { spacing, colors as palette, radii } from "../../constants/theme"
 import { appearanceService } from "../../services/appearanceService"
 import { attendanceService } from "../../services/attendanceService"
+import { useDepartments } from "../../hooks/useDepartments"
 import type { AppearanceItemKey, AppearanceRecord } from "../../types"
+
+const UNASSIGNED_DEPARTMENT = "Other"
+const PINNED_DEPARTMENT = "Store"
 
 const APPEARANCE_ITEMS: { key: AppearanceItemKey; label: string }[] = [
   { key: "uniform", label: "Uniform" },
@@ -44,10 +49,13 @@ function StaffAppearanceRow({
   const statusColor = isAllOk ? palette.success.default : palette.error.default
 
   return (
-    <AppCard elevation="sm" style={styles.staffCard}>
+    <AppCard
+      elevation="sm"
+      style={[styles.staffCard]}
+    >
       {/* Name row */}
       <View style={styles.nameRow}>
-        <View style={[styles.avatar, { backgroundColor: statusColor + "22" }]}>
+        <View style={[styles.avatar, { backgroundColor: statusColor + "1f" }]}>
           <AppText variant="bodyMedium" style={{ color: statusColor }}>
             {initials}
           </AppText>
@@ -83,21 +91,23 @@ function StaffAppearanceRow({
             <Pressable
               key={item.key}
               onPress={() => !isUpdating && onToggle(item.key)}
-              style={({ pressed }) => [
+              disabled={isUpdating}
+              style={({ pressed, hovered }: any) => [
                 styles.chip,
                 {
-                  backgroundColor: chipColor + "18",
-                  borderColor: chipColor,
-                  opacity: pressed || isUpdating ? 0.6 : 1,
+                  backgroundColor: chipColor + "14",
+                  borderColor: chipColor + (pressed || hovered ? "" : "80"),
+                  opacity: isUpdating ? 0.5 : 1,
+                  transform: [{ scale: pressed ? 0.97 : 1 }],
                 },
               ]}
             >
               {isBad ? (
-                <X size={11} color={chipColor} strokeWidth={2.5} />
+                <X size={12} color={chipColor} strokeWidth={2.5} />
               ) : (
-                <Check size={11} color={chipColor} strokeWidth={2.5} />
+                <Check size={12} color={chipColor} strokeWidth={2.5} />
               )}
-              <AppText variant="caption" style={{ color: chipColor, fontSize: 11 }}>
+              <AppText variant="caption" style={{ color: chipColor }}>
                 {item.label}
               </AppText>
             </Pressable>
@@ -117,11 +127,14 @@ export default function AppearanceScreen() {
   const [issues, setIssues] = useState<Record<number, AppearanceItemKey[]>>({})
   const [initialized, setInitialized] = useState(false)
   const [updatingIds, setUpdatingIds] = useState<Set<number>>(new Set())
+  const [search, setSearch] = useState("")
 
   const { data: staffData, isLoading: isLoadingStaff, refetch: refetchStaff } = useQuery({
     queryKey: ["staff"],
     queryFn: () => attendanceService.getStaff(),
   })
+
+  const { data: departmentsData } = useDepartments()
 
   const { data: appearanceData, isLoading: isLoadingAppearance, isRefetching, refetch: refetchAppearance } = useQuery({
     queryKey: ["appearance-today"],
@@ -181,9 +194,63 @@ export default function AppearanceScreen() {
       })),
     [staffData, issues]
   )
+
+  const filteredRecords = useMemo(() => {
+    const query = search.trim().toLowerCase()
+    if (!query) return records
+    return records.filter((r) => r.staffName.toLowerCase().includes(query))
+  }, [records, search])
+
   const today = moment().format("ddd, D MMM YYYY")
 
   const issueCount = Object.values(issues).filter((v) => v.length > 0).length
+  const okCount = records.length - issueCount
+  const compliancePct = records.length > 0 ? Math.round((okCount / records.length) * 100) : 0
+
+  const { width: winWidth } = useWindowDimensions()
+  const numColumns = winWidth >= 1400 ? 3 : winWidth >= 1024 ? 3 : winWidth >= 768 ? 2 : 1
+
+  type GridRow =
+    | { type: "header"; key: string; label: string; count: number }
+    | { type: "records"; key: string; items: AppearanceRecord[] }
+
+  const gridRows = useMemo<GridRow[]>(() => {
+    const departmentNameById = new Map<string, string>()
+    departmentsData?.data.forEach((d) => {
+      departmentNameById.set(d._id, d.name)
+    })
+
+    const departmentById = new Map<number, string>()
+    staffData?.data.forEach((s) => {
+      const deptName = s.departmentId ? departmentNameById.get(s.departmentId) : undefined
+      departmentById.set(s.id, deptName ?? UNASSIGNED_DEPARTMENT)
+    })
+
+    const departmentGroups = new Map<string, AppearanceRecord[]>()
+    filteredRecords.forEach((r) => {
+      const dept = departmentById.get(r.staffId) ?? UNASSIGNED_DEPARTMENT
+      if (!departmentGroups.has(dept)) departmentGroups.set(dept, [])
+      departmentGroups.get(dept)!.push(r)
+    })
+
+    const departmentNames = [
+      ...(departmentGroups.has(PINNED_DEPARTMENT) ? [PINNED_DEPARTMENT] : []),
+      ...[...departmentGroups.keys()]
+        .filter((d) => d !== UNASSIGNED_DEPARTMENT && d !== PINNED_DEPARTMENT)
+        .sort(),
+      ...(departmentGroups.has(UNASSIGNED_DEPARTMENT) ? [UNASSIGNED_DEPARTMENT] : []),
+    ]
+
+    const rows: GridRow[] = []
+    departmentNames.forEach((dept) => {
+      const items = departmentGroups.get(dept) ?? []
+      rows.push({ type: "header", key: `header-${dept}`, label: dept, count: items.length })
+      for (let i = 0; i < items.length; i += numColumns) {
+        rows.push({ type: "records", key: `${dept}-${i}`, items: items.slice(i, i + numColumns) })
+      }
+    })
+    return rows
+  }, [filteredRecords, staffData, departmentsData, numColumns])
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background.primary }]}>
@@ -198,36 +265,73 @@ export default function AppearanceScreen() {
             </AppText>
           </View>
         </View>
+
         {initialized && (
           <View style={styles.summary}>
+            <View style={styles.complianceWrap}>
+              <AppText
+                variant="heading3"
+                style={{ color: compliancePct === 100 ? palette.success.default : colors.text.primary }}
+              >
+                {compliancePct}%
+              </AppText>
+              <AppText variant="caption" color="tertiary">compliant</AppText>
+            </View>
             <View style={[styles.summaryPill, { backgroundColor: palette.success.default + "18" }]}>
               <Check size={12} color={palette.success.default} strokeWidth={2.5} />
               <AppText variant="caption" style={{ color: palette.success.default }}>
-                {records.length - issueCount} OK
+                {okCount} OK
               </AppText>
             </View>
             {issueCount > 0 && (
               <View style={[styles.summaryPill, { backgroundColor: palette.error.default + "18" }]}>
                 <AlertCircle size={12} color={palette.error.default} strokeWidth={2} />
                 <AppText variant="caption" style={{ color: palette.error.default }}>
-                  {issueCount} issues
+                  {issueCount} issue{issueCount > 1 ? "s" : ""}
                 </AppText>
               </View>
             )}
           </View>
         )}
-        <Pressable onPress={refetch} hitSlop={8} style={{ padding: spacing[2] }}>
+
+        <Pressable
+          onPress={refetch}
+          hitSlop={8}
+          style={({ pressed }) => [
+            styles.refreshBtn,
+            { backgroundColor: colors.background.secondary, opacity: pressed ? 0.6 : 1 },
+          ]}
+        >
           {isRefetching
             ? <ActivityIndicator size="small" color={colors.accent} />
-            : <RefreshCw size={18} color={colors.text.tertiary} strokeWidth={1.75} />
+            : <RefreshCw size={16} color={colors.text.secondary} strokeWidth={1.75} />
           }
         </Pressable>
+      </View>
+
+      {/* Search */}
+      <View style={[styles.searchWrap, { borderBottomColor: colors.border }]}>
+        <AppInput
+          placeholder="Search staff name..."
+          value={search}
+          onChangeText={setSearch}
+          returnKeyType="search"
+          rightIcon={
+            search.length > 0 ? (
+              <Pressable onPress={() => setSearch("")} hitSlop={8}>
+                <XCircle size={16} color={colors.text.tertiary} strokeWidth={1.75} />
+              </Pressable>
+            ) : (
+              <Search size={16} color={colors.text.tertiary} strokeWidth={1.75} />
+            )
+          }
+        />
       </View>
 
       {/* Legend */}
       <View style={[styles.legend, { backgroundColor: colors.background.secondary, borderBottomColor: colors.border }]}>
         <AppText variant="caption" color="tertiary">
-          Tap any item to toggle violation status
+          Tap any item on a staff card to toggle its violation status
         </AppText>
         <View style={styles.legendItems}>
           <View style={styles.legendItem}>
@@ -246,24 +350,38 @@ export default function AppearanceScreen() {
       </View>
 
       <FlatList
-        data={records}
-        keyExtractor={(item) => String(item.staffId)}
-        renderItem={({ item }) => (
-          <StaffAppearanceRow
-            record={item}
-            issues={issues[item.staffId] ?? []}
-            isUpdating={updatingIds.has(item.staffId)}
-            onToggle={(key) => handleToggle(item.staffId, key)}
-          />
-        )}
+        data={gridRows}
+        keyExtractor={(row) => row.key}
+        renderItem={({ item: row }) =>
+          row.type === "header" ? (
+            <View style={[styles.deptHeader, numColumns === 1 && styles.deptHeaderPadded]}>
+              <AppText variant="bodyMedium" color="secondary">{row.label}</AppText>
+              <AppText variant="caption" color="tertiary">{"  "}{row.count}</AppText>
+            </View>
+          ) : (
+            <View style={numColumns > 1 ? styles.gridRow : undefined}>
+              {row.items.map((item) => (
+                <View key={item.staffId} style={numColumns > 1 ? styles.gridCell : { marginBottom: spacing[3] }}>
+                  <StaffAppearanceRow
+                    record={item}
+                    issues={issues[item.staffId] ?? []}
+                    isUpdating={updatingIds.has(item.staffId)}
+                    onToggle={(key) => handleToggle(item.staffId, key)}
+                  />
+                </View>
+              ))}
+            </View>
+          )
+        }
         contentContainerStyle={styles.list}
-        ItemSeparatorComponent={() => <View style={{ height: spacing[3] }} />}
         ListEmptyComponent={
           isLoading ? (
             <ActivityIndicator size="large" color={colors.accent} style={styles.center} />
           ) : (
             <View style={styles.center}>
-              <AppText color="tertiary">No staff records found</AppText>
+              <AppText color="tertiary">
+                {search ? "No staff match your search" : "No staff records found"}
+              </AppText>
             </View>
           )
         }
@@ -284,7 +402,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   headerLeft: { flexDirection: "row", alignItems: "center", gap: spacing[3] },
-  summary: { flexDirection: "row", gap: spacing[2] },
+  summary: { flexDirection: "row", alignItems: "center", gap: spacing[3] },
+  complianceWrap: { alignItems: "flex-end", marginRight: spacing[1] },
   summaryPill: {
     flexDirection: "row",
     alignItems: "center",
@@ -292,6 +411,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[1],
     borderRadius: radii.full,
+  },
+  refreshBtn: {
+    padding: spacing[2],
+    borderRadius: radii.full,
+    marginLeft: spacing[3],
+  },
+  searchWrap: {
+    paddingHorizontal: spacing[5],
+    paddingVertical: spacing[3],
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   legend: {
     flexDirection: "row",
@@ -304,6 +433,15 @@ const styles = StyleSheet.create({
   legendItems: { flexDirection: "row", gap: spacing[4] },
   legendItem: { flexDirection: "row", alignItems: "center", gap: spacing[1] },
   list: { padding: spacing[4], paddingBottom: spacing[10] },
+  deptHeader: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    marginTop: spacing[2],
+    marginBottom: spacing[1],
+  },
+  deptHeaderPadded: { paddingHorizontal: spacing[1] },
+  gridRow: { flexDirection: "row", gap: spacing[3] },
+  gridCell: { flex: 1, marginBottom: spacing[3] },
   center: { alignItems: "center", justifyContent: "center", paddingTop: spacing[16] },
   staffCard: { padding: spacing[4] },
   nameRow: {

@@ -1,18 +1,24 @@
 import { View, FlatList, ActivityIndicator, StyleSheet, Pressable, Animated, Easing, useWindowDimensions } from "react-native"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { ChevronLeft, ChevronRight, ChevronDown, Trophy, Timer, Clock, CalendarX, ShieldCheck, Award, RefreshCw, MessageSquareText } from "lucide-react-native"
+import { ChevronLeft, ChevronRight, ChevronDown, Trophy, Timer, Clock, CalendarX, ShieldCheck, Award, RefreshCw, MessageSquareText, Search, XCircle } from "lucide-react-native"
 import moment from "moment"
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useMemo } from "react"
 import BackButton from "../../components/shared/BackButton"
 import Collapsible from "../../components/shared/Collapsible"
 import AppText from "../../components/ui/AppText"
 import AppCard from "../../components/ui/AppCard"
 import AppButton from "../../components/ui/AppButton"
+import AppInput from "../../components/ui/AppInput"
 import { useTheme } from "../../providers/ThemeProvider"
 import { useTablet } from "../../hooks/useTablet"
 import { spacing, colors as palette, radii } from "../../constants/theme"
 import { scoreService } from "../../services/scoreService"
+import { attendanceService } from "../../services/attendanceService"
+import { useDepartments } from "../../hooks/useDepartments"
 import type { ScoreBreakdownItem, StaffScore } from "../../types"
+
+const UNASSIGNED_DEPARTMENT = "Other"
+const PINNED_DEPARTMENT = "Store"
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -252,13 +258,39 @@ function ScoreCard({ score, rank }: { score: StaffScore; rank: number }) {
 
 // ─── ScoresScreen ─────────────────────────────────────────────────────────────
 
-type ScoreRow = { key: string; items: StaffScore[]; startRank: number }
+type ScoreGridRow =
+  | { type: "header"; key: string; label: string; count: number }
+  | { type: "records"; key: string; items: { score: StaffScore; rank: number }[] }
 
-function buildScoreRows(scores: StaffScore[], columns: number): ScoreRow[] {
-  const rows: ScoreRow[] = []
-  for (let i = 0; i < scores.length; i += columns) {
-    rows.push({ key: `row-${i}`, items: scores.slice(i, i + columns), startRank: i + 1 })
-  }
+function buildScoreGridRows(
+  scores: StaffScore[],
+  columns: number,
+  departmentById: Map<number, string>
+): ScoreGridRow[] {
+  const departmentGroups = new Map<string, StaffScore[]>()
+  scores.forEach((s) => {
+    const dept = departmentById.get(s.staffId) ?? UNASSIGNED_DEPARTMENT
+    if (!departmentGroups.has(dept)) departmentGroups.set(dept, [])
+    departmentGroups.get(dept)!.push(s)
+  })
+
+  const departmentNames = [
+    ...(departmentGroups.has(PINNED_DEPARTMENT) ? [PINNED_DEPARTMENT] : []),
+    ...[...departmentGroups.keys()]
+      .filter((d) => d !== UNASSIGNED_DEPARTMENT && d !== PINNED_DEPARTMENT)
+      .sort(),
+    ...(departmentGroups.has(UNASSIGNED_DEPARTMENT) ? [UNASSIGNED_DEPARTMENT] : []),
+  ]
+
+  const rows: ScoreGridRow[] = []
+  departmentNames.forEach((dept) => {
+    const items = departmentGroups.get(dept) ?? []
+    const ranked = items.map((score, i) => ({ score, rank: i + 1 }))
+    rows.push({ type: "header", key: `header-${dept}`, label: dept, count: items.length })
+    for (let i = 0; i < ranked.length; i += columns) {
+      rows.push({ type: "records", key: `${dept}-${i}`, items: ranked.slice(i, i + columns) })
+    }
+  })
   return rows
 }
 
@@ -270,6 +302,7 @@ export default function ScoresScreen() {
   const desktopColumns = windowWidth >= 1600 ? 3 : 2
 
   const [month, setMonth] = useState(() => moment().startOf("month"))
+  const [search, setSearch] = useState("")
   const monthParam = month.format("YYYY-MM")
   const isCurrentMonth = month.isSame(moment(), "month")
 
@@ -284,6 +317,13 @@ export default function ScoresScreen() {
     retry: false,
   })
 
+  const { data: staffData } = useQuery({
+    queryKey: ["staff"],
+    queryFn: () => attendanceService.getStaff(),
+  })
+
+  const { data: departmentsData } = useDepartments()
+
   const calculateMutation = useMutation({
     mutationFn: () => scoreService.calculateMonthly(monthParam),
     onSuccess: () => {
@@ -293,6 +333,25 @@ export default function ScoresScreen() {
 
   const scores = overviewData?.data?.scores ?? []
   const config = configData?.data
+
+  const filteredScores = useMemo(() => {
+    const query = search.trim().toLowerCase()
+    if (!query) return scores
+    return scores.filter((s) => s.staffName.toLowerCase().includes(query))
+  }, [scores, search])
+
+  const departmentById = useMemo(() => {
+    const departmentNameById = new Map<string, string>()
+    departmentsData?.data.forEach((d) => {
+      departmentNameById.set(d._id, d.name)
+    })
+    const map = new Map<number, string>()
+    staffData?.data.forEach((s) => {
+      const deptName = s.departmentId ? departmentNameById.get(s.departmentId) : undefined
+      map.set(s.id, deptName ?? UNASSIGNED_DEPARTMENT)
+    })
+    return map
+  }, [staffData, departmentsData])
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background.primary }]}>
@@ -348,6 +407,25 @@ export default function ScoresScreen() {
         </Pressable>
       </View>
 
+      {/* Search */}
+      <View style={[styles.searchWrap, { borderBottomColor: colors.border }]}>
+        <AppInput
+          placeholder="Search staff name..."
+          value={search}
+          onChangeText={setSearch}
+          returnKeyType="search"
+          rightIcon={
+            search.length > 0 ? (
+              <Pressable onPress={() => setSearch("")} hitSlop={8}>
+                <XCircle size={16} color={colors.text.tertiary} strokeWidth={1.75} />
+              </Pressable>
+            ) : (
+              <Search size={16} color={colors.text.tertiary} strokeWidth={1.75} />
+            )
+          }
+        />
+      </View>
+
       {/* Config strip */}
       {config && (
         <View style={[styles.configStrip, { backgroundColor: colors.background.secondary, borderBottomColor: colors.border }]}>
@@ -379,21 +457,32 @@ export default function ScoresScreen() {
       {isDesktop ? (
         <FlatList
           key={`desktop-grid-${desktopColumns}`}
-          data={buildScoreRows(scores, desktopColumns)}
+          data={buildScoreGridRows(filteredScores, desktopColumns, departmentById)}
           keyExtractor={(row) => row.key}
-          renderItem={({ item: row }) => (
-            <View style={styles.deskGridRow}>
-              {row.items.map((score, i) => (
-                <View key={score._id} style={{ flex: 1 }}>
-                  <ScoreCard score={score} rank={row.startRank + i} />
-                </View>
-              ))}
-            </View>
-          )}
+          renderItem={({ item: row }) =>
+            row.type === "header" ? (
+              <View style={styles.deptHeader}>
+                <AppText variant="bodyMedium" color="secondary">{row.label}</AppText>
+                <AppText variant="caption" color="tertiary">{"  "}{row.count}</AppText>
+              </View>
+            ) : (
+              <View style={styles.deskGridRow}>
+                {row.items.map(({ score, rank }) => (
+                  <View key={score._id} style={{ flex: 1 }}>
+                    <ScoreCard score={score} rank={rank} />
+                  </View>
+                ))}
+              </View>
+            )
+          }
           contentContainerStyle={styles.deskGridContent}
           ListEmptyComponent={
             isLoading ? (
               <ActivityIndicator size="large" color={colors.accent} style={styles.center} />
+            ) : search ? (
+              <View style={styles.emptyState}>
+                <AppText color="tertiary">No staff match your search</AppText>
+              </View>
             ) : (
               <View style={styles.emptyState}>
                 <Trophy size={40} color={colors.text.tertiary} strokeWidth={1.25} />
@@ -417,14 +506,27 @@ export default function ScoresScreen() {
         />
       ) : (
         <FlatList
-          data={scores}
-          keyExtractor={(item) => item._id}
-          renderItem={({ item, index }) => <ScoreCard score={item} rank={index + 1} />}
+          data={buildScoreGridRows(filteredScores, 1, departmentById)}
+          keyExtractor={(row) => row.key}
+          renderItem={({ item: row }) =>
+            row.type === "header" ? (
+              <View style={[styles.deptHeader, styles.deptHeaderPadded]}>
+                <AppText variant="bodyMedium" color="secondary">{row.label}</AppText>
+                <AppText variant="caption" color="tertiary">{"  "}{row.count}</AppText>
+              </View>
+            ) : (
+              <ScoreCard score={row.items[0].score} rank={row.items[0].rank} />
+            )
+          }
           contentContainerStyle={styles.list}
           ItemSeparatorComponent={() => <View style={{ height: spacing[3] }} />}
           ListEmptyComponent={
             isLoading ? (
               <ActivityIndicator size="large" color={colors.accent} style={styles.center} />
+            ) : search ? (
+              <View style={styles.emptyState}>
+                <AppText color="tertiary">No staff match your search</AppText>
+              </View>
             ) : (
               <View style={styles.emptyState}>
                 <Trophy size={40} color={colors.text.tertiary} strokeWidth={1.25} />
@@ -463,6 +565,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: spacing[4],
     alignItems: "flex-start",
+  },
+  searchWrap: {
+    paddingHorizontal: spacing[5],
+    paddingVertical: spacing[3],
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   header: {
     paddingHorizontal: spacing[5],
@@ -510,6 +617,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#94A3B8",
   },
   list: { padding: spacing[4], paddingBottom: spacing[10] },
+  deptHeader: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    marginTop: spacing[2],
+    marginBottom: spacing[1],
+  },
+  deptHeaderPadded: { paddingHorizontal: spacing[1] },
   center: { alignItems: "center", justifyContent: "center", paddingTop: spacing[16] },
   emptyState: {
     alignItems: "center",
