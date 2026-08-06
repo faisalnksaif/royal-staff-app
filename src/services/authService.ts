@@ -47,4 +47,11 @@ async function savePushToken(expoPushToken: string): Promise<void> {
   })
 }
 
-export const authService = { login, register, logout, getMe, savePushToken }
+async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  const { data } = await api.authentication.changePasswordUpdate({ currentPassword, newPassword })
+  if (!data.success) {
+    throw new Error(data.message ?? "Failed to change password")
+  }
+}
+
+export const authService = { login, register, logout, getMe, savePushToken, changePassword }

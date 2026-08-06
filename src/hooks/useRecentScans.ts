@@ -5,6 +5,5 @@ export function useRecentScans(limit = 20) {
   return useQuery({
     queryKey: ["recent-scans", limit],
     queryFn: () => attendanceService.getRecentScans(limit),
-    refetchInterval: 15000,
   })
 }

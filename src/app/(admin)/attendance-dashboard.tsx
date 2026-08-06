@@ -82,6 +82,16 @@ function StaffRow({ entry }: { entry: AttendanceDashboardResponse["data"]["staff
       <View style={{ alignItems: "flex-end" }}>
         <AppText variant="bodyMedium" style={{ color: rateColor }}>{entry.attendanceRate.toFixed(0)}%</AppText>
         <AppText variant="caption" color="tertiary">{entry.totalWorkHours.toFixed(1)}h</AppText>
+        {entry.totalApprovedOvertimeMinutes > 0 && (
+          <AppText variant="caption" style={{ color: palette.success.default }}>
+            +{(entry.totalApprovedOvertimeMinutes / 60).toFixed(1)}h OT
+          </AppText>
+        )}
+        {entry.totalPendingOvertimeMinutes > 0 && (
+          <AppText variant="caption" style={{ color: palette.warning.default }}>
+            {(entry.totalPendingOvertimeMinutes / 60).toFixed(1)}h OT pending
+          </AppText>
+        )}
         {entry.missedCheckoutDays > 0 && (
           <AppText variant="caption" style={{ color: palette.error.default }}>
             {entry.missedCheckoutDays} missed checkout{entry.missedCheckoutDays > 1 ? "s" : ""}
@@ -103,7 +113,8 @@ function FlagsCard({ flags }: { flags: AttendanceDashboardResponse["data"]["flag
   const { colors } = useTheme()
   const sections = [
     { key: "chronicallyLate", label: "Chronically Late", color: palette.warning.default, items: flags.chronicallyLate, suffix: (v: number) => `${v}d late` },
-    { key: "excessiveOvertime", label: "Excessive Overtime", color: palette.info.default, items: flags.excessiveOvertime, suffix: (v: number) => `${v.toFixed(1)}h OT` },
+    { key: "excessiveOvertime", label: "Excessive Overtime", color: palette.info.default, items: flags.excessiveOvertime, suffix: (v: number) => `${(v / 60).toFixed(1)}h OT` },
+    { key: "pendingOvertimeApprovals", label: "Pending Overtime Approvals", color: palette.warning.default, items: flags.pendingOvertimeApprovals, suffix: (v: number) => `${(v / 60).toFixed(1)}h pending` },
     { key: "frequentAbsentees", label: "Frequent Absentees", color: palette.error.default, items: flags.frequentAbsentees, suffix: (v: number) => `${v}d absent` },
     { key: "missedCheckouts", label: "Missed Checkouts", color: palette.error.default, items: flags.missedCheckouts, suffix: (v: number) => `${v}d missed` },
     { key: "excessiveBreaks", label: "Excessive Breaks", color: palette.warning.default, items: flags.excessiveBreaks, suffix: (v: number) => `${v}m over` },
@@ -123,7 +134,7 @@ function FlagsCard({ flags }: { flags: AttendanceDashboardResponse["data"]["flag
               {s.items.map((item: any) => (
                 <View key={item.staffId} style={[styles.pill, { backgroundColor: s.color + "18", borderColor: colors.border }]}>
                   <AppText variant="caption" style={{ color: s.color, fontSize: 11 }}>
-                    {item.staffName} · {s.suffix(item.lateDays ?? item.totalOvertimeHours ?? item.absentDays ?? item.missedCheckoutDays ?? item.totalBreakExcessMinutes)}
+                    {item.staffName} · {s.suffix(item.lateDays ?? item.totalApprovedOvertimeMinutes ?? item.totalPendingOvertimeMinutes ?? item.absentDays ?? item.missedCheckoutDays ?? item.totalBreakExcessMinutes)}
                   </AppText>
                 </View>
               ))}

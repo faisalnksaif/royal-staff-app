@@ -195,6 +195,75 @@ export interface UserResponse {
   isActive: boolean;
 }
 
+/** A staff member's own note/todo item */
+export interface TodoResponse {
+  /** @example "507f1f77bcf86cd799439033" */
+  id?: string;
+  /** @example 3027 */
+  staffId?: number;
+  /** @example "Follow up with vendor about delayed shipment" */
+  title?: string;
+  /** @example "Call in the afternoon after lunch" */
+  notes?: string | null;
+  /**
+   * YYYY-MM-DD the todo is intended for, or null if undated
+   * @format date
+   * @example "2026-08-05"
+   */
+  plannedFor?: string | null;
+  /** @example "normal" */
+  priority?: "low" | "normal" | "high";
+  /** @example "planned" */
+  status?: "planned" | "done" | "cancelled";
+  /**
+   * What was actually done - set when marking done/cancelled
+   * @example "Called vendor, shipment arriving Monday"
+   */
+  actionNote?: string | null;
+  /** @format date-time */
+  completedAt?: string | null;
+  /**
+   * Set once the plannedFor-day push reminder has been sent, to avoid re-sending
+   * @format date-time
+   */
+  reminderSentAt?: string | null;
+  /** @format date-time */
+  createdAt?: string;
+  /** @format date-time */
+  updatedAt?: string;
+}
+
+/** A department's scanning-device login (role scanner) */
+export interface ScanningDeviceResponse {
+  /** @example "507f1f77bcf86cd799439099" */
+  id?: string;
+  /**
+   * @format email
+   * @example "scan-kitchen@rowbest.com"
+   */
+  email?: string;
+  /** @example "Kitchen scanner" */
+  name?: string | null;
+  /** @example true */
+  isActive?: boolean;
+  /**
+   * Department ID, or the populated department object on GET/list responses
+   * @example "507f1f77bcf86cd799439022"
+   */
+  departmentId?: string;
+  location?: {
+    /** @example 11.2588 */
+    lat?: number;
+    /** @example 75.7804 */
+    lng?: number;
+    /**
+     * Allowed distance (meters) from this point for a scan to be considered location-verified
+     * @example 100
+     */
+    radiusMeters?: number;
+  } | null;
+}
+
 export interface StaffResponse {
   /** @example 2645 */
   id: number;
@@ -1091,6 +1160,45 @@ export class Api<SecurityDataType extends unknown> {
       }),
 
     /**
+     * @description Lets any authenticated user (staff, manager, HR, superAdmin, or scanner device) change their own password, verifying the current password first. There is no separate "admin resets someone else's password" endpoint - each account changes its own.
+     *
+     * @tags Authentication
+     * @name ChangePasswordUpdate
+     * @summary Change the current user's own password
+     * @request PUT:/auth/change-password
+     * @secure
+     */
+    changePasswordUpdate: (
+      data: {
+        /** @example "1234" */
+        currentPassword: string;
+        /**
+         * @minLength 4
+         * @example "5678"
+         */
+        newPassword: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          /** @example "Password changed successfully" */
+          message?: string;
+        },
+        ErrorResponse
+      >({
+        path: `/auth/change-password`,
+        method: "PUT",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
      * @description Stores the device's Expo push token on the authenticated user's staff record, for sending push notifications later
      *
      * @tags Authentication
@@ -1151,6 +1259,126 @@ export class Api<SecurityDataType extends unknown> {
         format: "json",
         ...params,
       }),
+
+    /**
+     * @description Creates a role=scanner login for a department's physical attendance-scanning device. The device logs in via /auth/login with these credentials and sends the resulting bearer token on every POST /attendance/scan call. lat/lng/radiusMeters define the device's expected physical location, used to flag scans made outside that radius.
+     *
+     * @tags Authentication
+     * @name ScanningDevicesCreate
+     * @summary Create a department's scanning-device login (admin)
+     * @request POST:/auth/scanning-devices
+     * @secure
+     */
+    scanningDevicesCreate: (
+      data: {
+        /**
+         * @format email
+         * @example "scan-kitchen@rowbest.com"
+         */
+        email: string;
+        /**
+         * @minLength 4
+         * @example "s3cret"
+         */
+        password: string;
+        /** @example "Kitchen scanner" */
+        name?: string | null;
+        /** @example "507f1f77bcf86cd799439022" */
+        departmentId: string;
+        /** @example 11.2588 */
+        lat: number;
+        /** @example 75.7804 */
+        lng: number;
+        /** @example 100 */
+        radiusMeters: number;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          /** @example "Scanning device created successfully" */
+          message?: string;
+          /** A department's scanning-device login (role scanner) */
+          data?: ScanningDeviceResponse;
+        },
+        ErrorResponse | void
+      >({
+        path: `/auth/scanning-devices`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @tags Authentication
+     * @name ScanningDevicesList
+     * @summary List department scanning-device logins (admin)
+     * @request GET:/auth/scanning-devices
+     * @secure
+     */
+    scanningDevicesList: (params: RequestParams = {}) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          /** @example 3 */
+          count?: number;
+          data?: ScanningDeviceResponse[];
+        },
+        void
+      >({
+        path: `/auth/scanning-devices`,
+        method: "GET",
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @tags Authentication
+     * @name ScanningDevicesPartialUpdate
+     * @summary Update a scanning device's department/location/active state (admin)
+     * @request PATCH:/auth/scanning-devices/{id}
+     * @secure
+     */
+    scanningDevicesPartialUpdate: (
+      id: string,
+      data: {
+        departmentId?: string;
+        lat?: number;
+        lng?: number;
+        radiusMeters?: number;
+        isActive?: boolean;
+        name?: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          /** A department's scanning-device login (role scanner) */
+          data?: ScanningDeviceResponse;
+        },
+        void
+      >({
+        path: `/auth/scanning-devices/${id}`,
+        method: "PATCH",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
   };
   staff = {
     /**
@@ -1169,7 +1397,13 @@ export class Api<SecurityDataType extends unknown> {
           success?: boolean;
           /** @example 7 */
           count?: number;
-          data?: StaffResponse[];
+          data?: (StaffResponse & {
+            /**
+             * Role of this staff member's linked User account
+             * @example "manager"
+             */
+            role?: "staff" | "manager" | "superAdmin" | "hr" | "scanner";
+          })[];
         },
         ErrorResponse
       >({
@@ -3240,7 +3474,7 @@ export class Api<SecurityDataType extends unknown> {
   };
   attendance = {
     /**
-     * @description Public endpoint (no auth required) - camera-first, no staff pre-selected. Runs face recognition against all enrolled staff (open-set search) to identify the closest match, then automatically toggles check-in/check-out based on that staff member's existing sessions for the day. Duplicate/too-soon scans are rejected server-side using the existing fraud-prevention gap (MIN_GAP_FOR_CHECKOUT / MIN_GAP_FOR_NEW_SESSION) - in that case the response has matched: true but success: false with an error message, and no action/attendance fields.
+     * @description Requires a department scanning-device login (role scanner - see POST /auth/scanning-devices), camera-first, no staff pre-selected. Runs face recognition against staff belonging to the scanner's department (plus any staff flagged canScanAnyDepartment, e.g. drivers) to identify the closest match, then automatically toggles check-in/check-out based on that staff member's existing sessions for the day. lat/lng are mandatory and are compared against the scanning device's configured location - scans outside its allowed radius are still recorded (not blocked) but returned/stored with locationVerified: false for fraud review. Duplicate/too-soon scans are rejected server-side using the existing fraud-prevention gap (MIN_GAP_FOR_CHECKOUT / MIN_GAP_FOR_NEW_SESSION) - in that case the response has matched: true but success: false with an error message, and no action/attendance fields.
      *
      * @tags Attendance
      * @name ScanCreate
@@ -3260,6 +3494,20 @@ export class Api<SecurityDataType extends unknown> {
          * @format date-time
          */
         timestamp: string;
+        /**
+         * Current GPS latitude reported by the scanning device
+         * @example 11.2588
+         */
+        lat: number;
+        /**
+         * Current GPS longitude reported by the scanning device
+         * @example 75.7804
+         */
+        lng: number;
+        /** Optional client-supplied identifier of the physical scanning device */
+        deviceId?: string;
+        /** Optional client-supplied human-readable name of the physical scanning device */
+        deviceName?: string;
       },
       params: RequestParams = {},
     ) =>
@@ -3279,6 +3527,8 @@ export class Api<SecurityDataType extends unknown> {
           error?: string;
           /** Present when matched is true and the scan was accepted */
           action?: "checkIn" | "checkOut";
+          /** Present when matched is true and the scan was accepted - false if the scan's lat/lng was outside the scanning device's configured radius (not blocked, only flagged) */
+          locationVerified?: boolean;
           /** Present when matched is true and the scan was accepted - that staff member's updated day summary */
           attendance?: {
             id?: string;
@@ -3297,7 +3547,6 @@ export class Api<SecurityDataType extends unknown> {
             }[];
             totalWorkHours?: number | null;
             totalBreakTime?: number | null;
-            overtimeHours?: number | null;
             status?: "present" | "late" | "absent";
             isOnLeave?: boolean;
             leaveType?: string | null;
@@ -3310,6 +3559,54 @@ export class Api<SecurityDataType extends unknown> {
         body: data,
         secure: true,
         type: ContentType.FormData,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Requires a scanner-role login (see POST /auth/scanning-devices). Returns the most recent check-in/check-out events recorded today by this device's department, newest first - lets the staff member standing at the device confirm their scan just registered correctly.
+     *
+     * @tags Attendance
+     * @name ScansRecentList
+     * @summary Recent scans recorded by the calling scanning device's department
+     * @request GET:/attendance/scans/recent
+     * @secure
+     */
+    scansRecentList: (
+      query?: {
+        /**
+         * Max number of events to return
+         * @max 100
+         * @default 20
+         */
+        limit?: number;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          /** @example 5 */
+          count?: number;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            action?: "checkIn" | "checkOut";
+            /** @format date-time */
+            timestamp?: string;
+            /** 0-1 face-match similarity score for this scan */
+            confidence?: number;
+            /** False if this scan's lat/lng was outside the device's configured radius */
+            locationVerified?: boolean;
+          }[];
+        },
+        void
+      >({
+        path: `/attendance/scans/recent`,
+        method: "GET",
+        query: query,
+        secure: true,
         format: "json",
         ...params,
       }),
@@ -3425,12 +3722,25 @@ export class Api<SecurityDataType extends unknown> {
             sessions?: object[];
             totalWorkHours?: number | null;
             totalBreakTime?: number | null;
-            overtimeHours?: number | null;
             /**
-             * Early-arrival (>=15 min before shift start) plus late-checkout (past the shift's overtime threshold) minutes, combined
+             * Early-arrival (>=15 min before shift start) plus late-checkout (past the shift's overtime threshold) minutes, combined - computed but not yet credited until approved
              * @example 20
              */
-            overtimeMinutes?: number;
+            pendingOvertimeMinutes?: number;
+            /**
+             * 0 until a manager/HR/superAdmin approves this day's overtime via PATCH /attendance/{staffId}/{date}/overtime-approval - this is the only figure counted in reports/dashboards
+             * @example 0
+             */
+            approvedOvertimeMinutes?: number;
+            /**
+             * none if pendingOvertimeMinutes is 0 for the day
+             * @example "pending"
+             */
+            overtimeApprovalStatus?:
+              | "none"
+              | "pending"
+              | "approved"
+              | "rejected";
             /**
              * Minutes late vs the staff's assigned shift start time (0 if on-time or early)
              * @example 0
@@ -3497,7 +3807,7 @@ export class Api<SecurityDataType extends unknown> {
       }),
 
     /**
-     * @description Overwrites a day's check-in/check-out sessions (e.g. staff forgot to check in/out) and recomputes totals, lateness, overtime, and break-excess for that day. Every edit is appended to the record's audit trail (editor, role, timestamp, before/after snapshot, reason). Permissions (nobody may edit their own session, regardless of role): - manager/HR may edit STAFF sessions only (not each other's, not their own) - superAdmin may edit STAFF, MANAGER, and HR sessions (not their own)
+     * @description Overwrites a day's check-in/check-out sessions (e.g. staff forgot to check in/out) and recomputes totals, lateness, overtime, and break-excess for that day. Every edit is appended to the record's audit trail (editor, role, timestamp, before/after snapshot, reason). If the recomputed overtime minutes differ from before, any prior approval decision is reset to pending - see PATCH /attendance/{staffId}/{date}/overtime-approval. Permissions (nobody may edit their own session, regardless of role): - manager/HR may edit STAFF sessions only (not each other's, not their own) - superAdmin may edit STAFF, MANAGER, and HR sessions (not their own)
      *
      * @tags Attendance
      * @name SessionsPartialUpdate
@@ -3537,6 +3847,49 @@ export class Api<SecurityDataType extends unknown> {
         ErrorResponse
       >({
         path: `/attendance/${staffId}/${date}/sessions`,
+        method: "PATCH",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Overtime is computed from shift rules (early arrival + late checkout) but never auto-credited - it sits as pendingOvertimeMinutes with overtimeApprovalStatus: pending until a manager/HR/superAdmin explicitly approves or rejects it here. Approving sets approvedOvertimeMinutes to approvedMinutes if given (letting a manager credit only part of the computed minutes - e.g. discounting an implausible late checkout - without editing the underlying sessions), clamped to [0, pendingOvertimeMinutes]; otherwise the full pendingOvertimeMinutes is credited. Rejecting always sets it to 0. Fails with 400 if there is no pending overtime to decide on (e.g. already decided, or nothing computed that day). Permissions (nobody may decide on their own overtime, regardless of role): - manager/HR may decide on STAFF overtime only (not each other's, not their own) - superAdmin may decide on STAFF, MANAGER, and HR overtime (not their own)
+     *
+     * @tags Attendance
+     * @name OvertimeApprovalPartialUpdate
+     * @summary Approve or reject a staff member's pending overtime for a day
+     * @request PATCH:/attendance/{staffId}/{date}/overtime-approval
+     * @secure
+     */
+    overtimeApprovalPartialUpdate: (
+      staffId: number,
+      date: string,
+      data: {
+        /** @example true */
+        approved: boolean;
+        /**
+         * Optional partial credit when approved is true - clamped to [0, pendingOvertimeMinutes]. Omit to credit the full pendingOvertimeMinutes. Ignored when approved is false.
+         * @example 45
+         */
+        approvedMinutes?: number;
+        /** @example "Confirmed with staff - stayed to finish closing stock count" */
+        reason?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          /** The updated attendance record for that day (same shape as an item in GET /attendance's data array) */
+          data?: object;
+        },
+        ErrorResponse
+      >({
+        path: `/attendance/${staffId}/${date}/overtime-approval`,
         method: "PATCH",
         body: data,
         secure: true,
@@ -3705,12 +4058,15 @@ export class Api<SecurityDataType extends unknown> {
                */
               totalWorkHours?: number;
               /**
-               * @format float
-               * @example 4.5
+               * Sum of approvedOvertimeMinutes over the range - the only overtime figure that should feed payroll/reports
+               * @example 270
                */
-              totalOvertimeHours?: number;
-              /** @example 270 */
-              totalOvertimeMinutes?: number;
+              totalApprovedOvertimeMinutes?: number;
+              /**
+               * Sum of pendingOvertimeMinutes for days still awaiting an approval decision (approved/rejected days are excluded)
+               * @example 45
+               */
+              totalPendingOvertimeMinutes?: number;
               /** @example 30 */
               totalTeaBreakExcessMinutes?: number;
               /** @example 90 */
@@ -3737,17 +4093,23 @@ export class Api<SecurityDataType extends unknown> {
                 /** @example 4 */
                 lateDays?: number;
               }[];
-              /** Staff with 10 or more total overtime hours in the range */
+              /** Staff with 600 or more approved overtime minutes (10+ hours) in the range */
               excessiveOvertime?: {
                 /** @example 12 */
                 staffId?: number;
                 /** @example "Jane Doe" */
                 staffName?: string;
-                /**
-                 * @format float
-                 * @example 12.5
-                 */
-                totalOvertimeHours?: number;
+                /** @example 750 */
+                totalApprovedOvertimeMinutes?: number;
+              }[];
+              /** Staff with any overtime still awaiting an approve/reject decision in the range */
+              pendingOvertimeApprovals?: {
+                /** @example 12 */
+                staffId?: number;
+                /** @example "Jane Doe" */
+                staffName?: string;
+                /** @example 45 */
+                totalPendingOvertimeMinutes?: number;
               }[];
               /** Staff with 3 or more absent days in the range */
               frequentAbsentees?: {
@@ -3830,7 +4192,10 @@ export class Api<SecurityDataType extends unknown> {
               halfDayDays?: number;
               totalWorkHours?: number;
               totalBreakTime?: number;
-              totalOvertimeMinutes?: number;
+              /** Sum of approvedOvertimeMinutes over the range */
+              totalApprovedOvertimeMinutes?: number;
+              /** Sum of pendingOvertimeMinutes for days still awaiting an approval decision */
+              totalPendingOvertimeMinutes?: number;
               totalTeaBreakExcessMinutes?: number;
               totalLunchBreakExcessMinutes?: number;
             };
@@ -3843,7 +4208,13 @@ export class Api<SecurityDataType extends unknown> {
               totalWorkHours?: number;
               totalBreakTime?: number;
               lateMinutes?: number;
-              overtimeMinutes?: number;
+              pendingOvertimeMinutes?: number;
+              approvedOvertimeMinutes?: number;
+              overtimeApprovalStatus?:
+                | "none"
+                | "pending"
+                | "approved"
+                | "rejected";
               teaBreakMinutes?: number | null;
               teaBreakExcessMinutes?: number;
               lunchBreakMinutes?: number | null;
@@ -4206,6 +4577,10 @@ export class Api<SecurityDataType extends unknown> {
               numberOfDays?: number;
               reason?: string;
               status?: string;
+              /** Mongo user ID of the approver/rejecter */
+              approvedBy?: string | null;
+              /** Name (or email fallback) of the approver/rejecter */
+              approvedByName?: string | null;
               /** @format date-time */
               approvedAt?: string | null;
             }[];
@@ -4288,6 +4663,14 @@ export class Api<SecurityDataType extends unknown> {
               numberOfDays?: number;
               reason?: string;
               status?: string;
+              /** Mongo user ID of the manager/HR/superAdmin who approved/rejected this request */
+              approvedBy?: string | null;
+              /** Name (or email fallback) of the approver/rejecter */
+              approvedByName?: string | null;
+              /** user_id of the manager/superAdmin this request was delegated to, if any */
+              delegatedTo?: number;
+              /** Whether the requesting user can approve/reject this specific leave (always false for non-pending leaves) */
+              canApprove?: boolean;
               /** @format date-time */
               createdAt?: string;
             }[];
@@ -4304,11 +4687,11 @@ export class Api<SecurityDataType extends unknown> {
       }),
 
     /**
-     * @description Approve a pending leave request. Automatically deducts from leave balance.
+     * @description Approve a pending leave request. HR and superAdmin can always approve. A manager can only approve if the `leave.managerCanApproveDirect` setting is enabled, or if HR/superAdmin delegated this specific request to them via POST /leaves/{leaveId}/delegate.
      *
      * @tags Leaves
      * @name ApproveUpdate
-     * @summary Approve leave request (MANAGERS/SUPER ADMIN)
+     * @summary Approve leave request (HR/SUPER ADMIN, or delegated/permitted MANAGER)
      * @request PUT:/leaves/{leaveId}/approve
      * @secure
      */
@@ -4334,11 +4717,11 @@ export class Api<SecurityDataType extends unknown> {
       }),
 
     /**
-     * @description Reject a pending leave request with reason
+     * @description Reject a pending leave request with reason. Same permission rules as approve - HR and superAdmin can always reject; a manager needs `leave.managerCanApproveDirect` enabled or an explicit delegation.
      *
      * @tags Leaves
      * @name RejectUpdate
-     * @summary Reject leave request (MANAGERS/SUPER ADMIN)
+     * @summary Reject leave request (HR/SUPER ADMIN, or delegated/permitted MANAGER)
      * @request PUT:/leaves/{leaveId}/reject
      * @secure
      */
@@ -4362,6 +4745,47 @@ export class Api<SecurityDataType extends unknown> {
         void
       >({
         path: `/leaves/${leaveId}/reject`,
+        method: "PUT",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Reassigns approval authority for a pending leave request to a specific active manager or superAdmin. Once delegated, that user can approve/reject this request regardless of the `leave.managerCanApproveDirect` setting.
+     *
+     * @tags Leaves
+     * @name DelegateUpdate
+     * @summary Delegate approval authority for a leave request (HR/SUPER ADMIN)
+     * @request PUT:/leaves/{leaveId}/delegate
+     * @secure
+     */
+    delegateUpdate: (
+      leaveId: string,
+      data: {
+        /**
+         * user_id of the manager/superAdmin to delegate approval to
+         * @example 42
+         */
+        delegateToUserId: number;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            id?: string;
+            delegatedTo?: number;
+            /** @format date-time */
+            delegatedAt?: string;
+          };
+        },
+        void
+      >({
+        path: `/leaves/${leaveId}/delegate`,
         method: "PUT",
         body: data,
         secure: true,
@@ -4436,6 +4860,211 @@ export class Api<SecurityDataType extends unknown> {
         path: `/leaves/stats/overview`,
         method: "GET",
         secure: true,
+        format: "json",
+        ...params,
+      }),
+  };
+  todos = {
+    /**
+     * @description Personal notes and to-dos - always created for the authenticated staff member (no staffId in the body).
+     *
+     * @tags Todos
+     * @name TodosCreate
+     * @summary Create a todo/note for the current staff member
+     * @request POST:/todos
+     * @secure
+     */
+    todosCreate: (
+      data: {
+        /** @example "Follow up with vendor about delayed shipment" */
+        title: string;
+        notes?: string | null;
+        /**
+         * YYYY-MM-DD
+         * @format date
+         * @example "2026-08-05"
+         */
+        plannedFor?: string | null;
+        /** @default "normal" */
+        priority?: "low" | "normal" | "high";
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          message?: string;
+          /** A staff member's own note/todo item */
+          data?: TodoResponse;
+        },
+        void
+      >({
+        path: `/todos`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Defaults to the authenticated user's own todos. Managers/HR/superAdmin may pass ?staffId= to view another staff member's instead.
+     *
+     * @tags Todos
+     * @name TodosList
+     * @summary List todos for the current staff member (or another, for admins)
+     * @request GET:/todos
+     * @secure
+     */
+    todosList: (
+      query?: {
+        /** Admin roles only - view this staff member's todos instead of your own */
+        staffId?: number;
+        status?: "planned" | "done" | "cancelled";
+        /**
+         * Exact YYYY-MM-DD match
+         * @format date
+         */
+        plannedFor?: string;
+        /** If true, returns only still-planned todos with plannedFor before today (overrides status/plannedFor) */
+        overdue?: boolean;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          count?: number;
+          data?: TodoResponse[];
+        },
+        void
+      >({
+        path: `/todos`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @tags Todos
+     * @name TodosDetail
+     * @summary Get a todo by ID
+     * @request GET:/todos/{id}
+     * @secure
+     */
+    todosDetail: (id: string, params: RequestParams = {}) =>
+      this.http.request<
+        {
+          success?: boolean;
+          /** A staff member's own note/todo item */
+          data?: TodoResponse;
+        },
+        void
+      >({
+        path: `/todos/${id}`,
+        method: "GET",
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description For closing out a todo (marking it done/cancelled with what was actually done), use POST /todos/{id}/complete instead.
+     *
+     * @tags Todos
+     * @name TodosUpdate
+     * @summary Update a todo's title/notes/plannedFor/priority
+     * @request PUT:/todos/{id}
+     * @secure
+     */
+    todosUpdate: (
+      id: string,
+      data: {
+        title?: string;
+        notes?: string | null;
+        /** @format date */
+        plannedFor?: string | null;
+        priority?: "low" | "normal" | "high";
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          message?: string;
+          /** A staff member's own note/todo item */
+          data?: TodoResponse;
+        },
+        void
+      >({
+        path: `/todos/${id}`,
+        method: "PUT",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @tags Todos
+     * @name TodosDelete
+     * @summary Delete a todo
+     * @request DELETE:/todos/{id}
+     * @secure
+     */
+    todosDelete: (id: string, params: RequestParams = {}) =>
+      this.http.request<void, void>({
+        path: `/todos/${id}`,
+        method: "DELETE",
+        secure: true,
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @tags Todos
+     * @name CompleteCreate
+     * @summary Mark a todo done or cancelled, optionally noting what was actually done
+     * @request POST:/todos/{id}/complete
+     * @secure
+     */
+    completeCreate: (
+      id: string,
+      data: {
+        status: "done" | "cancelled";
+        /**
+         * What was actually done
+         * @example "Called vendor, shipment arriving Monday"
+         */
+        actionNote?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          message?: string;
+          /** A staff member's own note/todo item */
+          data?: TodoResponse;
+        },
+        void
+      >({
+        path: `/todos/${id}/complete`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
         format: "json",
         ...params,
       }),

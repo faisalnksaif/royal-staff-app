@@ -170,6 +170,61 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /auth/change-password:
+    put:
+      tags:
+        - Authentication
+      summary: Change the current user's own password
+      description: |
+        Lets any authenticated user (staff, manager, HR, superAdmin, or scanner device) change their
+        own password, verifying the current password first. There is no separate "admin resets
+        someone else's password" endpoint - each account changes its own.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - currentPassword
+                - newPassword
+              properties:
+                currentPassword:
+                  type: string
+                  example: "1234"
+                newPassword:
+                  type: string
+                  minLength: 4
+                  example: "5678"
+      responses:
+        '200':
+          description: Password changed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Password changed successfully
+        '400':
+          description: Missing currentPassword/newPassword, newPassword under 4 characters, or currentPassword is incorrect
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized - no token or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /auth/push-token:
     put:
       tags:
@@ -742,12 +797,6 @@ paths:
                       closing_dr_cr:
                         type: string
                         enum: [Dr, Cr]
-                      target_amount:
-                        type: number
-                        description: What the customer actually needs to pay - closing_balance with any hidden "SUSPENSE ACCOUNT" commission entries subtracted out, since those are a commission booked against the customer rather than real debt. Use this instead of closing_balance for collections/follow-up purposes.
-                      target_dr_cr:
-                        type: string
-                        enum: [Dr, Cr]
                   retention:
                     type: object
                     description: This customer's buying-recency classification - same logic as GET /ledger/retention, computed over full history regardless of from_date/to_date
@@ -1147,12 +1196,6 @@ paths:
                         outstanding_dr_cr:
                           type: string
                           enum: [Dr, Cr]
-                        target_amount:
-                          type: number
-                          description: What the customer actually needs to pay - outstanding_balance with any hidden "SUSPENSE ACCOUNT" commission entries subtracted out, since those are a commission booked against the customer rather than real debt. Use this instead of outstanding_balance for collections/follow-up purposes.
-                        target_dr_cr:
-                          type: string
-                          enum: [Dr, Cr]
                         ownership_source:
                           type: string
                           enum: [assigned, dynamic, unassigned]
@@ -1444,12 +1487,6 @@ paths:
                         outstanding_dr_cr:
                           type: string
                           enum: [Dr, Cr]
-                        target_amount:
-                          type: number
-                          description: What the customer actually needs to pay - outstanding_balance with any hidden "SUSPENSE ACCOUNT" commission entries subtracted out, since those are a commission booked against the customer rather than real debt. Use this instead of outstanding_balance for collections/follow-up purposes.
-                        target_dr_cr:
-                          type: string
-                          enum: [Dr, Cr]
                         follow_up:
                           type: object
                           properties:
@@ -1681,12 +1718,6 @@ paths:
                         outstanding_dr_cr:
                           type: string
                           enum: [Dr, Cr]
-                        target_amount:
-                          type: number
-                          description: What the customer actually needs to pay - outstanding_balance with any hidden "SUSPENSE ACCOUNT" commission entries subtracted out, since those are a commission booked against the customer rather than real debt. Use this instead of outstanding_balance for collections/follow-up purposes.
-                        target_dr_cr:
-                          type: string
-                          enum: [Dr, Cr]
                         is_new:
                           type: boolean
                           description: First synced from rowbest within the last `newDays` days
@@ -1900,12 +1931,6 @@ paths:
                           type: number
                           description: Current live balance, from LedgerCustomer
                         outstanding_dr_cr:
-                          type: string
-                          enum: [Dr, Cr]
-                        target_amount:
-                          type: number
-                          description: What the customer actually needs to pay - outstanding_balance with any hidden "SUSPENSE ACCOUNT" commission entries subtracted out, since those are a commission booked against the customer rather than real debt. Use this instead of outstanding_balance for collections/follow-up purposes.
-                        target_dr_cr:
                           type: string
                           enum: [Dr, Cr]
                         last_payment_date:
@@ -3590,9 +3615,6 @@ paths:
                       totalBreakTime:
                         type: number
                         nullable: true
-                      overtimeHours:
-                        type: number
-                        nullable: true
                       status:
                         type: string
                         enum: [present, late, absent]
@@ -3846,13 +3868,19 @@ paths:
                         totalBreakTime:
                           type: number
                           nullable: true
-                        overtimeHours:
-                          type: number
-                          nullable: true
-                        overtimeMinutes:
+                        pendingOvertimeMinutes:
                           type: integer
-                          description: Early-arrival (>=15 min before shift start) plus late-checkout (past the shift's overtime threshold) minutes, combined
+                          description: Early-arrival (>=15 min before shift start) plus late-checkout (past the shift's overtime threshold) minutes, combined - computed but not yet credited until approved
                           example: 20
+                        approvedOvertimeMinutes:
+                          type: integer
+                          description: 0 until a manager/HR/superAdmin approves this day's overtime via PATCH /attendance/{staffId}/{date}/overtime-approval - this is the only figure counted in reports/dashboards
+                          example: 0
+                        overtimeApprovalStatus:
+                          type: string
+                          enum: [none, pending, approved, rejected]
+                          description: none if pendingOvertimeMinutes is 0 for the day
+                          example: pending
                         lateMinutes:
                           type: integer
                           description: Minutes late vs the staff's assigned shift start time (0 if on-time or early)
@@ -3932,6 +3960,9 @@ paths:
         Overwrites a day's check-in/check-out sessions (e.g. staff forgot to check in/out) and recomputes totals, lateness, overtime, and break-excess for that day.
         Every edit is appended to the record's audit trail (editor, role, timestamp, before/after snapshot, reason).
 
+        If the recomputed overtime minutes differ from before, any prior approval decision is reset to pending -
+        see PATCH /attendance/{staffId}/{date}/overtime-approval.
+
         Permissions (nobody may edit their own session, regardless of role):
         - manager/HR may edit STAFF sessions only (not each other's, not their own)
         - superAdmin may edit STAFF, MANAGER, and HR sessions (not their own)
@@ -4010,6 +4041,93 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Target staff not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /attendance/{staffId}/{date}/overtime-approval:
+    patch:
+      tags:
+        - Attendance
+      summary: Approve or reject a staff member's pending overtime for a day
+      description: |
+        Overtime is computed from shift rules (early arrival + late checkout) but never auto-credited -
+        it sits as pendingOvertimeMinutes with overtimeApprovalStatus: pending until a manager/HR/superAdmin
+        explicitly approves or rejects it here. Approving sets approvedOvertimeMinutes to approvedMinutes if
+        given (letting a manager credit only part of the computed minutes - e.g. discounting an implausible
+        late checkout - without editing the underlying sessions), clamped to [0, pendingOvertimeMinutes];
+        otherwise the full pendingOvertimeMinutes is credited. Rejecting always sets it to 0.
+        Fails with 400 if there is no pending overtime to decide on (e.g. already decided, or nothing computed that day).
+
+        Permissions (nobody may decide on their own overtime, regardless of role):
+        - manager/HR may decide on STAFF overtime only (not each other's, not their own)
+        - superAdmin may decide on STAFF, MANAGER, and HR overtime (not their own)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          description: Staff ID whose overtime is being decided on (not the approver)
+          schema:
+            type: integer
+            example: 2645
+        - name: date
+          in: path
+          required: true
+          schema:
+            type: string
+            format: date
+            example: 2026-06-29
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - approved
+              properties:
+                approved:
+                  type: boolean
+                  example: true
+                approvedMinutes:
+                  type: number
+                  description: Optional partial credit when approved is true - clamped to [0, pendingOvertimeMinutes]. Omit to credit the full pendingOvertimeMinutes. Ignored when approved is false.
+                  example: 45
+                reason:
+                  type: string
+                  nullable: true
+                  example: Confirmed with staff - stayed to finish closing stock count
+      responses:
+        '200':
+          description: Overtime approval decision recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    description: The updated attendance record for that day (same shape as an item in GET /attendance's data array)
+        '400':
+          description: Missing/invalid approved field, or no pending overtime to decide on
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - self-approval and peer-role decisions are blocked (see permission rules above)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Target staff not found, or no attendance record for that staff/date
           content:
             application/json:
               schema:
@@ -4222,13 +4340,14 @@ paths:
                               type: number
                               format: float
                               example: 176.5
-                            totalOvertimeHours:
-                              type: number
-                              format: float
-                              example: 4.5
-                            totalOvertimeMinutes:
+                            totalApprovedOvertimeMinutes:
                               type: integer
+                              description: Sum of approvedOvertimeMinutes over the range - the only overtime figure that should feed payroll/reports
                               example: 270
+                            totalPendingOvertimeMinutes:
+                              type: integer
+                              description: Sum of pendingOvertimeMinutes for days still awaiting an approval decision (approved/rejected days are excluded)
+                              example: 45
                             totalTeaBreakExcessMinutes:
                               type: integer
                               example: 30
@@ -4264,7 +4383,7 @@ paths:
                                   example: 4
                           excessiveOvertime:
                             type: array
-                            description: Staff with 10 or more total overtime hours in the range
+                            description: Staff with 600 or more approved overtime minutes (10+ hours) in the range
                             items:
                               type: object
                               properties:
@@ -4274,10 +4393,24 @@ paths:
                                 staffName:
                                   type: string
                                   example: Jane Doe
-                                totalOvertimeHours:
-                                  type: number
-                                  format: float
-                                  example: 12.5
+                                totalApprovedOvertimeMinutes:
+                                  type: integer
+                                  example: 750
+                          pendingOvertimeApprovals:
+                            type: array
+                            description: Staff with any overtime still awaiting an approve/reject decision in the range
+                            items:
+                              type: object
+                              properties:
+                                staffId:
+                                  type: integer
+                                  example: 12
+                                staffName:
+                                  type: string
+                                  example: Jane Doe
+                                totalPendingOvertimeMinutes:
+                                  type: integer
+                                  example: 45
                           frequentAbsentees:
                             type: array
                             description: Staff with 3 or more absent days in the range
@@ -4392,8 +4525,12 @@ paths:
                             type: number
                           totalBreakTime:
                             type: number
-                          totalOvertimeMinutes:
+                          totalApprovedOvertimeMinutes:
                             type: integer
+                            description: Sum of approvedOvertimeMinutes over the range
+                          totalPendingOvertimeMinutes:
+                            type: integer
+                            description: Sum of pendingOvertimeMinutes for days still awaiting an approval decision
                           totalTeaBreakExcessMinutes:
                             type: integer
                           totalLunchBreakExcessMinutes:
@@ -4419,8 +4556,13 @@ paths:
                               type: number
                             lateMinutes:
                               type: integer
-                            overtimeMinutes:
+                            pendingOvertimeMinutes:
                               type: integer
+                            approvedOvertimeMinutes:
+                              type: integer
+                            overtimeApprovalStatus:
+                              type: string
+                              enum: [none, pending, approved, rejected]
                             teaBreakMinutes:
                               type: integer
                               nullable: true
@@ -4810,14 +4952,7 @@ paths:
       tags:
         - Leaves
       summary: Request a leave
-      description: >
-        Request a leave. Maximum 3 leaves per month, 12 per year. A
-        staff-originated request goes to HR (and managers, for visibility) for
-        approval. A manager- or HR-originated request escalates to superAdmin
-        - only superAdmin can approve/reject it. In that case `delegatedTo` is
-        automatically set to a specific active superAdmin as the point of
-        contact (informational only - any active superAdmin may still act on
-        it).
+      description: Staff requests a leave. Requires approval from a manager or superAdmin. Maximum 3 leaves per month, 12 per year.
       security:
         - BearerAuth: []
       requestBody:
@@ -5317,12 +5452,7 @@ paths:
                               description: Name (or email fallback) of the approver/rejecter
                             delegatedTo:
                               type: integer
-                              description: >-
-                                user_id of the manager/superAdmin this request was delegated to, if any.
-                                For staff-originated requests this grants that user approval rights (see
-                                PUT /leaves/{leaveId}/delegate). For manager/HR-originated requests this
-                                is set automatically to a superAdmin as an informational point of
-                                contact only - it does not restrict approval to just that user.
+                              description: user_id of the manager/superAdmin this request was delegated to, if any
                             canApprove:
                               type: boolean
                               description: Whether the requesting user can approve/reject this specific leave (always false for non-pending leaves)
@@ -5338,13 +5468,10 @@ paths:
         - Leaves
       summary: Approve leave request (HR/SUPER ADMIN, or delegated/permitted MANAGER)
       description: >
-        Approve a pending leave request. For a staff-originated request, HR
-        and superAdmin can always approve, and a manager can approve if the
-        `leave.managerCanApproveDirect` setting is enabled or if HR/superAdmin
-        delegated this specific request to them via PUT
-        /leaves/{leaveId}/delegate. For a manager- or HR-originated request
-        (self-requested leave), only superAdmin may approve - it escalates
-        automatically and cannot be delegated.
+        Approve a pending leave request. HR and superAdmin can always approve.
+        A manager can only approve if the `leave.managerCanApproveDirect`
+        setting is enabled, or if HR/superAdmin delegated this specific
+        request to them via POST /leaves/{leaveId}/delegate.
       security:
         - BearerAuth: []
       parameters:
@@ -5375,7 +5502,7 @@ paths:
                         type: string
                         format: date-time
         '403':
-          description: Forbidden - HR/superadmin only, manager without approval rights on this leave, or leave was requested by a manager/HR (superAdmin only)
+          description: Forbidden - HR/superadmin only, or manager without approval rights on this leave
         '400':
           description: Bad request - invalid status
 
@@ -5386,10 +5513,8 @@ paths:
       summary: Reject leave request (HR/SUPER ADMIN, or delegated/permitted MANAGER)
       description: >
         Reject a pending leave request with reason. Same permission rules as
-        approve - HR and superAdmin can always reject a staff-originated
-        request; a manager needs `leave.managerCanApproveDirect` enabled or an
-        explicit delegation. A manager- or HR-originated request can only be
-        rejected by superAdmin.
+        approve - HR and superAdmin can always reject; a manager needs
+        `leave.managerCanApproveDirect` enabled or an explicit delegation.
       security:
         - BearerAuth: []
       parameters:
@@ -5429,7 +5554,7 @@ paths:
                         type: string
                         example: rejected
         '403':
-          description: Forbidden - HR/superadmin only, manager without approval rights on this leave, or leave was requested by a manager/HR (superAdmin only)
+          description: Forbidden - HR/superadmin only, or manager without approval rights on this leave
         '400':
           description: Bad request - invalid status
 
@@ -5439,12 +5564,10 @@ paths:
         - Leaves
       summary: Delegate approval authority for a leave request (HR/SUPER ADMIN)
       description: >
-        Reassigns approval authority for a pending, staff-originated leave
-        request to a specific active manager or superAdmin. Once delegated,
-        that user can approve/reject this request regardless of the
-        `leave.managerCanApproveDirect` setting. Manager- or HR-originated
-        requests cannot be delegated - they can only be approved by
-        superAdmin.
+        Reassigns approval authority for a pending leave request to a
+        specific active manager or superAdmin. Once delegated, that user can
+        approve/reject this request regardless of the
+        `leave.managerCanApproveDirect` setting.
       security:
         - BearerAuth: []
       parameters:
@@ -5489,7 +5612,7 @@ paths:
         '403':
           description: Forbidden - HR/superadmin only
         '400':
-          description: Bad request - invalid status, delegate is not an active manager/superAdmin, or leave was requested by a manager/HR (cannot be delegated)
+          description: Bad request - invalid status, or delegate is not an active manager/superAdmin
 
   /leaves/{leaveId}:
     delete:
@@ -6633,16 +6756,6 @@ components:
           type: number
           description: dr - cr
           example: 8064269
-        suspense_amount:
-          type: number
-          nullable: true
-          description: Signed (Dr - Cr) sum of this customer's entries with particulars "SUSPENSE ACCOUNT" - a hidden commission, not real debt. Populated by the stats recompute job; null until first computed.
-        target_amount:
-          type: number
-          description: What the customer actually needs to pay - balance with suspense_amount subtracted out, since a "SUSPENSE ACCOUNT" entry is a hidden commission booked against the customer rather than real debt. Use this instead of balance for collections/follow-up purposes. Only present on GET /ledger/customers responses (computed from suspense_amount at request time, not stored).
-        target_dr_cr:
-          type: string
-          enum: [Dr, Cr]
         assigned_staff_id:
           type: integer
           nullable: true

@@ -188,4 +188,22 @@ async function editSessions(
   return data
 }
 
-export const attendanceService = { scanFace, getRecentScans, enrollFace, deleteFaceEnrollment, getAttendance, getAttendanceSummary, getAttendanceDashboard, getStaff, editSessions }
+async function decideOvertime(
+  staffId: number,
+  date: string,
+  approved: boolean,
+  approvedMinutes?: number,
+  reason?: string
+): Promise<{ success: boolean; data: AttendanceRecord }> {
+  const { data } = await api.http.request<{ success: boolean; data: AttendanceRecord }>({
+    path: `/attendance/${staffId}/${date}/overtime-approval`,
+    method: "PATCH",
+    body: { approved, approvedMinutes, reason },
+    type: ContentType.Json,
+    secure: true,
+    format: "json",
+  })
+  return data
+}
+
+export const attendanceService = { scanFace, getRecentScans, enrollFace, deleteFaceEnrollment, getAttendance, getAttendanceSummary, getAttendanceDashboard, getStaff, editSessions, decideOvertime }

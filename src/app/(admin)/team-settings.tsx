@@ -1,5 +1,6 @@
-import React from "react"
+import React, { useState } from "react"
 import { View, StyleSheet, TouchableOpacity, ScrollView } from "react-native"
+import { ChevronRight } from "lucide-react-native"
 import { useRouter } from "expo-router"
 import AppText from "../../components/ui/AppText"
 import AppCard from "../../components/ui/AppCard"
@@ -11,6 +12,7 @@ import useAuthStore from "../../stores/useAuthStore"
 import { APP_CONFIG } from "../../constants/config"
 import { spacing } from "../../constants/theme"
 import DrawerMenuButton from "../../components/shared/DrawerMenuButton"
+import ChangePasswordModal from "../../components/shared/ChangePasswordModal"
 
 function RowList({ children }: { children: React.ReactNode }) {
   const { colors } = useTheme()
@@ -60,6 +62,7 @@ export default function SuperAdminSettingsScreen() {
   const { colors, isDark } = useTheme()
   const { theme, setTheme, fontSize, setFontSize } = useThemeStore()
   const { user, logout, isLoading } = useAuthStore()
+  const [showChangePassword, setShowChangePassword] = useState(false)
 
   async function handleLogout() {
     await logout()
@@ -86,6 +89,11 @@ export default function SuperAdminSettingsScreen() {
             <SettingRow
               label="Role"
               value={user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : "—"}
+            />
+            <SettingRow
+              label="Change Password"
+              onPress={() => setShowChangePassword(true)}
+              right={<ChevronRight size={18} color={colors.text.tertiary} strokeWidth={2} />}
             />
           </RowList>
         </AppCard>
@@ -153,6 +161,10 @@ export default function SuperAdminSettingsScreen() {
           size="lg"
         />
       </ScrollView>
+
+      {showChangePassword && (
+        <ChangePasswordModal onClose={() => setShowChangePassword(false)} />
+      )}
     </View>
   )
 }

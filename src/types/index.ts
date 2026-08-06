@@ -512,7 +512,9 @@ export interface AttendanceRecord {
   sessions: AttendanceSession[]
   totalWorkHours: number | null
   totalBreakTime: number | null
-  overtimeMinutes?: number
+  pendingOvertimeMinutes?: number
+  approvedOvertimeMinutes?: number
+  overtimeApprovalStatus?: 'none' | 'pending' | 'approved' | 'rejected'
   lateMinutes?: number
   teaBreak?: BreakWindow
   lunchBreak?: BreakWindow
@@ -572,8 +574,8 @@ export interface AttendanceDashboardResponse {
       absentDays: number;
       onLeaveDays: number;
       totalWorkHours: number;
-      totalOvertimeHours: number;
-      totalOvertimeMinutes: number;
+      totalApprovedOvertimeMinutes: number;
+      totalPendingOvertimeMinutes: number;
       totalTeaBreakExcessMinutes: number;
       totalLunchBreakExcessMinutes: number;
       missedCheckoutDays: number;
@@ -581,7 +583,8 @@ export interface AttendanceDashboardResponse {
     }>;
     flags: {
       chronicallyLate: Array<{ staffId: number; staffName: string; lateDays: number }>;
-      excessiveOvertime: Array<{ staffId: number; staffName: string; totalOvertimeHours: number }>;
+      excessiveOvertime: Array<{ staffId: number; staffName: string; totalApprovedOvertimeMinutes: number }>;
+      pendingOvertimeApprovals: Array<{ staffId: number; staffName: string; totalPendingOvertimeMinutes: number }>;
       frequentAbsentees: Array<{ staffId: number; staffName: string; absentDays: number }>;
       missedCheckouts: Array<{ staffId: number; staffName: string; missedCheckoutDays: number }>;
       excessiveBreaks: Array<{ staffId: number; staffName: string; totalBreakExcessMinutes: number }>;

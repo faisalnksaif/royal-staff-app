@@ -65,7 +65,118 @@ const STATUS_ORDER: Record<AttendanceRecord["status"], number> = { present: 0, l
 function needsAttention(record: AttendanceRecord): boolean {
   const breakExcessMinutes = (record.teaBreak?.excessMinutes ?? 0) + (record.lunchBreak?.excessMinutes ?? 0)
   const hasAutoClosed = record.sessions?.some((s) => s.autoClosed)
-  return record.status === "late" || breakExcessMinutes > 0 || !!hasAutoClosed
+  return record.status === "late" || breakExcessMinutes > 0 || !!hasAutoClosed || record.overtimeApprovalStatus === "pending"
+}
+
+function OvertimeBadge({ record }: { record: AttendanceRecord }) {
+  const approved = record.approvedOvertimeMinutes ?? 0
+  const pending = record.pendingOvertimeMinutes ?? 0
+  const status = record.overtimeApprovalStatus
+
+  if (approved > 0) {
+    return (
+      <AppText variant="caption" style={{ color: palette.success.default }}>
+        {"  ·  "}+{formatWorkHours(approved / 60)} OT
+      </AppText>
+    )
+  }
+  if (status === "pending" && pending > 0) {
+    return (
+      <AppText variant="caption" style={{ color: palette.warning.default }}>
+        {"  ·  "}{formatWorkHours(pending / 60)} OT pending
+      </AppText>
+    )
+  }
+  if (status === "rejected") {
+    return (
+      <AppText variant="caption" color="tertiary">
+        {"  ·  "}OT rejected
+      </AppText>
+    )
+  }
+  return null
+}
+
+function OvertimeDecisionButtons({
+  record, onApprove, onReject,
+}: {
+  record: AttendanceRecord
+  onApprove: (record: AttendanceRecord) => void
+  onReject: (record: AttendanceRecord) => void
+}) {
+  return (
+    <View style={{ flexDirection: "row", gap: spacing[1], marginLeft: spacing[1] }}>
+      <Pressable onPress={() => onApprove(record)} hitSlop={8}>
+        <CheckCircle size={18} color={palette.success.default} strokeWidth={2} />
+      </Pressable>
+      <Pressable onPress={() => onReject(record)} hitSlop={8}>
+        <XCircle size={18} color={palette.error.default} strokeWidth={2} />
+      </Pressable>
+    </View>
+  )
+}
+
+function OvertimeApprovalModal({
+  record, date, onClose, onSaved,
+}: {
+  record: AttendanceRecord
+  date: string
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const pending = record.pendingOvertimeMinutes ?? 0
+  const [minutesText, setMinutesText] = useState(String(pending))
+  const [reason, setReason] = useState("")
+  const [isSaving, setIsSaving] = useState(false)
+  const [error, setError] = useState("")
+
+  async function handleConfirm() {
+    const parsed = Number(minutesText)
+    if (!Number.isFinite(parsed) || parsed < 0 || parsed > pending) {
+      setError(`Enter a value between 0 and ${pending}`)
+      return
+    }
+    setIsSaving(true)
+    setError("")
+    try {
+      await attendanceService.decideOvertime(record.staffId, date, true, parsed, reason.trim() || undefined)
+      onSaved()
+      onClose()
+    } catch (e) {
+      setError((e as Error).message ?? "Failed to approve overtime")
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  return (
+    <Popup title={`Approve overtime · ${toTitleCase(record.staffName)}`} onClose={onClose}>
+      <AppText variant="caption" color="tertiary" style={{ marginBottom: spacing[3] }}>
+        Computed: {formatWorkHours(pending / 60)} pending. Adjust the minutes to credit, or leave as-is to approve the full amount.
+      </AppText>
+      <AppInput
+        label="Minutes to credit"
+        value={minutesText}
+        onChangeText={setMinutesText}
+        keyboardType="numeric"
+        style={{ marginBottom: spacing[3] }}
+      />
+      <AppInput
+        label="Reason (optional)"
+        value={reason}
+        onChangeText={setReason}
+        placeholder="e.g. Discounted late checkout - unconfirmed"
+        style={{ marginBottom: spacing[3] }}
+      />
+      {!!error && (
+        <AppText variant="caption" style={{ color: palette.error.default, marginBottom: spacing[3] }}>{error}</AppText>
+      )}
+      <View style={{ flexDirection: "row", gap: spacing[3] }}>
+        <AppButton label="Cancel" variant="secondary" onPress={onClose} style={{ flex: 1 }} />
+        <AppButton label="Approve" onPress={handleConfirm} isLoading={isSaving} style={{ flex: 1 }} />
+      </View>
+    </Popup>
+  )
 }
 
 // ─── SummaryBar ───────────────────────────────────────────────────────────────
@@ -517,12 +628,15 @@ function EditSessionsModal({
 }
 
 function AttendanceRow({
-  record, canEdit, onEdit, expandAllSignal,
+  record, canEdit, onEdit, expandAllSignal, canDecideOvertime, onApproveOvertime, onRejectOvertime,
 }: {
   record: AttendanceRecord
   canEdit: boolean
   onEdit: (record: AttendanceRecord) => void
   expandAllSignal: { value: boolean; token: number }
+  canDecideOvertime: boolean
+  onApproveOvertime: (record: AttendanceRecord) => void
+  onRejectOvertime: (record: AttendanceRecord) => void
 }) {
   const { colors } = useTheme()
   const [expanded, setExpanded] = useState(false)
@@ -584,11 +698,7 @@ function AttendanceRow({
                 {"  ·  "}{record.lateMinutes}m late
               </AppText>
             )}
-            {!!record.overtimeMinutes && (
-              <AppText variant="caption" style={{ color: palette.success.default }}>
-                {"  ·  "}+{formatWorkHours(record.overtimeMinutes / 60)} OT
-              </AppText>
-            )}
+            <OvertimeBadge record={record} />
             {breakExcessMinutes > 0 && (
               <AppText variant="caption" style={{ color: palette.warning.default }}>
                 {"  ·  "}{breakExcessMinutes}m over break
@@ -607,6 +717,10 @@ function AttendanceRow({
             {STATUS_LABEL[record.status]}
           </AppText>
         </View>
+
+        {canDecideOvertime && record.overtimeApprovalStatus === "pending" && (
+          <OvertimeDecisionButtons record={record} onApprove={onApproveOvertime} onReject={onRejectOvertime} />
+        )}
 
         {canEdit && (
           <Pressable onPress={() => onEdit(record)} hitSlop={8} style={{ marginLeft: spacing[1] }}>
@@ -752,12 +866,15 @@ function SessionProgressBar({ record, color }: { record: AttendanceRecord; color
 // ─── StaffCardDesktop ─────────────────────────────────────────────────────────
 
 function StaffCardDesktop({
-  record, canEdit, onEdit, expandAllSignal,
+  record, canEdit, onEdit, expandAllSignal, canDecideOvertime, onApproveOvertime, onRejectOvertime,
 }: {
   record: AttendanceRecord
   canEdit: boolean
   onEdit: (record: AttendanceRecord) => void
   expandAllSignal: { value: boolean; token: number }
+  canDecideOvertime: boolean
+  onApproveOvertime: (record: AttendanceRecord) => void
+  onRejectOvertime: (record: AttendanceRecord) => void
 }) {
   const { colors } = useTheme()
   const [expanded, setExpanded] = useState(false)
@@ -797,11 +914,7 @@ function StaffCardDesktop({
                 {record.totalWorkHours != null ? "  ·  " : ""}{record.lateMinutes}m late
               </AppText>
             )}
-            {!!record.overtimeMinutes && (
-              <AppText variant="caption" style={{ color: palette.success.default }}>
-                {"  ·  "}+{formatWorkHours(record.overtimeMinutes / 60)} OT
-              </AppText>
-            )}
+            <OvertimeBadge record={record} />
             {breakExcessMinutes > 0 && (
               <AppText variant="caption" style={{ color: palette.warning.default }}>
                 {"  ·  "}{breakExcessMinutes}m over break
@@ -819,6 +932,9 @@ function StaffCardDesktop({
             {STATUS_LABEL[record.status]}
           </AppText>
         </View>
+        {canDecideOvertime && record.overtimeApprovalStatus === "pending" && (
+          <OvertimeDecisionButtons record={record} onApprove={onApproveOvertime} onReject={onRejectOvertime} />
+        )}
         {canEdit && (
           <Pressable onPress={() => onEdit(record)} hitSlop={8} style={{ marginLeft: spacing[2] }}>
             <Pencil size={16} color={colors.text.tertiary} strokeWidth={2} />
@@ -864,7 +980,7 @@ export default function AttendanceScreen() {
   const today = moment().format("YYYY-MM-DD")
   const [selectedDate, setSelectedDate] = useState(today)
   const isToday = selectedDate === today
-  const { isHR } = useRole()
+  const { isHR, isAdmin } = useRole()
   const { currentStaff } = useCurrentStaff()
   const { data: staffData } = useStaff()
   const { data: departmentsData } = useDepartments()
@@ -872,6 +988,7 @@ export default function AttendanceScreen() {
   const [iosTempDate, setIosTempDate] = useState(new Date())
   const webDateInputRef = useRef<HTMLInputElement | null>(null)
   const [editTarget, setEditTarget] = useState<AttendanceRecord | null>(null)
+  const [otApprovalTarget, setOtApprovalTarget] = useState<AttendanceRecord | null>(null)
   const [editMode, setEditMode] = useState(false)
   const [expandAllSignal, setExpandAllSignal] = useState({ value: false, token: 0 })
 
@@ -962,6 +1079,20 @@ export default function AttendanceScreen() {
   function canEditRecord(record: AttendanceRecord): boolean {
     if (!editMode || !currentStaff) return false
     return record.staffId !== currentStaff.id
+  }
+
+  function canDecideOvertimeFor(record: AttendanceRecord): boolean {
+    if (!currentStaff || !(isAdmin || isHR)) return false
+    return record.staffId !== currentStaff.id
+  }
+
+  async function handleRejectOvertime(record: AttendanceRecord) {
+    try {
+      await attendanceService.decideOvertime(record.staffId, selectedDate, false)
+      refetch()
+    } catch {
+      // no-op: backend rejects invalid/unauthorized decisions, UI stays as-is
+    }
   }
 
   return (
@@ -1121,7 +1252,7 @@ export default function AttendanceScreen() {
               <AnimatedListItem index={index} style={[styles.deskGridRow, expandAllSignal.value && styles.deskGridRowStretch]}>
                 {row.items.map((item) => (
                   <View key={item.staffId} style={{ flex: 1 }}>
-                    <StaffCardDesktop record={item} canEdit={canEditRecord(item)} onEdit={setEditTarget} expandAllSignal={expandAllSignal} />
+                    <StaffCardDesktop record={item} canEdit={canEditRecord(item)} onEdit={setEditTarget} expandAllSignal={expandAllSignal} canDecideOvertime={canDecideOvertimeFor(item)} onApproveOvertime={setOtApprovalTarget} onRejectOvertime={handleRejectOvertime} />
                   </View>
                 ))}
               </AnimatedListItem>
@@ -1152,7 +1283,7 @@ export default function AttendanceScreen() {
             </View>
           ) : (
             <AnimatedListItem index={index}>
-              <AttendanceRow record={row.items[0]} canEdit={canEditRecord(row.items[0])} onEdit={setEditTarget} expandAllSignal={expandAllSignal} />
+              <AttendanceRow record={row.items[0]} canEdit={canEditRecord(row.items[0])} onEdit={setEditTarget} expandAllSignal={expandAllSignal} canDecideOvertime={canDecideOvertimeFor(row.items[0])} onApproveOvertime={setOtApprovalTarget} onRejectOvertime={handleRejectOvertime} />
             </AnimatedListItem>
           )
         }
@@ -1177,6 +1308,16 @@ export default function AttendanceScreen() {
           record={editTarget}
           date={selectedDate}
           onClose={() => setEditTarget(null)}
+          onSaved={refetch}
+        />
+      )}
+
+      {/* Overtime approval modal */}
+      {otApprovalTarget && (
+        <OvertimeApprovalModal
+          record={otApprovalTarget}
+          date={selectedDate}
+          onClose={() => setOtApprovalTarget(null)}
           onSaved={refetch}
         />
       )}
