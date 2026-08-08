@@ -37,6 +37,11 @@ export interface StaffListResponse {
   data: StaffResponse[]
 }
 
+export interface StaffOption {
+  id: number
+  name: string
+}
+
 export interface ShiftResponse {
   _id: string
   name: string
@@ -835,6 +840,36 @@ export interface ExtraPerformance {
 }
 
 export interface ExtraPerformanceStats {
+  total: number
+  approved: number
+  pending: number
+  rejected: number
+}
+
+// ─── Testimonials ─────────────────────────────────────────────────────────────
+
+export type TestimonialStatus = "pending" | "approved" | "rejected"
+
+export interface Testimonial {
+  _id: string
+  reviewerUserId: number
+  reviewerName: string
+  revieweeUserId: number
+  revieweeName: string
+  month: string
+  year: number
+  monthNumber: number
+  message: string
+  status: TestimonialStatus
+  points: number
+  approvedBy: string | null
+  approvedAt: string | null
+  rejectionReason: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface TestimonialStats {
   total: number
   approved: number
   pending: number

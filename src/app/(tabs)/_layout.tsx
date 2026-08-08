@@ -13,6 +13,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ListChecks,
+  MessageSquareQuote,
 } from "lucide-react-native"
 
 const EXPANDED_WIDTH = 240
@@ -31,6 +32,7 @@ const NAV_ITEMS = [
   { label: "Leaves",      href: "/(tabs)/leaves",          icon: CalendarClock,   match: "leaves" },
   { label: "Todo",        href: "/(tabs)/todo",            icon: ListChecks,      match: "todo" },
   { label: "Performance", href: "/(tabs)/extra-performance", icon: Award,         match: "extra-performance" },
+  { label: "Testimonials", href: "/(tabs)/testimonials",   icon: MessageSquareQuote, match: "testimonials" },
   { label: "Settings",    href: "/(tabs)/settings",        icon: Settings,        match: "settings" },
 ]
 
@@ -162,6 +164,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="leaves"            options={{ href: null }} />
       <Tabs.Screen name="todo"              options={{ href: null }} />
       <Tabs.Screen name="extra-performance" options={{ href: null }} />
+      <Tabs.Screen name="testimonials"      options={{ href: null }} />
       <Tabs.Screen name="followups"         options={{ href: null }} />
     </Tabs>
   )

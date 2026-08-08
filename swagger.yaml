@@ -512,6 +512,48 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /staff/options:
+    get:
+      tags:
+        - Staff
+      summary: Lightweight staff list for dropdowns/pickers
+      description: >
+        Id+name pairs (sorted by name) for every staff member with isEligibleForAttendance
+        true - for populating a colleague picker, e.g. "who are you writing a testimonial
+        about" or a "reassign to" dropdown. Any authenticated user may call this (unlike
+        GET /staff, which is manager-only and returns full records).
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Staff options
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: integer
+                          description: Staff.id (internal id)
+                          example: 2645
+                        name:
+                          type: string
+                          example: ANAS
+        '401':
+          description: Unauthorized - no token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /staff/{id}:
     get:
       tags:
@@ -6546,6 +6588,300 @@ paths:
         '404':
           description: Staff not found
 
+  /testimonials:
+    post:
+      tags:
+        - Testimonials
+      summary: Submit a testimonial about another staff member
+      description: |
+        Any authenticated staff member can write a testimonial about a colleague. Submissions start
+        pending and require approval from a manager/HR/superAdmin before counting toward the
+        reviewee's score - see PUT /testimonials/{testimonialId}/approve. A staff member cannot
+        submit a testimonial about themselves.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - revieweeStaffId
+                - message
+              properties:
+                revieweeStaffId:
+                  type: integer
+                  description: Staff.id (internal id) of the colleague being reviewed
+                  example: 2646
+                message:
+                  type: string
+                  example: "Anas went out of his way to help close the month-end reconciliation - great teamwork."
+      responses:
+        '201':
+          description: Testimonial submitted successfully (pending approval)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/TestimonialResponse'
+        '400':
+          description: Missing revieweeStaffId/message, or attempting to review yourself
+        '401':
+          description: Unauthorized
+        '404':
+          description: Reviewee staff not found
+
+  /testimonials/received:
+    get:
+      tags:
+        - Testimonials
+      summary: Get testimonials received by a staff member
+      description: Defaults to the authenticated user's own received testimonials (all statuses). Managers/HR/superAdmin may pass ?staffId= to view another staff member's instead.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Admin roles only - Staff.id (internal id) of the staff member whose received testimonials to view
+      responses:
+        '200':
+          description: Received testimonials with a status breakdown
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      revieweeUserId:
+                        type: integer
+                      stats:
+                        type: object
+                        properties:
+                          total:
+                            type: integer
+                          approved:
+                            type: integer
+                          pending:
+                            type: integer
+                          rejected:
+                            type: integer
+                      testimonials:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/TestimonialResponse'
+        '400':
+          description: Bad request - user not associated with staff
+        '403':
+          description: Forbidden - staff can only view their own
+        '404':
+          description: Staff not found
+
+  /testimonials/given:
+    get:
+      tags:
+        - Testimonials
+      summary: Get testimonials the authenticated staff member has given to others
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Testimonials given by the authenticated user
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      reviewerUserId:
+                        type: integer
+                      count:
+                        type: integer
+                      testimonials:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/TestimonialResponse'
+        '400':
+          description: Bad request - user not associated with staff
+        '401':
+          description: Unauthorized
+
+  /testimonials/pending:
+    get:
+      tags:
+        - Testimonials
+      summary: Get pending testimonials for approval (MANAGERS/HR/SUPER ADMIN)
+      description: Retrieve all pending testimonials across all staff for a given month. Used to review and approve/reject submissions.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: month
+          in: query
+          schema:
+            type: string
+            format: date
+            pattern: '^\d{4}-\d{2}$'
+          description: Month in YYYY-MM format (default current month)
+          example: "2026-06"
+      responses:
+        '200':
+          description: List of pending testimonials
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      month:
+                        type: string
+                      count:
+                        type: integer
+                      testimonials:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/TestimonialResponse'
+        '403':
+          description: Forbidden - managers/HR/superadmin only
+
+  /testimonials/approved:
+    get:
+      tags:
+        - Testimonials
+      summary: Get approved testimonials across all staff (MANAGERS/HR/SUPER ADMIN)
+      description: Company-wide list of approved testimonials for a given month, newest-approved first. For a company-wide "team testimonials" view alongside GET /testimonials/pending.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: month
+          in: query
+          schema:
+            type: string
+            format: date
+            pattern: '^\d{4}-\d{2}$'
+          description: Month in YYYY-MM format (default current month)
+          example: "2026-06"
+      responses:
+        '200':
+          description: List of approved testimonials
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      month:
+                        type: string
+                      count:
+                        type: integer
+                      testimonials:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/TestimonialResponse'
+        '403':
+          description: Forbidden - managers/HR/superadmin only
+
+  /testimonials/{testimonialId}/approve:
+    put:
+      tags:
+        - Testimonials
+      summary: Approve a testimonial (MANAGERS/HR/SUPER ADMIN)
+      description: Approve a pending testimonial. The reviewee receives 5 points on their monthly score, capped at 20 points (4 approved testimonials) per month.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: testimonialId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Testimonial approved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/TestimonialResponse'
+        '403':
+          description: Forbidden - managers/HR/superadmin only
+        '404':
+          description: Testimonial not found
+
+  /testimonials/{testimonialId}/reject:
+    put:
+      tags:
+        - Testimonials
+      summary: Reject a testimonial (MANAGERS/HR/SUPER ADMIN)
+      description: Reject a pending testimonial with a reason.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: testimonialId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - rejectionReason
+              properties:
+                rejectionReason:
+                  type: string
+                  example: "Too vague - please provide a specific example"
+      responses:
+        '200':
+          description: Testimonial rejected successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/TestimonialResponse'
+        '400':
+          description: Bad request - missing rejectionReason
+        '403':
+          description: Forbidden - managers/HR/superadmin only
+        '404':
+          description: Testimonial not found
+
   /scoring-config:
     get:
       tags:
@@ -6644,6 +6980,24 @@ paths:
                       items:
                         type: string
                       example: ["uniform", "socks_banyan", "hair_beard_moustache"]
+                extraPerformance:
+                  type: object
+                  properties:
+                    pointsPerPerformance:
+                      type: integer
+                      example: 10
+                    maxPointsAllowed:
+                      type: integer
+                      example: 10
+                testimonial:
+                  type: object
+                  properties:
+                    pointsPerTestimonial:
+                      type: integer
+                      example: 5
+                    maxPointsAllowed:
+                      type: integer
+                      example: 20
       responses:
         '200':
           description: Configuration updated successfully
@@ -7576,6 +7930,71 @@ components:
           type: string
           format: date-time
 
+    TestimonialResponse:
+      type: object
+      description: A testimonial from one staff member about another, with approval status
+      properties:
+        _id:
+          type: string
+          description: MongoDB testimonial ID
+          example: 6a4417ccd5ddf48055605a24
+        reviewerUserId:
+          type: integer
+          description: Rowbest numeric user ID of the staff member who wrote the testimonial
+          example: 3027
+        reviewerName:
+          type: string
+          example: ANAS
+        revieweeUserId:
+          type: integer
+          description: Rowbest numeric user ID of the staff member being reviewed
+          example: 3028
+        revieweeName:
+          type: string
+          example: ANSARKA
+        month:
+          type: string
+          description: Month the testimonial counts toward (derived from submission date)
+          example: "2026-06"
+        year:
+          type: integer
+          example: 2026
+        monthNumber:
+          type: integer
+          example: 6
+        message:
+          type: string
+          example: "Anas went out of his way to help close the month-end reconciliation - great teamwork."
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+          description: Approval status
+          example: "approved"
+        points:
+          type: integer
+          description: Points awarded to the reviewee when approved (5)
+          example: 5
+        approvedBy:
+          type: string
+          description: MongoDB user ID of the manager/HR/superAdmin who approved (if approved)
+          nullable: true
+        approvedAt:
+          type: string
+          format: date-time
+          description: Approval timestamp (if approved)
+          nullable: true
+        rejectionReason:
+          type: string
+          description: Reason for rejection (if rejected)
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+          description: When the testimonial was submitted
+        updatedAt:
+          type: string
+          format: date-time
+
     ScoringConfigResponse:
       type: object
       description: |
@@ -7586,7 +8005,8 @@ components:
         - Leaves: 10 points
         - Appearance: 5 points
         - Extra Performance: 10 points
-        - Future rules: 65 points (reserved)
+        - Testimonial: 20 points
+        - Future rules: 45 points (reserved)
       properties:
         _id:
           type: string
@@ -7674,6 +8094,18 @@ components:
               type: integer
               description: Maximum points allowed per month for extra performance
               example: 10
+        testimonial:
+          type: object
+          description: Testimonial scoring rules (Approved testimonials from other staff)
+          properties:
+            pointsPerTestimonial:
+              type: integer
+              description: Points awarded per approved testimonial
+              example: 5
+            maxPointsAllowed:
+              type: integer
+              description: Maximum points allowed per month for testimonials
+              example: 20
         isActive:
           type: boolean
           description: Whether this config is active
@@ -7714,6 +8146,8 @@ tags:
     description: Staff appearance and dress code tracking
   - name: Extra Performance
     description: Staff extra performance submissions and approval workflow
+  - name: Testimonials
+    description: Peer-to-peer testimonials between staff, with manager/HR/superAdmin approval workflow
   - name: Scoring
     description: |
       Staff performance scoring system (100 points total):
@@ -7721,7 +8155,8 @@ tags:
       - Leaves: 10 points (approved leaves per month)
       - Appearance: 5 points (dress code violations)
       - Extra Performance: 10 points (approved submissions)
-      - Future rules: 65 points (reserved for expansion)
+      - Testimonial: 20 points (5 points per approved testimonial, max 4)
+      - Future rules: 45 points (reserved for expansion)
 
 security:
   - BearerAuth: []
