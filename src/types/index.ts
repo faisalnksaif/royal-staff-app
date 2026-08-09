@@ -730,6 +730,31 @@ export interface LeaveBalance {
   monthlyLimit: number
 }
 
+export type MeetingAttendanceStatus = "present" | "absent" | "excused"
+
+export interface Meeting {
+  _id: string
+  title: string
+  date: string
+  notes?: string | null
+  createdBy: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface MeetingAttendanceEntry {
+  staffId: number
+  staffName: string
+  status: MeetingAttendanceStatus
+  reason?: string | null
+}
+
+export interface MeetingHistoryEntry {
+  meeting: Meeting
+  status: MeetingAttendanceStatus
+  reason?: string | null
+}
+
 export type AppearanceItemKey = "uniform" | "socks_banyan" | "hair_beard_moustache"
 
 export interface AppearanceRecord {

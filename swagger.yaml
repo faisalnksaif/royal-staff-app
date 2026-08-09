@@ -5781,8 +5781,8 @@ paths:
                   description: Required if status is "bad"
                   items:
                     type: string
-                    enum: [uniform, hair_beard_moustache]
-                  example: [uniform]
+                    enum: [uniform, socks_banyan, hair_beard_moustache]
+                  example: [uniform, socks_banyan]
                 remarks:
                   type: string
                   nullable: true
@@ -5855,7 +5855,7 @@ paths:
                               type: array
                               items:
                                 type: string
-                                enum: [uniform, hair_beard_moustache]
+                                enum: [uniform, socks_banyan, hair_beard_moustache]
                             remarks:
                               type: string
                               nullable: true
@@ -5898,8 +5898,8 @@ paths:
                   description: Appearance violations to mark
                   items:
                     type: string
-                    enum: [uniform, hair_beard_moustache]
-                  example: [uniform]
+                    enum: [uniform, socks_banyan, hair_beard_moustache]
+                  example: [uniform, socks_banyan]
                 remarks:
                   type: string
                   nullable: true
@@ -7213,6 +7213,251 @@ paths:
         '404':
           description: Testimonial not found
 
+  /meetings:
+    post:
+      tags:
+        - Meetings
+      summary: Create a meeting (MANAGERS/HR/SUPER ADMIN)
+      description: Creates a meeting and defaults every active staff member's attendance to "present". Admins later update individuals to absent/excused.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - title
+              properties:
+                title:
+                  type: string
+                  example: "Weekly Sales Review"
+                date:
+                  type: string
+                  format: date-time
+                  description: Defaults to now if omitted
+                  example: "2026-08-09T10:00:00+05:30"
+                notes:
+                  type: string
+                  example: "Discuss Q3 targets"
+      responses:
+        '201':
+          description: Meeting created with all staff defaulted to present
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/MeetingResponse'
+        '400':
+          description: Bad request - missing title
+        '403':
+          description: Forbidden - managers/HR/superadmin only
+
+    get:
+      tags:
+        - Meetings
+      summary: List meetings (MANAGERS/HR/SUPER ADMIN)
+      description: Returns meetings sorted by date, most recent first. Optionally filter by date range.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+          example: "2026-08-01"
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+          example: "2026-08-31"
+      responses:
+        '200':
+          description: List of meetings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MeetingResponse'
+        '403':
+          description: Forbidden - managers/HR/superadmin only
+
+  /meetings/{id}:
+    get:
+      tags:
+        - Meetings
+      summary: Get a meeting with its attendance roster (MANAGERS/HR/SUPER ADMIN)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Meeting document ID
+      responses:
+        '200':
+          description: Meeting details with per-staff attendance
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      meeting:
+                        $ref: '#/components/schemas/MeetingResponse'
+                      attendance:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/MeetingAttendanceEntry'
+                      absentCount:
+                        type: integer
+                      excusedCount:
+                        type: integer
+        '403':
+          description: Forbidden - managers/HR/superadmin only
+        '404':
+          description: Meeting not found
+
+  /meetings/{id}/attendance/{staffId}:
+    put:
+      tags:
+        - Meetings
+      summary: Update a staff member's attendance for a meeting (MANAGERS/HR/SUPER ADMIN)
+      description: Set a staff member's status to present, absent, or excused. A reason is required when marking excused; excused absences don't count against the Meeting scoring rule.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Meeting document ID
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Staff.id (internal id)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum: [present, absent, excused]
+                  example: excused
+                reason:
+                  type: string
+                  description: Required when status is excused
+                  example: "Approved sick leave"
+      responses:
+        '200':
+          description: Attendance updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/MeetingAttendanceEntry'
+        '400':
+          description: Bad request - invalid status, or missing reason when excused
+        '403':
+          description: Forbidden - managers/HR/superadmin only
+        '404':
+          description: Meeting not found
+
+  /meetings/staff/{staffId}/history:
+    get:
+      tags:
+        - Meetings
+      summary: Get a staff member's meeting attendance history (MANAGERS/HR/SUPER ADMIN)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Staff.id (internal id)
+        - name: months
+          in: query
+          schema:
+            type: integer
+            default: 3
+          description: Number of months back to include
+      responses:
+        '200':
+          description: Meeting attendance history with absent/excused counts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      absentCount:
+                        type: integer
+                      excusedCount:
+                        type: integer
+                      history:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            meeting:
+                              $ref: '#/components/schemas/MeetingResponse'
+                            status:
+                              type: string
+                              enum: [present, absent, excused]
+                            reason:
+                              type: string
+                              nullable: true
+        '403':
+          description: Forbidden - managers/HR/superadmin only
+        '404':
+          description: Staff not found
+
   /scoring-config:
     get:
       tags:
@@ -7310,7 +7555,7 @@ paths:
                       type: array
                       items:
                         type: string
-                      example: ["uniform", "hair_beard_moustache"]
+                      example: ["uniform", "socks_banyan", "hair_beard_moustache"]
                 cleaning:
                   type: object
                   properties:
@@ -7321,6 +7566,19 @@ paths:
                       type: integer
                       example: 5
                       description: Full points forfeited for the month if any single day is marked bad
+                meeting:
+                  type: object
+                  properties:
+                    enabled:
+                      type: boolean
+                      example: true
+                    maxPoints:
+                      type: integer
+                      example: 5
+                    maxMissedAllowed:
+                      type: integer
+                      example: 0
+                      description: Full points forfeited for the month once missed meetings exceed this count (excused absences don't count)
                 extraPerformance:
                   type: object
                   properties:
@@ -8336,6 +8594,60 @@ components:
           type: string
           format: date-time
 
+    MeetingResponse:
+      type: object
+      description: A meeting created by an admin, used as the basis for attendance tracking and Meeting scoring
+      properties:
+        _id:
+          type: string
+          description: MongoDB meeting ID
+          example: 6a4417ccd5ddf48055605a24
+        title:
+          type: string
+          example: "Weekly Sales Review"
+        date:
+          type: string
+          format: date-time
+        notes:
+          type: string
+          nullable: true
+        createdBy:
+          type: string
+          description: MongoDB user ID of the admin who created the meeting
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    MeetingAttendanceEntry:
+      type: object
+      description: A single staff member's attendance record for a meeting
+      properties:
+        staffId:
+          type: integer
+          description: Staff.id (internal id)
+        staffName:
+          type: string
+          example: ANAS
+        status:
+          type: string
+          enum: [present, absent, excused]
+          example: present
+        reason:
+          type: string
+          nullable: true
+          description: Present only when status is excused
+        markedBy:
+          type: string
+          nullable: true
+          description: MongoDB user ID of the admin who last updated this status
+        markedAt:
+          type: string
+          format: date-time
+          nullable: true
+
     ScoringConfigResponse:
       type: object
       description: |
@@ -8422,8 +8734,8 @@ components:
               description: Types of violations to track
               items:
                 type: string
-                enum: [uniform, hair_beard_moustache]
-              example: ["uniform", "hair_beard_moustache"]
+                enum: [uniform, socks_banyan, hair_beard_moustache]
+              example: ["uniform", "socks_banyan", "hair_beard_moustache"]
         cleaning:
           type: object
           description: Cleaning culture scoring rules (binary - full points forfeited for the month on any single bad day)
@@ -8504,15 +8816,18 @@ tags:
     description: Staff extra performance submissions and approval workflow
   - name: Testimonials
     description: Peer-to-peer testimonials between staff, with manager/HR/superAdmin approval workflow
+  - name: Meetings
+    description: Meeting creation and attendance tracking. All active staff default to present; admins/HR mark individuals absent or excused.
   - name: Scoring
     description: |
       Staff performance scoring system (100 points total):
       - Attendance: 10 points (late arrivals tracking)
       - Leaves: 10 points (approved leaves per month)
       - Appearance: 5 points (dress code violations)
+      - Meeting: 5 points (forfeited if missed meetings exceed the configured limit)
       - Extra Performance: 10 points (approved submissions)
       - Testimonial: 20 points (5 points per approved testimonial, max 4)
-      - Future rules: 45 points (reserved for expansion)
+      - Future rules: 40 points (reserved for expansion)
 
 security:
   - BearerAuth: []

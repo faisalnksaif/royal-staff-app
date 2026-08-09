@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react"
 import { View, Pressable, ScrollView, StyleSheet, Platform, StatusBar, Modal, Animated, TouchableWithoutFeedback } from "react-native"
 import { Stack, useRouter, usePathname } from "expo-router"
-import { MessageCircleMore, CalendarCheck, CalendarClock, ClipboardCheck, Trophy, Award, Users, Settings, LogOut, UsersRound, Bell, ChevronLeft, ChevronRight, IdCard, Radar, ListChecks, MessageSquareQuote } from "lucide-react-native"
+import { MessageCircleMore, CalendarCheck, CalendarClock, ClipboardCheck, Trophy, Award, Users, Settings, LogOut, UsersRound, Bell, ChevronLeft, ChevronRight, IdCard, Radar, ListChecks, MessageSquareQuote, Presentation } from "lucide-react-native"
 import { AdminDrawerContext } from "../../contexts/adminDrawer"
 import { useQuery } from "@tanstack/react-query"
 import AppText from "../../components/ui/AppText"
@@ -30,6 +30,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Attendance",          href: "/(admin)/attendance",        icon: CalendarCheck,     matchExact: false },
   { label: "Staff",               href: "/(admin)/staff",             icon: IdCard,            matchExact: false, roles: ["superAdmin", "manager", "hr"] },
   { label: "Leaves",              href: "/(admin)/team-leaves",       icon: CalendarClock,     matchExact: false },
+  { label: "Meetings",            href: "/(admin)/team-meetings",     icon: Presentation,      matchExact: false, roles: ["superAdmin", "manager", "hr"] },
   { label: "Todo",                href: "/(admin)/team-todo",         icon: ListChecks,        matchExact: false, roles: ["superAdmin", "manager", "hr"] },
   { label: "Scores",              href: "/(admin)/scores",            icon: Trophy,            matchExact: false, roles: ["superAdmin", "manager", "hr"] },
   { label: "Extra Performance",   href: "/(admin)/team-extra-performance", icon: Award,        matchExact: false, roles: ["superAdmin", "manager", "hr"] },
