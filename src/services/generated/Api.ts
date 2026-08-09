@@ -702,6 +702,66 @@ export interface ExtraPerformanceResponse {
   updatedAt?: string;
 }
 
+/** A testimonial from one staff member about another, with approval status */
+export interface TestimonialResponse {
+  /**
+   * MongoDB testimonial ID
+   * @example "6a4417ccd5ddf48055605a24"
+   */
+  _id?: string;
+  /**
+   * Rowbest numeric user ID of the staff member who wrote the testimonial
+   * @example 3027
+   */
+  reviewerUserId?: number;
+  /** @example "ANAS" */
+  reviewerName?: string;
+  /**
+   * Rowbest numeric user ID of the staff member being reviewed
+   * @example 3028
+   */
+  revieweeUserId?: number;
+  /** @example "ANSARKA" */
+  revieweeName?: string;
+  /**
+   * Month the testimonial counts toward (derived from submission date)
+   * @example "2026-06"
+   */
+  month?: string;
+  /** @example 2026 */
+  year?: number;
+  /** @example 6 */
+  monthNumber?: number;
+  /** @example "Anas went out of his way to help close the month-end reconciliation - great teamwork." */
+  message?: string;
+  /**
+   * Approval status
+   * @example "approved"
+   */
+  status?: "pending" | "approved" | "rejected";
+  /**
+   * Points awarded to the reviewee when approved (5)
+   * @example 5
+   */
+  points?: number;
+  /** MongoDB user ID of the manager/HR/superAdmin who approved (if approved) */
+  approvedBy?: string | null;
+  /**
+   * Approval timestamp (if approved)
+   * @format date-time
+   */
+  approvedAt?: string | null;
+  /** Reason for rejection (if rejected) */
+  rejectionReason?: string | null;
+  /**
+   * When the testimonial was submitted
+   * @format date-time
+   */
+  createdAt?: string;
+  /** @format date-time */
+  updatedAt?: string;
+}
+
 /**
  * Scoring rules configuration for a specific month. Controls point allocation for all scoring categories.
  *
@@ -709,8 +769,10 @@ export interface ExtraPerformanceResponse {
  * - Attendance: 10 points
  * - Leaves: 10 points
  * - Appearance: 5 points
+ * - Cleaning Culture: 5 points
  * - Extra Performance: 10 points
- * - Future rules: 65 points (reserved)
+ * - Testimonial: 20 points
+ * - Future rules: 40 points (reserved)
  */
 export interface ScoringConfigResponse {
   /** MongoDB config ID */
@@ -788,9 +850,22 @@ export interface ScoringConfigResponse {
     maxPoints?: number;
     /**
      * Types of violations to track
-     * @example ["uniform","socks_banyan","hair_beard_moustache"]
+     * @example ["uniform","hair_beard_moustache"]
      */
-    violations?: ("uniform" | "socks_banyan" | "hair_beard_moustache")[];
+    violations?: ("uniform" | "hair_beard_moustache")[];
+  };
+  /** Cleaning culture scoring rules (binary - full points forfeited for the month on any single bad day) */
+  cleaning?: {
+    /**
+     * Enable/disable cleaning scoring
+     * @example true
+     */
+    enabled?: boolean;
+    /**
+     * Points for cleaning category, awarded in full only if no day in the month is marked bad
+     * @example 5
+     */
+    maxPoints?: number;
   };
   /** Extra performance scoring rules (Approved submissions) */
   extraPerformance?: {
@@ -802,6 +877,19 @@ export interface ScoringConfigResponse {
     /**
      * Maximum points allowed per month for extra performance
      * @example 10
+     */
+    maxPointsAllowed?: number;
+  };
+  /** Testimonial scoring rules (Approved testimonials from other staff) */
+  testimonial?: {
+    /**
+     * Points awarded per approved testimonial
+     * @example 5
+     */
+    pointsPerTestimonial?: number;
+    /**
+     * Maximum points allowed per month for testimonials
+     * @example 20
      */
     maxPointsAllowed?: number;
   };
@@ -1408,6 +1496,39 @@ export class Api<SecurityDataType extends unknown> {
         ErrorResponse
       >({
         path: `/staff`,
+        method: "GET",
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Id+name pairs (sorted by name) for every staff member with isEligibleForAttendance true - for populating a colleague picker, e.g. "who are you writing a testimonial about" or a "reassign to" dropdown. Any authenticated user may call this (unlike GET /staff, which is manager-only and returns full records).
+     *
+     * @tags Staff
+     * @name OptionsList
+     * @summary Lightweight staff list for dropdowns/pickers
+     * @request GET:/staff/options
+     * @secure
+     */
+    optionsList: (params: RequestParams = {}) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          data?: {
+            /**
+             * Staff.id (internal id)
+             * @example 2645
+             */
+            id?: number;
+            /** @example "ANAS" */
+            name?: string;
+          }[];
+        },
+        ErrorResponse
+      >({
+        path: `/staff/options`,
         method: "GET",
         secure: true,
         format: "json",
@@ -5086,9 +5207,9 @@ export class Api<SecurityDataType extends unknown> {
         status?: "ok" | "bad";
         /**
          * Required if status is "bad"
-         * @example ["uniform","socks_banyan"]
+         * @example ["uniform"]
          */
-        violations?: ("uniform" | "socks_banyan" | "hair_beard_moustache")[];
+        violations?: ("uniform" | "hair_beard_moustache")[];
         /** @example "Wrinkled uniform, mismatched socks" */
         remarks?: string | null;
       },
@@ -5138,11 +5259,7 @@ export class Api<SecurityDataType extends unknown> {
               staffName?: string;
               date?: string;
               status?: "ok" | "bad";
-              violations?: (
-                | "uniform"
-                | "socks_banyan"
-                | "hair_beard_moustache"
-              )[];
+              violations?: ("uniform" | "hair_beard_moustache")[];
               remarks?: string | null;
               /** @format date-time */
               markedAt?: string | null;
@@ -5174,9 +5291,9 @@ export class Api<SecurityDataType extends unknown> {
         status?: "ok" | "bad";
         /**
          * Appearance violations to mark
-         * @example ["uniform","socks_banyan"]
+         * @example ["uniform"]
          */
-        violations: ("uniform" | "socks_banyan" | "hair_beard_moustache")[];
+        violations: ("uniform" | "hair_beard_moustache")[];
         /** @example "Wrinkled uniform, mismatched socks" */
         remarks?: string | null;
       },
@@ -5312,6 +5429,252 @@ export class Api<SecurityDataType extends unknown> {
         void
       >({
         path: `/appearance/stats/overview`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+  };
+  cleaning = {
+    /**
+     * @description Update cleaning status for a staff member. Use status "ok" to reset, or "bad" with violations to mark violations.
+     *
+     * @tags Cleaning
+     * @name CleaningUpdate
+     * @summary Update staff cleaning culture status (MANAGERS/SUPER ADMIN)
+     * @request PUT:/cleaning/{staffId}
+     * @secure
+     */
+    cleaningUpdate: (
+      staffId: number,
+      data: {
+        /** @example "bad" */
+        status?: "ok" | "bad";
+        /**
+         * Required if status is "bad"
+         * @example ["cleanliness"]
+         */
+        violations?: "cleanliness"[];
+        /** @example "Workstation left uncleaned" */
+        remarks?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: object;
+        },
+        void
+      >({
+        path: `/cleaning/${staffId}`,
+        method: "PUT",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Retrieve cleaning status for all staff members for today. Defaults to OK for all staff.
+     *
+     * @tags Cleaning
+     * @name TodayList
+     * @summary Get today's cleaning status for all staff (MANAGERS/SUPER ADMIN)
+     * @request GET:/cleaning/today
+     * @secure
+     */
+    todayList: (params: RequestParams = {}) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            /**
+             * @format date
+             * @example "2026-08-09"
+             */
+            date?: string;
+            /** @example 50 */
+            count?: number;
+            /** @example 3 */
+            badCount?: number;
+            staff?: {
+              staffId?: number;
+              staffName?: string;
+              date?: string;
+              status?: "ok" | "bad";
+              violations?: "cleanliness"[];
+              remarks?: string | null;
+              /** @format date-time */
+              markedAt?: string | null;
+            }[];
+          };
+        },
+        void
+      >({
+        path: `/cleaning/today`,
+        method: "GET",
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Mark cleaning violation for a staff member for today
+     *
+     * @tags Cleaning
+     * @name MarkBadCreate
+     * @summary Mark staff cleaning as bad (MANAGERS/SUPER ADMIN)
+     * @request POST:/cleaning/mark-bad/{staffId}
+     * @secure
+     */
+    markBadCreate: (
+      staffId: number,
+      data: {
+        /** @default "bad" */
+        status?: "ok" | "bad";
+        /**
+         * Cleaning violations to mark
+         * @example ["cleanliness"]
+         */
+        violations: "cleanliness"[];
+        /** @example "Workstation left uncleaned" */
+        remarks?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            status?: string;
+            violations?: string[];
+            remarks?: string;
+            /** @format date-time */
+            markedAt?: string;
+          };
+        },
+        void
+      >({
+        path: `/cleaning/mark-bad/${staffId}`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Reset staff cleaning status back to OK for today
+     *
+     * @tags Cleaning
+     * @name ResetCreate
+     * @summary Reset cleaning status to OK (MANAGERS/SUPER ADMIN)
+     * @request POST:/cleaning/reset/{staffId}
+     * @secure
+     */
+    resetCreate: (staffId: number, params: RequestParams = {}) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            /** @example "ok" */
+            status?: string;
+          };
+        },
+        void
+      >({
+        path: `/cleaning/reset/${staffId}`,
+        method: "POST",
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Get cleaning history for a specific staff member
+     *
+     * @tags Cleaning
+     * @name HistoryDetail
+     * @summary Get cleaning history (MANAGERS/SUPER ADMIN)
+     * @request GET:/cleaning/history/{staffId}
+     * @secure
+     */
+    historyDetail: (
+      staffId: number,
+      query?: {
+        /**
+         * Number of days to look back (default 30)
+         * @default 30
+         */
+        days?: number;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            period?: string;
+            stats?: {
+              totalDays?: number;
+              badDays?: number;
+              okDays?: number;
+              badPercentage?: string;
+            };
+            history?: object[];
+          };
+        },
+        void
+      >({
+        path: `/cleaning/history/${staffId}`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Get aggregated cleaning statistics across staff
+     *
+     * @tags Cleaning
+     * @name StatsOverviewList
+     * @summary Get cleaning statistics (MANAGERS/SUPER ADMIN)
+     * @request GET:/cleaning/stats/overview
+     * @secure
+     */
+    statsOverviewList: (
+      query?: {
+        /** @format date */
+        startDate?: string;
+        /** @format date */
+        endDate?: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            period?: object;
+            totalStaff?: number;
+            staffWithBadDays?: number;
+            stats?: object[];
+          };
+        },
+        void
+      >({
+        path: `/cleaning/stats/overview`,
         method: "GET",
         query: query,
         secure: true,
@@ -5512,8 +5875,10 @@ export class Api<SecurityDataType extends unknown> {
            * - Attendance: 10 points
            * - Leaves: 10 points
            * - Appearance: 5 points
+           * - Cleaning Culture: 5 points
            * - Extra Performance: 10 points
-           * - Future rules: 65 points (reserved)
+           * - Testimonial: 20 points
+           * - Future rules: 40 points (reserved)
            */
           data?: ScoringConfigResponse;
         },
@@ -5570,8 +5935,29 @@ export class Api<SecurityDataType extends unknown> {
           pointsPerViolation?: number;
           /** @example 5 */
           maxPoints?: number;
-          /** @example ["uniform","socks_banyan","hair_beard_moustache"] */
+          /** @example ["uniform","hair_beard_moustache"] */
           violations?: string[];
+        };
+        cleaning?: {
+          /** @example true */
+          enabled?: boolean;
+          /**
+           * Full points forfeited for the month if any single day is marked bad
+           * @example 5
+           */
+          maxPoints?: number;
+        };
+        extraPerformance?: {
+          /** @example 10 */
+          pointsPerPerformance?: number;
+          /** @example 10 */
+          maxPointsAllowed?: number;
+        };
+        testimonial?: {
+          /** @example 5 */
+          pointsPerTestimonial?: number;
+          /** @example 20 */
+          maxPointsAllowed?: number;
         };
       },
       params: RequestParams = {},
@@ -5586,8 +5972,10 @@ export class Api<SecurityDataType extends unknown> {
            * - Attendance: 10 points
            * - Leaves: 10 points
            * - Appearance: 5 points
+           * - Cleaning Culture: 5 points
            * - Extra Performance: 10 points
-           * - Future rules: 65 points (reserved)
+           * - Testimonial: 20 points
+           * - Future rules: 40 points (reserved)
            */
           data?: ScoringConfigResponse;
         },
@@ -5852,6 +6240,255 @@ export class Api<SecurityDataType extends unknown> {
         method: "GET",
         query: query,
         secure: true,
+        format: "json",
+        ...params,
+      }),
+  };
+  testimonials = {
+    /**
+     * @description Any authenticated staff member can write a testimonial about a colleague. Submissions start pending and require approval from a manager/HR/superAdmin before counting toward the reviewee's score - see PUT /testimonials/{testimonialId}/approve. A staff member cannot submit a testimonial about themselves.
+     *
+     * @tags Testimonials
+     * @name TestimonialsCreate
+     * @summary Submit a testimonial about another staff member
+     * @request POST:/testimonials
+     * @secure
+     */
+    testimonialsCreate: (
+      data: {
+        /**
+         * Staff.id (internal id) of the colleague being reviewed
+         * @example 2646
+         */
+        revieweeStaffId: number;
+        /** @example "Anas went out of his way to help close the month-end reconciliation - great teamwork." */
+        message: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          /** A testimonial from one staff member about another, with approval status */
+          data?: TestimonialResponse;
+        },
+        void
+      >({
+        path: `/testimonials`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Defaults to the authenticated user's own received testimonials (all statuses). Managers/HR/superAdmin may pass ?staffId= to view another staff member's instead.
+     *
+     * @tags Testimonials
+     * @name ReceivedList
+     * @summary Get testimonials received by a staff member
+     * @request GET:/testimonials/received
+     * @secure
+     */
+    receivedList: (
+      query?: {
+        /** Admin roles only - Staff.id (internal id) of the staff member whose received testimonials to view */
+        staffId?: number;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          data?: {
+            revieweeUserId?: number;
+            stats?: {
+              total?: number;
+              approved?: number;
+              pending?: number;
+              rejected?: number;
+            };
+            testimonials?: TestimonialResponse[];
+          };
+        },
+        void
+      >({
+        path: `/testimonials/received`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @tags Testimonials
+     * @name GivenList
+     * @summary Get testimonials the authenticated staff member has given to others
+     * @request GET:/testimonials/given
+     * @secure
+     */
+    givenList: (params: RequestParams = {}) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          data?: {
+            reviewerUserId?: number;
+            count?: number;
+            testimonials?: TestimonialResponse[];
+          };
+        },
+        void
+      >({
+        path: `/testimonials/given`,
+        method: "GET",
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Retrieve all pending testimonials across all staff for a given month. Used to review and approve/reject submissions.
+     *
+     * @tags Testimonials
+     * @name PendingList
+     * @summary Get pending testimonials for approval (MANAGERS/HR/SUPER ADMIN)
+     * @request GET:/testimonials/pending
+     * @secure
+     */
+    pendingList: (
+      query?: {
+        /**
+         * Month in YYYY-MM format (default current month)
+         * @format date
+         * @pattern ^\d{4}-\d{2}$
+         * @example "2026-06"
+         */
+        month?: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            month?: string;
+            count?: number;
+            testimonials?: TestimonialResponse[];
+          };
+        },
+        void
+      >({
+        path: `/testimonials/pending`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Company-wide list of approved testimonials for a given month, newest-approved first. For a company-wide "team testimonials" view alongside GET /testimonials/pending.
+     *
+     * @tags Testimonials
+     * @name ApprovedList
+     * @summary Get approved testimonials across all staff (MANAGERS/HR/SUPER ADMIN)
+     * @request GET:/testimonials/approved
+     * @secure
+     */
+    approvedList: (
+      query?: {
+        /**
+         * Month in YYYY-MM format (default current month)
+         * @format date
+         * @pattern ^\d{4}-\d{2}$
+         * @example "2026-06"
+         */
+        month?: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            month?: string;
+            count?: number;
+            testimonials?: TestimonialResponse[];
+          };
+        },
+        void
+      >({
+        path: `/testimonials/approved`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Approve a pending testimonial. The reviewee receives 5 points on their monthly score, capped at 20 points (4 approved testimonials) per month.
+     *
+     * @tags Testimonials
+     * @name ApproveUpdate
+     * @summary Approve a testimonial (MANAGERS/HR/SUPER ADMIN)
+     * @request PUT:/testimonials/{testimonialId}/approve
+     * @secure
+     */
+    approveUpdate: (testimonialId: string, params: RequestParams = {}) =>
+      this.http.request<
+        {
+          success?: boolean;
+          /** A testimonial from one staff member about another, with approval status */
+          data?: TestimonialResponse;
+        },
+        void
+      >({
+        path: `/testimonials/${testimonialId}/approve`,
+        method: "PUT",
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Reject a pending testimonial with a reason.
+     *
+     * @tags Testimonials
+     * @name RejectUpdate
+     * @summary Reject a testimonial (MANAGERS/HR/SUPER ADMIN)
+     * @request PUT:/testimonials/{testimonialId}/reject
+     * @secure
+     */
+    rejectUpdate: (
+      testimonialId: string,
+      data: {
+        /** @example "Too vague - please provide a specific example" */
+        rejectionReason: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          /** A testimonial from one staff member about another, with approval status */
+          data?: TestimonialResponse;
+        },
+        void
+      >({
+        path: `/testimonials/${testimonialId}/reject`,
+        method: "PUT",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
         format: "json",
         ...params,
       }),

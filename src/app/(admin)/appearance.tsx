@@ -20,7 +20,6 @@ const PINNED_DEPARTMENT = "Store"
 
 const APPEARANCE_ITEMS: { key: AppearanceItemKey; label: string }[] = [
   { key: "uniform", label: "Uniform" },
-  { key: "socks_banyan", label: "Socks & Banyan" },
   { key: "hair_beard_moustache", label: "Hair & Beard" },
 ]
 

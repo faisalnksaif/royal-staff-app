@@ -1,6 +1,6 @@
 import { View, FlatList, ActivityIndicator, StyleSheet, Pressable, Animated, Easing, useWindowDimensions } from "react-native"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { ChevronLeft, ChevronRight, ChevronDown, Trophy, Timer, Clock, CalendarX, ShieldCheck, Award, RefreshCw, MessageSquareText, MessageSquareQuote, Search, XCircle } from "lucide-react-native"
+import { ChevronLeft, ChevronRight, ChevronDown, Trophy, Timer, Clock, CalendarX, ShieldCheck, Sparkles, Award, RefreshCw, MessageSquareText, MessageSquareQuote, Search, XCircle } from "lucide-react-native"
 import moment from "moment"
 import { useState, useRef, useEffect, useMemo } from "react"
 import BackButton from "../../components/shared/BackButton"
@@ -46,6 +46,7 @@ function categoryIcon(category: string, color: string, size = 13) {
     case "attendance":   return <Clock size={size} color={color} strokeWidth={1.75} />
     case "leaves":       return <CalendarX size={size} color={color} strokeWidth={1.75} />
     case "appearance":   return <ShieldCheck size={size} color={color} strokeWidth={1.75} />
+    case "cleaning":     return <Sparkles size={size} color={color} strokeWidth={1.75} />
     case "extra performance": return <Award size={size} color={color} strokeWidth={1.75} />
     case "testimonial": return <MessageSquareQuote size={size} color={color} strokeWidth={1.75} />
     default:             return <Trophy size={size} color={color} strokeWidth={1.75} />

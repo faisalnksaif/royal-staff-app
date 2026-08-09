@@ -750,6 +750,26 @@ export interface TodayAppearance {
   staff: AppearanceRecord[]
 }
 
+export type CleaningItemKey = "cleanliness"
+
+export interface CleaningRecord {
+  staffId: number
+  staffName: string
+  date?: string
+  status?: "ok" | "bad"
+  violations?: CleaningItemKey[]
+  issues?: CleaningItemKey[]
+  remarks?: string | null
+  markedAt?: string | null
+}
+
+export interface TodayCleaning {
+  date: string
+  count: number
+  badCount: number
+  staff: CleaningRecord[]
+}
+
 export interface ScoreBreakdownItem {
   rule: string
   category: string

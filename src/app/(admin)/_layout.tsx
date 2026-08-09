@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react"
 import { View, Pressable, ScrollView, StyleSheet, Platform, StatusBar, Modal, Animated, TouchableWithoutFeedback } from "react-native"
 import { Stack, useRouter, usePathname } from "expo-router"
-import { MessageCircleMore, CalendarCheck, CalendarClock, ShieldCheck, Trophy, Award, Users, Settings, LogOut, UsersRound, Bell, ChevronLeft, ChevronRight, IdCard, Radar, ListChecks, MessageSquareQuote } from "lucide-react-native"
+import { MessageCircleMore, CalendarCheck, CalendarClock, ClipboardCheck, Trophy, Award, Users, Settings, LogOut, UsersRound, Bell, ChevronLeft, ChevronRight, IdCard, Radar, ListChecks, MessageSquareQuote } from "lucide-react-native"
 import { AdminDrawerContext } from "../../contexts/adminDrawer"
 import { useQuery } from "@tanstack/react-query"
 import AppText from "../../components/ui/AppText"
@@ -35,7 +35,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Extra Performance",   href: "/(admin)/team-extra-performance", icon: Award,        matchExact: false, roles: ["superAdmin", "manager", "hr"] },
   { label: "Testimonials",        href: "/(admin)/team-testimonials", icon: MessageSquareQuote, matchExact: false, roles: ["superAdmin", "manager", "hr"] },
   { label: "Mappings",            href: "/(admin)/mappings",          icon: Users,             matchExact: false, roles: ["superAdmin", "manager"] },
-  { label: "Appearance",          href: "/(admin)/appearance",        icon: ShieldCheck,       matchExact: false, roles: ["superAdmin", "manager", "hr"] },
+  { label: "Daily Check",         href: "/(admin)/daily-check",       icon: ClipboardCheck,    matchExact: false, roles: ["superAdmin", "manager", "hr"] },
   { label: "Scanning Devices",    href: "/(admin)/scanning-devices",  icon: Radar,             matchExact: false, roles: ["superAdmin"] },
   { label: "Settings",            href: "/(admin)/team-settings",     icon: Settings,          matchExact: false, roles: ["superAdmin", "manager", "hr"] },
   { label: "Notifications",       href: "/notifications",             icon: Bell,              matchExact: false, roles: ["superAdmin", "manager"] },

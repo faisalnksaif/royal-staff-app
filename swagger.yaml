@@ -5781,8 +5781,8 @@ paths:
                   description: Required if status is "bad"
                   items:
                     type: string
-                    enum: [uniform, socks_banyan, hair_beard_moustache]
-                  example: [uniform, socks_banyan]
+                    enum: [uniform, hair_beard_moustache]
+                  example: [uniform]
                 remarks:
                   type: string
                   nullable: true
@@ -5855,7 +5855,7 @@ paths:
                               type: array
                               items:
                                 type: string
-                                enum: [uniform, socks_banyan, hair_beard_moustache]
+                                enum: [uniform, hair_beard_moustache]
                             remarks:
                               type: string
                               nullable: true
@@ -5898,8 +5898,8 @@ paths:
                   description: Appearance violations to mark
                   items:
                     type: string
-                    enum: [uniform, socks_banyan, hair_beard_moustache]
-                  example: [uniform, socks_banyan]
+                    enum: [uniform, hair_beard_moustache]
+                  example: [uniform]
                 remarks:
                   type: string
                   nullable: true
@@ -6074,6 +6074,337 @@ paths:
                       totalStaff:
                         type: integer
                       staffWithBadAppearance:
+                        type: integer
+                      stats:
+                        type: array
+                        items:
+                          type: object
+        '403':
+          description: Forbidden - managers/superadmin only
+
+  /cleaning/{staffId}:
+    put:
+      tags:
+        - Cleaning
+      summary: Update staff cleaning culture status (MANAGERS/SUPER ADMIN)
+      description: Update cleaning status for a staff member. Use status "ok" to reset, or "bad" with violations to mark violations.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [ok, bad]
+                  example: bad
+                violations:
+                  type: array
+                  description: Required if status is "bad"
+                  items:
+                    type: string
+                    enum: [cleanliness]
+                  example: [cleanliness]
+                remarks:
+                  type: string
+                  nullable: true
+                  example: "Workstation left uncleaned"
+      responses:
+        '200':
+          description: Cleaning status updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+        '400':
+          description: Bad request - issues required when status is bad
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /cleaning/today:
+    get:
+      tags:
+        - Cleaning
+      summary: Get today's cleaning status for all staff (MANAGERS/SUPER ADMIN)
+      description: Retrieve cleaning status for all staff members for today. Defaults to OK for all staff.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Today's cleaning records
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      date:
+                        type: string
+                        format: date
+                        example: "2026-08-09"
+                      count:
+                        type: integer
+                        example: 50
+                      badCount:
+                        type: integer
+                        example: 3
+                      staff:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            staffId:
+                              type: integer
+                            staffName:
+                              type: string
+                            date:
+                              type: string
+                            status:
+                              type: string
+                              enum: [ok, bad]
+                            violations:
+                              type: array
+                              items:
+                                type: string
+                                enum: [cleanliness]
+                            remarks:
+                              type: string
+                              nullable: true
+                            markedAt:
+                              type: string
+                              format: date-time
+                              nullable: true
+        '403':
+          description: Forbidden - managers/superadmin only
+
+  /cleaning/mark-bad/{staffId}:
+    post:
+      tags:
+        - Cleaning
+      summary: Mark staff cleaning as bad (MANAGERS/SUPER ADMIN)
+      description: Mark cleaning violation for a staff member for today
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - violations
+              properties:
+                status:
+                  type: string
+                  enum: [ok, bad]
+                  default: bad
+                violations:
+                  type: array
+                  description: Cleaning violations to mark
+                  items:
+                    type: string
+                    enum: [cleanliness]
+                  example: [cleanliness]
+                remarks:
+                  type: string
+                  nullable: true
+                  example: "Workstation left uncleaned"
+      responses:
+        '200':
+          description: Cleaning marked successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      status:
+                        type: string
+                      violations:
+                        type: array
+                        items:
+                          type: string
+                      remarks:
+                        type: string
+                      markedAt:
+                        type: string
+                        format: date-time
+        '400':
+          description: Bad request
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /cleaning/reset/{staffId}:
+    post:
+      tags:
+        - Cleaning
+      summary: Reset cleaning status to OK (MANAGERS/SUPER ADMIN)
+      description: Reset staff cleaning status back to OK for today
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Cleaning status reset successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      status:
+                        type: string
+                        example: ok
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /cleaning/history/{staffId}:
+    get:
+      tags:
+        - Cleaning
+      summary: Get cleaning history (MANAGERS/SUPER ADMIN)
+      description: Get cleaning history for a specific staff member
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: days
+          in: query
+          description: Number of days to look back (default 30)
+          schema:
+            type: integer
+            default: 30
+      responses:
+        '200':
+          description: Cleaning history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      period:
+                        type: string
+                      stats:
+                        type: object
+                        properties:
+                          totalDays:
+                            type: integer
+                          badDays:
+                            type: integer
+                          okDays:
+                            type: integer
+                          badPercentage:
+                            type: string
+                      history:
+                        type: array
+                        items:
+                          type: object
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /cleaning/stats/overview:
+    get:
+      tags:
+        - Cleaning
+      summary: Get cleaning statistics (MANAGERS/SUPER ADMIN)
+      description: Get aggregated cleaning statistics across staff
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Cleaning statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      period:
+                        type: object
+                      totalStaff:
+                        type: integer
+                      staffWithBadDays:
                         type: integer
                       stats:
                         type: array
@@ -6979,7 +7310,17 @@ paths:
                       type: array
                       items:
                         type: string
-                      example: ["uniform", "socks_banyan", "hair_beard_moustache"]
+                      example: ["uniform", "hair_beard_moustache"]
+                cleaning:
+                  type: object
+                  properties:
+                    enabled:
+                      type: boolean
+                      example: true
+                    maxPoints:
+                      type: integer
+                      example: 5
+                      description: Full points forfeited for the month if any single day is marked bad
                 extraPerformance:
                   type: object
                   properties:
@@ -8004,9 +8345,10 @@ components:
         - Attendance: 10 points
         - Leaves: 10 points
         - Appearance: 5 points
+        - Cleaning Culture: 5 points
         - Extra Performance: 10 points
         - Testimonial: 20 points
-        - Future rules: 45 points (reserved)
+        - Future rules: 40 points (reserved)
       properties:
         _id:
           type: string
@@ -8080,8 +8422,20 @@ components:
               description: Types of violations to track
               items:
                 type: string
-                enum: [uniform, socks_banyan, hair_beard_moustache]
-              example: ["uniform", "socks_banyan", "hair_beard_moustache"]
+                enum: [uniform, hair_beard_moustache]
+              example: ["uniform", "hair_beard_moustache"]
+        cleaning:
+          type: object
+          description: Cleaning culture scoring rules (binary - full points forfeited for the month on any single bad day)
+          properties:
+            enabled:
+              type: boolean
+              description: Enable/disable cleaning scoring
+              example: true
+            maxPoints:
+              type: integer
+              description: Points for cleaning category, awarded in full only if no day in the month is marked bad
+              example: 5
         extraPerformance:
           type: object
           description: Extra performance scoring rules (Approved submissions)
@@ -8144,6 +8498,8 @@ tags:
     description: Leave request and approval tracking
   - name: Appearance
     description: Staff appearance and dress code tracking
+  - name: Cleaning
+    description: Staff cleaning culture tracking
   - name: Extra Performance
     description: Staff extra performance submissions and approval workflow
   - name: Testimonials
