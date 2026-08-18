@@ -31,6 +31,7 @@ function RootStack() {
         <Stack.Screen name="scanner" />
         <Stack.Screen name="customer" />
         <Stack.Screen name="notifications" />
+        <Stack.Screen name="feedback" />
       </Stack>
     </>
   )

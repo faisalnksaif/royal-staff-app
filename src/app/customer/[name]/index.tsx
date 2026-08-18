@@ -31,6 +31,7 @@ import {
   BellRing,
   Lock,
   LockOpen,
+  ThumbsUp,
 } from "lucide-react-native"
 import { Linking } from "react-native"
 import AppText from "../../../components/ui/AppText"
@@ -48,6 +49,8 @@ import { useCustomerFollowups } from "../../../hooks/useCustomerFollowups"
 import { useCustomerLedger } from "../../../hooks/useCustomerLedger"
 import { followupService } from "../../../services/followupService"
 import { mappingService } from "../../../services/mappingService"
+import { feedbackService } from "../../../services/feedbackService"
+import { WEB_BASE_URL } from "../../../constants/config"
 import StaffPickerModal from "../../../components/shared/StaffPickerModal"
 import { formatDate, formatAmount, toTitleCase } from "../../../utils/helpers"
 import moment from "moment"
@@ -589,6 +592,15 @@ export default function CustomerDetailScreen() {
     },
   })
 
+  const { mutate: sendFeedbackLink, isPending: isSendingFeedback } = useMutation({
+    mutationFn: () => feedbackService.createFeedbackRequest(Number(customerId)),
+    onSuccess: ({ data }) => {
+      const link = `${WEB_BASE_URL}/feedback/${data.token}`
+      const msg = `Dear ${toTitleCase(name)},\n\nWe'd love to hear about your experience with us. Please share your feedback here:\n${link}\n\nThank you!\nRoyal Glass Vengara`
+      Linking.openURL(`whatsapp://send?phone=${mobile}&text=${encodeURIComponent(msg)}`)
+    },
+  })
+
   const { data, isLoading, refetch: refetchFollowups } = useCustomerFollowups(customerId)
   const {
     data: ledgerData,
@@ -681,6 +693,19 @@ export default function CustomerDetailScreen() {
                 >
                   <BellRing size={11} color={palette.warning.default} strokeWidth={1.75} />
                   <AppText variant="caption" style={{ color: palette.warning.default }}>Remind</AppText>
+                </TouchableOpacity>
+              )}
+              {customerId && (
+                <TouchableOpacity
+                  activeOpacity={0.6}
+                  style={styles.contactBtn}
+                  disabled={isSendingFeedback}
+                  onPress={() => sendFeedbackLink()}
+                >
+                  <ThumbsUp size={11} color={colors.accent} strokeWidth={1.75} />
+                  <AppText variant="caption" style={{ color: colors.accent }}>
+                    {isSendingFeedback ? "Sending…" : "Feedback"}
+                  </AppText>
                 </TouchableOpacity>
               )}
             </View>

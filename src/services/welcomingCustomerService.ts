@@ -1,25 +1,25 @@
 import api from "./apiClient"
-import type { AppearanceItemKey, TodayAppearance } from "../types"
+import type { WelcomingCustomerItemKey, TodayWelcomingCustomer } from "../types"
 
-async function getTodayAppearance(date?: string): Promise<{ success: boolean; data: TodayAppearance }> {
+async function getTodayWelcomingCustomer(date?: string): Promise<{ success: boolean; data: TodayWelcomingCustomer }> {
   const { data } = await api.http.request({
-    path: "/appearance/today",
+    path: "/welcoming-customer/today",
     method: "GET",
     query: date ? { date } : undefined,
     secure: true,
     format: "json",
   })
-  return data as { success: boolean; data: TodayAppearance }
+  return data as { success: boolean; data: TodayWelcomingCustomer }
 }
 
-async function updateAppearance(
+async function updateWelcomingCustomer(
   staffId: number,
-  issues: AppearanceItemKey[],
+  issues: WelcomingCustomerItemKey[],
   date?: string
 ): Promise<{ success: boolean; data: object }> {
   const status = issues.length === 0 ? "ok" : "bad"
   const { data } = await api.http.request({
-    path: `/appearance/${staffId}`,
+    path: `/welcoming-customer/${staffId}`,
     method: "PUT",
     body: { status, ...(status === "bad" ? { violations: issues } : {}), ...(date ? { date } : {}) },
     secure: true,
@@ -28,4 +28,4 @@ async function updateAppearance(
   return data as { success: boolean; data: object }
 }
 
-export const appearanceService = { getTodayAppearance, updateAppearance }
+export const welcomingCustomerService = { getTodayWelcomingCustomer, updateWelcomingCustomer }

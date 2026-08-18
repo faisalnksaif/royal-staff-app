@@ -788,6 +788,26 @@ export interface CleaningRecord {
   markedAt?: string | null
 }
 
+export type WelcomingCustomerItemKey = "no_greeting" | "no_smile" | "ignored_customer"
+
+export interface WelcomingCustomerRecord {
+  staffId: number
+  staffName: string
+  date?: string
+  status?: "ok" | "bad"
+  violations?: WelcomingCustomerItemKey[]
+  issues?: WelcomingCustomerItemKey[]
+  remarks?: string | null
+  markedAt?: string | null
+}
+
+export interface TodayWelcomingCustomer {
+  date: string
+  count: number
+  badCount: number
+  staff: WelcomingCustomerRecord[]
+}
+
 export interface TodayCleaning {
   date: string
   count: number
@@ -919,6 +939,54 @@ export interface TestimonialStats {
   approved: number
   pending: number
   rejected: number
+}
+
+// ─── Customer Feedback ─────────────────────────────────────────────────────────
+
+export interface FeedbackQuestion {
+  _id: string
+  text: string
+  isActive: boolean
+  order: number
+  createdAt: string
+  updatedAt: string
+}
+
+export type FeedbackRequestStatus = "pending" | "completed" | "expired"
+
+export interface FeedbackSnapshotQuestion {
+  questionId: string
+  text: string
+}
+
+export interface FeedbackAnswer {
+  questionId: string
+  answer: boolean
+}
+
+export interface FeedbackRequest {
+  _id: string
+  token: string
+  staffId: number
+  staffUserId: number
+  ledgerId: number
+  customerName: string
+  customerMobile: string
+  status: FeedbackRequestStatus
+  questions: FeedbackSnapshotQuestion[]
+  answers?: FeedbackAnswer[]
+  device?: {
+    fingerprint?: string
+    ipAddress?: string
+    userAgent?: string
+  }
+  flagged: boolean
+  flagReason?: string
+  sentAt: string
+  completedAt?: string
+  expiresAt: string
+  createdAt: string
+  updatedAt: string
 }
 
 // ─── Payment velocity ─────────────────────────────────────────────────────────

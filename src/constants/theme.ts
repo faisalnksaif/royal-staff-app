@@ -142,7 +142,7 @@ export const darkTheme = {
   text: {
     primary: colors.neutral[50],     // #F9F9F9 — clean white
     secondary: colors.neutral[400],  // #9A9A9A
-    tertiary: colors.neutral[600],   // #494949
+    tertiary: colors.neutral[500],   // #6E6E6E
     inverse: colors.neutral[950],
   },
   accent: colors.primary[400],       // #D4A53A — brand gold on dark

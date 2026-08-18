@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react"
 import { View, Pressable, ScrollView, StyleSheet, Platform, StatusBar, Modal, Animated, TouchableWithoutFeedback } from "react-native"
 import { Stack, useRouter, usePathname } from "expo-router"
-import { MessageCircleMore, CalendarCheck, CalendarClock, ClipboardCheck, Trophy, Award, Users, Settings, LogOut, UsersRound, Bell, ChevronLeft, ChevronRight, IdCard, Radar, ListChecks, MessageSquareQuote, Presentation } from "lucide-react-native"
+import { MessageCircleMore, CalendarCheck, CalendarClock, ClipboardCheck, Trophy, Award, Users, Settings, LogOut, UsersRound, Bell, ChevronLeft, ChevronRight, IdCard, Radar, ListChecks, MessageSquareQuote, Presentation, ThumbsUp } from "lucide-react-native"
 import { AdminDrawerContext } from "../../contexts/adminDrawer"
 import { useQuery } from "@tanstack/react-query"
 import AppText from "../../components/ui/AppText"
@@ -22,25 +22,37 @@ type NavItem = {
   icon: React.ComponentType<any>
   matchExact: boolean
   roles?: UserRole[]
+  section: "overview" | "team" | "scoring" | "admin"
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { label: "Follow Up Dashboard", href: "/(admin)",                   icon: MessageCircleMore, matchExact: true,  roles: ["superAdmin", "manager"] },
-  { label: "Customers",           href: "/(admin)/customers-with-debt",     icon: UsersRound,        matchExact: false, roles: ["superAdmin", "manager"] },
-  { label: "Attendance",          href: "/(admin)/attendance",        icon: CalendarCheck,     matchExact: false },
-  { label: "Staff",               href: "/(admin)/staff",             icon: IdCard,            matchExact: false, roles: ["superAdmin", "manager", "hr"] },
-  { label: "Leaves",              href: "/(admin)/team-leaves",       icon: CalendarClock,     matchExact: false },
-  { label: "Meetings",            href: "/(admin)/team-meetings",     icon: Presentation,      matchExact: false, roles: ["superAdmin", "manager", "hr"] },
-  { label: "Todo",                href: "/(admin)/team-todo",         icon: ListChecks,        matchExact: false, roles: ["superAdmin", "manager", "hr"] },
-  { label: "Scores",              href: "/(admin)/scores",            icon: Trophy,            matchExact: false, roles: ["superAdmin", "manager", "hr"] },
-  { label: "Extra Performance",   href: "/(admin)/team-extra-performance", icon: Award,        matchExact: false, roles: ["superAdmin", "manager", "hr"] },
-  { label: "Testimonials",        href: "/(admin)/team-testimonials", icon: MessageSquareQuote, matchExact: false, roles: ["superAdmin", "manager", "hr"] },
-  { label: "Mappings",            href: "/(admin)/mappings",          icon: Users,             matchExact: false, roles: ["superAdmin", "manager"] },
-  { label: "Daily Check",         href: "/(admin)/daily-check",       icon: ClipboardCheck,    matchExact: false, roles: ["superAdmin", "manager", "hr"] },
-  { label: "Scanning Devices",    href: "/(admin)/scanning-devices",  icon: Radar,             matchExact: false, roles: ["superAdmin"] },
-  { label: "Settings",            href: "/(admin)/team-settings",     icon: Settings,          matchExact: false, roles: ["superAdmin", "manager", "hr"] },
-  { label: "Notifications",       href: "/notifications",             icon: Bell,              matchExact: false, roles: ["superAdmin", "manager"] },
+  { label: "Follow Up Dashboard", href: "/(admin)",                   icon: MessageCircleMore, matchExact: true,  roles: ["superAdmin", "manager"], section: "overview" },
+  { label: "Customers",           href: "/(admin)/customers-with-debt",     icon: UsersRound,        matchExact: false, roles: ["superAdmin", "manager"], section: "overview" },
+
+  { label: "Attendance",          href: "/(admin)/attendance",        icon: CalendarCheck,     matchExact: false, section: "team" },
+  { label: "Leaves",              href: "/(admin)/team-leaves",       icon: CalendarClock,     matchExact: false, section: "team" },
+  { label: "Meetings",            href: "/(admin)/team-meetings",     icon: Presentation,      matchExact: false, roles: ["superAdmin", "manager", "hr"], section: "team" },
+
+  { label: "Daily Check",         href: "/(admin)/daily-check",       icon: ClipboardCheck,    matchExact: false, roles: ["superAdmin", "manager", "hr"], section: "scoring" },
+  { label: "Testimonials",        href: "/(admin)/team-testimonials", icon: MessageSquareQuote, matchExact: false, roles: ["superAdmin", "manager", "hr"], section: "scoring" },
+  { label: "Extra Performance",   href: "/(admin)/team-extra-performance", icon: Award,        matchExact: false, roles: ["superAdmin", "manager", "hr"], section: "scoring" },
+  { label: "Scores",              href: "/(admin)/scores",            icon: Trophy,            matchExact: false, roles: ["superAdmin", "manager", "hr"], section: "scoring" },
+
+  { label: "Notifications",       href: "/notifications",             icon: Bell,              matchExact: false, roles: ["superAdmin", "manager"], section: "admin" },
+  { label: "Staff",               href: "/(admin)/staff",             icon: IdCard,            matchExact: false, roles: ["superAdmin", "manager", "hr"], section: "admin" },
+  { label: "Todo",                href: "/(admin)/team-todo",         icon: ListChecks,        matchExact: false, roles: ["superAdmin", "manager", "hr"], section: "admin" },
+  { label: "Mappings",            href: "/(admin)/mappings",          icon: Users,             matchExact: false, roles: ["superAdmin", "manager"], section: "admin" },
+  { label: "Feedback Questions",  href: "/(admin)/team-feedback-questions", icon: ThumbsUp,    matchExact: false, roles: ["superAdmin", "manager", "hr"], section: "admin" },
+  { label: "Scanning Devices",    href: "/(admin)/scanning-devices",  icon: Radar,             matchExact: false, roles: ["superAdmin"], section: "admin" },
+  { label: "Settings",            href: "/(admin)/team-settings",     icon: Settings,          matchExact: false, roles: ["superAdmin", "manager", "hr"], section: "admin" },
 ]
+
+const SECTION_LABELS: Record<NavItem["section"], string> = {
+  overview: "Overview",
+  team: "Team",
+  scoring: "Scoring",
+  admin: "Admin",
+}
 
 function Sidebar() {
   const { colors } = useTheme()
@@ -93,39 +105,46 @@ function Sidebar() {
 
       {/* Nav */}
       <ScrollView style={styles.navScroll} contentContainerStyle={styles.nav} showsVerticalScrollIndicator={false} alwaysBounceVertical={false}>
-        {visibleItems.map((item) => {
+        {visibleItems.map((item, index) => {
           const active = isActive(item)
           const Icon = item.icon
+          const showSectionHeader = !collapsed && (index === 0 || visibleItems[index - 1].section !== item.section)
           return (
-            <Pressable
-              key={item.href}
-              onPress={() => router.push(item.href as any)}
-              style={({ pressed }) => [
-                styles.navItem,
-                active && { backgroundColor: colors.accent + "18" },
-                pressed && { opacity: 0.7 },
-              ]}
-            >
-              {() => (
-                <View style={[styles.navItemInner, { justifyContent: collapsed ? "center" : "flex-start" }]}>
-                  <View style={{ position: "relative" }}>
-                    <Icon size={20} strokeWidth={active ? 2 : 1.6} color={active ? colors.accent : colors.text.secondary} />
-                    {item.label === "Notifications" && unreadCount > 0 && (
-                      <View style={[styles.badge, { backgroundColor: colors.accent }]}>
-                        <AppText variant="caption" style={{ color: "#fff", fontSize: 9, lineHeight: 13 }}>
-                          {unreadCount > 99 ? "99+" : unreadCount}
-                        </AppText>
-                      </View>
+            <View key={item.href}>
+              {showSectionHeader && (
+                <AppText variant="caption" color="tertiary" style={styles.sectionLabel}>
+                  {SECTION_LABELS[item.section].toUpperCase()}
+                </AppText>
+              )}
+              <Pressable
+                onPress={() => router.push(item.href as any)}
+                style={({ pressed }) => [
+                  styles.navItem,
+                  active && { backgroundColor: colors.accent + "18" },
+                  pressed && { opacity: 0.7 },
+                ]}
+              >
+                {() => (
+                  <View style={[styles.navItemInner, { justifyContent: collapsed ? "center" : "flex-start" }]}>
+                    <View style={{ position: "relative" }}>
+                      <Icon size={20} strokeWidth={active ? 2 : 1.6} color={active ? colors.accent : colors.text.secondary} />
+                      {item.label === "Notifications" && unreadCount > 0 && (
+                        <View style={[styles.badge, { backgroundColor: colors.accent }]}>
+                          <AppText variant="caption" style={{ color: "#fff", fontSize: 9, lineHeight: 13 }}>
+                            {unreadCount > 99 ? "99+" : unreadCount}
+                          </AppText>
+                        </View>
+                      )}
+                    </View>
+                    {!collapsed && (
+                      <AppText variant={active ? "bodyMedium" : "body"} style={{ color: active ? colors.accent : colors.text.secondary }} numberOfLines={1}>
+                        {item.label}
+                      </AppText>
                     )}
                   </View>
-                  {!collapsed && (
-                    <AppText variant={active ? "bodyMedium" : "body"} style={{ color: active ? colors.accent : colors.text.secondary }} numberOfLines={1}>
-                      {item.label}
-                    </AppText>
-                  )}
-                </View>
-              )}
-            </Pressable>
+                )}
+              </Pressable>
+            </View>
           )
         })}
       </ScrollView>
@@ -229,41 +248,48 @@ function MobileDrawer({ open, onClose }: { open: boolean; onClose: () => void })
 
         {/* Nav */}
         <ScrollView style={styles.navScroll} contentContainerStyle={styles.nav} showsVerticalScrollIndicator={false}>
-          {visibleItems.map((item) => {
+          {visibleItems.map((item, index) => {
             const active = isActive(item)
             const Icon = item.icon
+            const showSectionHeader = index === 0 || visibleItems[index - 1].section !== item.section
             return (
-              <Pressable
-                key={item.href}
-                onPress={() => navigate(item.href)}
-                style={({ pressed }) => [
-                  styles.navItem,
-                  active && { backgroundColor: colors.accent + "18" },
-                  pressed && { opacity: 0.7 },
-                ]}
-              >
-                {() => (
-                  <View style={styles.navItemInner}>
-                    <View style={{ position: "relative" }}>
-                      <Icon size={20} strokeWidth={active ? 2 : 1.6} color={active ? colors.accent : colors.text.secondary} />
-                      {item.label === "Notifications" && unreadCount > 0 && (
-                        <View style={[styles.badge, { backgroundColor: colors.accent }]}>
-                          <AppText variant="caption" style={{ color: "#fff", fontSize: 9, lineHeight: 13 }}>
-                            {unreadCount > 99 ? "99+" : unreadCount}
-                          </AppText>
-                        </View>
-                      )}
-                    </View>
-                    <AppText
-                      variant={active ? "bodyMedium" : "body"}
-                      style={{ color: active ? colors.accent : colors.text.secondary }}
-                      numberOfLines={1}
-                    >
-                      {item.label}
-                    </AppText>
-                  </View>
+              <View key={item.href}>
+                {showSectionHeader && (
+                  <AppText variant="caption" color="tertiary" style={styles.sectionLabel}>
+                    {SECTION_LABELS[item.section].toUpperCase()}
+                  </AppText>
                 )}
-              </Pressable>
+                <Pressable
+                  onPress={() => navigate(item.href)}
+                  style={({ pressed }) => [
+                    styles.navItem,
+                    active && { backgroundColor: colors.accent + "18" },
+                    pressed && { opacity: 0.7 },
+                  ]}
+                >
+                  {() => (
+                    <View style={styles.navItemInner}>
+                      <View style={{ position: "relative" }}>
+                        <Icon size={20} strokeWidth={active ? 2 : 1.6} color={active ? colors.accent : colors.text.secondary} />
+                        {item.label === "Notifications" && unreadCount > 0 && (
+                          <View style={[styles.badge, { backgroundColor: colors.accent }]}>
+                            <AppText variant="caption" style={{ color: "#fff", fontSize: 9, lineHeight: 13 }}>
+                              {unreadCount > 99 ? "99+" : unreadCount}
+                            </AppText>
+                          </View>
+                        )}
+                      </View>
+                      <AppText
+                        variant={active ? "bodyMedium" : "body"}
+                        style={{ color: active ? colors.accent : colors.text.secondary }}
+                        numberOfLines={1}
+                      >
+                        {item.label}
+                      </AppText>
+                    </View>
+                  )}
+                </Pressable>
+              </View>
             )
           })}
         </ScrollView>
@@ -338,6 +364,12 @@ const styles = StyleSheet.create({
   navScroll: { flex: 1 },
   nav: { flexDirection: "column", gap: spacing[1], paddingHorizontal: spacing[2], paddingBottom: spacing[4] },
   navItem: { borderRadius: radii.md, width: "100%" },
+  sectionLabel: {
+    paddingHorizontal: spacing[3],
+    paddingTop: spacing[3],
+    paddingBottom: spacing[1],
+    letterSpacing: 0.5,
+  },
   navItemInner: {
     flexDirection: "row",
     alignItems: "center",

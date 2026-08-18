@@ -5787,6 +5787,12 @@ paths:
                   type: string
                   nullable: true
                   example: "Wrinkled uniform, mismatched socks"
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date this check applies to (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
       responses:
         '200':
           description: Appearance updated successfully
@@ -5810,10 +5816,17 @@ paths:
     get:
       tags:
         - Appearance
-      summary: Get today's appearance for all staff (MANAGERS/SUPER ADMIN)
-      description: Retrieve appearance status for all staff members for today. Defaults to OK for all staff.
+      summary: Get appearance for all staff for a given date (MANAGERS/SUPER ADMIN)
+      description: Retrieve appearance status for all staff members for a given date. Defaults to OK for all staff, and to today if `date` is omitted.
       security:
         - BearerAuth: []
+      parameters:
+        - name: date
+          in: query
+          description: Date to retrieve (YYYY-MM-DD). Defaults to today.
+          schema:
+            type: string
+            format: date
       responses:
         '200':
           description: Today's appearance records
@@ -5871,7 +5884,7 @@ paths:
       tags:
         - Appearance
       summary: Mark staff appearance as bad (MANAGERS/SUPER ADMIN)
-      description: Mark specific appearance violations for a staff member for today
+      description: Mark specific appearance violations for a staff member for a given date (defaults to today)
       security:
         - BearerAuth: []
       parameters:
@@ -5904,6 +5917,12 @@ paths:
                   type: string
                   nullable: true
                   example: "Wrinkled uniform, mismatched socks"
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date this check applies to (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
       responses:
         '200':
           description: Appearance marked successfully
@@ -5944,7 +5963,7 @@ paths:
       tags:
         - Appearance
       summary: Reset appearance to OK (MANAGERS/SUPER ADMIN)
-      description: Reset staff appearance status back to OK for today
+      description: Reset staff appearance status back to OK for a given date (defaults to today)
       security:
         - BearerAuth: []
       parameters:
@@ -5953,6 +5972,19 @@ paths:
           required: true
           schema:
             type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date to reset (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
       responses:
         '200':
           description: Appearance reset successfully
@@ -6118,6 +6150,12 @@ paths:
                   type: string
                   nullable: true
                   example: "Workstation left uncleaned"
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date this check applies to (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
       responses:
         '200':
           description: Cleaning status updated successfully
@@ -6141,10 +6179,17 @@ paths:
     get:
       tags:
         - Cleaning
-      summary: Get today's cleaning status for all staff (MANAGERS/SUPER ADMIN)
-      description: Retrieve cleaning status for all staff members for today. Defaults to OK for all staff.
+      summary: Get cleaning status for all staff for a given date (MANAGERS/SUPER ADMIN)
+      description: Retrieve cleaning status for all staff members for a given date. Defaults to OK for all staff, and to today if `date` is omitted.
       security:
         - BearerAuth: []
+      parameters:
+        - name: date
+          in: query
+          description: Date to retrieve (YYYY-MM-DD). Defaults to today.
+          schema:
+            type: string
+            format: date
       responses:
         '200':
           description: Today's cleaning records
@@ -6202,7 +6247,7 @@ paths:
       tags:
         - Cleaning
       summary: Mark staff cleaning as bad (MANAGERS/SUPER ADMIN)
-      description: Mark cleaning violation for a staff member for today
+      description: Mark cleaning violation for a staff member for a given date (defaults to today)
       security:
         - BearerAuth: []
       parameters:
@@ -6235,6 +6280,12 @@ paths:
                   type: string
                   nullable: true
                   example: "Workstation left uncleaned"
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date this check applies to (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
       responses:
         '200':
           description: Cleaning marked successfully
@@ -6275,7 +6326,7 @@ paths:
       tags:
         - Cleaning
       summary: Reset cleaning status to OK (MANAGERS/SUPER ADMIN)
-      description: Reset staff cleaning status back to OK for today
+      description: Reset staff cleaning status back to OK for a given date (defaults to today)
       security:
         - BearerAuth: []
       parameters:
@@ -6284,6 +6335,19 @@ paths:
           required: true
           schema:
             type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date to reset (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
       responses:
         '200':
           description: Cleaning status reset successfully
@@ -6390,6 +6454,369 @@ paths:
       responses:
         '200':
           description: Cleaning statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      period:
+                        type: object
+                      totalStaff:
+                        type: integer
+                      staffWithBadDays:
+                        type: integer
+                      stats:
+                        type: array
+                        items:
+                          type: object
+        '403':
+          description: Forbidden - managers/superadmin only
+
+  /welcoming-customer/{staffId}:
+    put:
+      tags:
+        - Welcoming Customer
+      summary: Update staff welcoming customer status (MANAGERS/SUPER ADMIN)
+      description: Update welcoming customer status for a staff member. Use status "ok" to reset, or "bad" with violations to mark violations.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [ok, bad]
+                  example: bad
+                violations:
+                  type: array
+                  description: Required if status is "bad"
+                  items:
+                    type: string
+                    enum: [no_greeting, no_smile, ignored_customer]
+                  example: [no_greeting]
+                remarks:
+                  type: string
+                  nullable: true
+                  example: "Did not greet customer at entry"
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date this check applies to (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
+      responses:
+        '200':
+          description: Welcoming customer status updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+        '400':
+          description: Bad request - issues required when status is bad
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /welcoming-customer/today:
+    get:
+      tags:
+        - Welcoming Customer
+      summary: Get welcoming customer status for all staff for a given date (MANAGERS/SUPER ADMIN)
+      description: Retrieve welcoming customer status for all staff members for a given date. Defaults to OK for all staff, and to today if `date` is omitted.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: date
+          in: query
+          description: Date to retrieve (YYYY-MM-DD). Defaults to today.
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Today's welcoming customer records
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      date:
+                        type: string
+                        format: date
+                        example: "2026-08-09"
+                      count:
+                        type: integer
+                        example: 50
+                      badCount:
+                        type: integer
+                        example: 3
+                      staff:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            staffId:
+                              type: integer
+                            staffName:
+                              type: string
+                            date:
+                              type: string
+                            status:
+                              type: string
+                              enum: [ok, bad]
+                            violations:
+                              type: array
+                              items:
+                                type: string
+                                enum: [no_greeting, no_smile, ignored_customer]
+                            remarks:
+                              type: string
+                              nullable: true
+                            markedAt:
+                              type: string
+                              format: date-time
+                              nullable: true
+        '403':
+          description: Forbidden - managers/superadmin only
+
+  /welcoming-customer/mark-bad/{staffId}:
+    post:
+      tags:
+        - Welcoming Customer
+      summary: Mark staff welcoming customer status as bad (MANAGERS/SUPER ADMIN)
+      description: Mark welcoming customer violation(s) for a staff member for a given date (defaults to today)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - violations
+              properties:
+                status:
+                  type: string
+                  enum: [ok, bad]
+                  default: bad
+                violations:
+                  type: array
+                  description: Welcoming customer violations to mark
+                  items:
+                    type: string
+                    enum: [no_greeting, no_smile, ignored_customer]
+                  example: [no_greeting]
+                remarks:
+                  type: string
+                  nullable: true
+                  example: "Did not greet customer at entry"
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date this check applies to (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
+      responses:
+        '200':
+          description: Welcoming customer marked successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      status:
+                        type: string
+                      violations:
+                        type: array
+                        items:
+                          type: string
+                      remarks:
+                        type: string
+                      markedAt:
+                        type: string
+                        format: date-time
+        '400':
+          description: Bad request
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /welcoming-customer/reset/{staffId}:
+    post:
+      tags:
+        - Welcoming Customer
+      summary: Reset welcoming customer status to OK (MANAGERS/SUPER ADMIN)
+      description: Reset staff welcoming customer status back to OK for a given date (defaults to today)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date to reset (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
+      responses:
+        '200':
+          description: Welcoming customer status reset successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      status:
+                        type: string
+                        example: ok
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /welcoming-customer/history/{staffId}:
+    get:
+      tags:
+        - Welcoming Customer
+      summary: Get welcoming customer history (MANAGERS/SUPER ADMIN)
+      description: Get welcoming customer history for a specific staff member
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: days
+          in: query
+          description: Number of days to look back (default 30)
+          schema:
+            type: integer
+            default: 30
+      responses:
+        '200':
+          description: Welcoming customer history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      period:
+                        type: string
+                      stats:
+                        type: object
+                        properties:
+                          totalDays:
+                            type: integer
+                          badDays:
+                            type: integer
+                          okDays:
+                            type: integer
+                          badPercentage:
+                            type: string
+                      history:
+                        type: array
+                        items:
+                          type: object
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /welcoming-customer/stats/overview:
+    get:
+      tags:
+        - Welcoming Customer
+      summary: Get welcoming customer statistics (MANAGERS/SUPER ADMIN)
+      description: Get aggregated welcoming customer statistics across staff
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Welcoming customer statistics
           content:
             application/json:
               schema:
@@ -7566,6 +7993,16 @@ paths:
                       type: integer
                       example: 5
                       description: Full points forfeited for the month if any single day is marked bad
+                welcomingCustomer:
+                  type: object
+                  properties:
+                    enabled:
+                      type: boolean
+                      example: true
+                    maxPoints:
+                      type: integer
+                      example: 10
+                      description: Full points forfeited for the month if any single day is marked bad
                 meeting:
                   type: object
                   properties:
@@ -7613,6 +8050,343 @@ paths:
           description: Forbidden - managers/superadmin only
         '400':
           description: Bad request - invalid configuration
+
+  /feedback/questions:
+    get:
+      tags:
+        - Feedback
+      summary: List feedback questions (MANAGERS/HR/SUPER ADMIN)
+      description: Returns every question in the bank, active and inactive, ordered by `order`.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Feedback questions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FeedbackQuestion'
+        '403':
+          description: Forbidden - managers/HR/superAdmin only
+    post:
+      tags:
+        - Feedback
+      summary: Create a feedback question (MANAGERS/HR/SUPER ADMIN)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - text
+              properties:
+                text:
+                  type: string
+                  example: "Was the staff member polite and helpful?"
+                order:
+                  type: integer
+                  description: Display order (lower first). Defaults to 0.
+                  example: 1
+      responses:
+        '201':
+          description: Question created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/FeedbackQuestion'
+        '400':
+          description: Bad request - text is required
+        '403':
+          description: Forbidden - managers/HR/superAdmin only
+
+  /feedback/questions/{id}:
+    patch:
+      tags:
+        - Feedback
+      summary: Update or retire a feedback question (MANAGERS/HR/SUPER ADMIN)
+      description: Partial update - only send the fields you want to change. Set `isActive` to false to retire a question without deleting it (questions already sent to customers keep their own text snapshot, so retiring one never changes past submissions).
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: FeedbackQuestion MongoDB ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                text:
+                  type: string
+                isActive:
+                  type: boolean
+                order:
+                  type: integer
+      responses:
+        '200':
+          description: Question updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/FeedbackQuestion'
+        '403':
+          description: Forbidden - managers/HR/superAdmin only
+        '404':
+          description: Question not found
+
+  /feedback/requests:
+    post:
+      tags:
+        - Feedback
+      summary: Create a feedback link for a customer (staff)
+      description: |
+        Creates a FeedbackRequest for the given customer, snapshotting every currently-active
+        question so later edits to the question bank never change what a customer already
+        answered or is mid-way through. Returns a `token` - the frontend builds the customer-facing
+        link around it (e.g. `https://.../feedback/{token}`) and shares it (WhatsApp, SMS, etc.).
+        staffId is resolved from the authenticated user, not from the request body. Links expire
+        7 days after creation.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - ledgerId
+              properties:
+                ledgerId:
+                  type: integer
+                  description: Rowbest ledger id of the customer to request feedback from
+                  example: 1024
+      responses:
+        '201':
+          description: Feedback link created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      token:
+                        type: string
+                        example: "b6c1a5e2-4f3d-4a1b-9c2e-7d8f6a1b2c3d"
+                      expiresAt:
+                        type: string
+                        format: date-time
+        '400':
+          description: Bad request - ledgerId missing, or no active questions configured
+        '403':
+          description: No staff record for the current user
+        '404':
+          description: Customer not found
+
+  /feedback/staff/{userId}:
+    get:
+      tags:
+        - Feedback
+      summary: Get a staff member's sent feedback requests
+      description: Staff can only view their own. Managers/HR/superAdmin may view any staff member's.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Rowbest numeric user ID (Users.user_id) of the staff member
+      responses:
+        '200':
+          description: Feedback requests sent by this staff member, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FeedbackRequest'
+        '403':
+          description: Forbidden - staff can only view their own
+        '404':
+          description: Staff not found
+
+  /feedback/flagged:
+    get:
+      tags:
+        - Feedback
+      summary: List flagged feedback submissions for review (MANAGERS/HR/SUPER ADMIN)
+      description: Feedback requests whose submitting device (fingerprint or IP) also appears on a completed request for a different customer - a signal the same person, possibly the sending staff member, may have answered on behalf of more than one customer. Not auto-blocked at submission time, surfaced here for manual review only.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Flagged feedback requests, newest completion first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FeedbackRequest'
+        '403':
+          description: Forbidden - managers/HR/superAdmin only
+
+  /feedback/{token}:
+    get:
+      tags:
+        - Feedback
+      summary: Get a feedback link's questions (public, no auth)
+      description: Hit directly by the customer's browser from the link a staff member shared - not an authenticated app request. Returns an empty `questions` array once the link is no longer pending (completed/expired).
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Opaque token from the feedback link
+      responses:
+        '200':
+          description: Feedback link status and questions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                        enum: [pending, completed, expired]
+                      customerName:
+                        type: string
+                        example: "Sunrise Traders"
+                      questions:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            questionId:
+                              type: string
+                            text:
+                              type: string
+        '404':
+          description: Feedback link not found
+    post:
+      tags:
+        - Feedback
+      summary: Submit feedback answers (public, no auth)
+      description: |
+        Hit directly by the customer's browser. One-time submission - a link that is already
+        completed or has expired is rejected. The server captures IP address and User-Agent
+        itself (never trusted from the request body); `deviceFingerprint` is an opaque
+        client-generated identifier the frontend is responsible for producing (e.g. a persisted
+        localStorage ID or a fingerprinting library's hash) and is stored as-is, purely as a
+        signal for the flagged-review queue - it is never used to block a submission outright.
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Opaque token from the feedback link
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - answers
+              properties:
+                answers:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - questionId
+                      - answer
+                    properties:
+                      questionId:
+                        type: string
+                      answer:
+                        type: boolean
+                deviceFingerprint:
+                  type: string
+                  description: Opaque client-generated device identifier, frontend's choice of source
+                  example: "f3a1c9e0b2d4"
+      responses:
+        '200':
+          description: Feedback submitted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                        example: "completed"
+        '400':
+          description: Bad request - answers missing/invalid, or an answer references a question not on this link
+        '404':
+          description: Feedback link not found
+        '409':
+          description: Feedback link is already completed, or has expired
 
 components:
   securitySchemes:
@@ -8658,9 +9432,10 @@ components:
         - Leaves: 10 points
         - Appearance: 5 points
         - Cleaning Culture: 5 points
+        - Welcoming Customer: 10 points
         - Extra Performance: 10 points
         - Testimonial: 20 points
-        - Future rules: 40 points (reserved)
+        - Future rules: 30 points (reserved)
       properties:
         _id:
           type: string
@@ -8748,6 +9523,18 @@ components:
               type: integer
               description: Points for cleaning category, awarded in full only if no day in the month is marked bad
               example: 5
+        welcomingCustomer:
+          type: object
+          description: Welcoming customer scoring rules (binary - full points forfeited for the month on any single bad day)
+          properties:
+            enabled:
+              type: boolean
+              description: Enable/disable welcoming customer scoring
+              example: true
+            maxPoints:
+              type: integer
+              description: Points for welcoming customer category, awarded in full only if no day in the month is marked bad
+              example: 10
         extraPerformance:
           type: object
           description: Extra performance scoring rules (Approved submissions)
@@ -8785,6 +9572,119 @@ components:
           format: date-time
           description: When this config was last updated
 
+    FeedbackQuestion:
+      type: object
+      description: A yes/no question in the feedback question bank
+      properties:
+        _id:
+          type: string
+          example: 6a4417ccd5ddf48055605a24
+        text:
+          type: string
+          example: "Was the staff member polite and helpful?"
+        isActive:
+          type: boolean
+          description: Inactive questions are excluded from new feedback links but remain on any FeedbackRequest that already snapshotted them
+          example: true
+        order:
+          type: integer
+          description: Display order, lower first
+          example: 1
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    FeedbackRequest:
+      type: object
+      description: A feedback link sent to a customer, its snapshotted questions, and (once completed) the customer's answers and submitting device info
+      properties:
+        _id:
+          type: string
+          example: 6a4417ccd5ddf48055605a25
+        token:
+          type: string
+          description: Opaque token used in the customer-facing link
+          example: "b6c1a5e2-4f3d-4a1b-9c2e-7d8f6a1b2c3d"
+        staffId:
+          type: integer
+          description: Staff.id (internal id) of the staff member who sent the link
+          example: 2646
+        staffUserId:
+          type: integer
+          description: Rowbest numeric user ID of the staff member who sent the link
+          example: 3027
+        ledgerId:
+          type: integer
+          description: Rowbest ledger id of the customer
+          example: 1024
+        customerName:
+          type: string
+          example: "Sunrise Traders"
+        customerMobile:
+          type: string
+          example: "9876543210"
+        status:
+          type: string
+          enum: [pending, completed, expired]
+          example: "completed"
+        questions:
+          type: array
+          description: Snapshot of active questions at the time this link was created - unaffected by later edits to the question bank
+          items:
+            type: object
+            properties:
+              questionId:
+                type: string
+              text:
+                type: string
+        answers:
+          type: array
+          description: Present once status is "completed"
+          items:
+            type: object
+            properties:
+              questionId:
+                type: string
+              answer:
+                type: boolean
+        device:
+          type: object
+          description: Captured at submission time only
+          properties:
+            fingerprint:
+              type: string
+              description: Client-supplied opaque device identifier
+            ipAddress:
+              type: string
+            userAgent:
+              type: string
+        flagged:
+          type: boolean
+          description: Set if this submission's device fingerprint/IP also appears on a completed request for a different customer - a manual-review signal, not an automatic block
+          example: false
+        flagReason:
+          type: string
+          example: "Device also used for feedback on a different customer (ledger 1031, request 6a4417ccd5ddf48055605a99)"
+        sentAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+          description: Link stops accepting submissions after this time (7 days after sentAt)
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
 tags:
   - name: System
     description: System health and status endpoints
@@ -8812,10 +9712,18 @@ tags:
     description: Staff appearance and dress code tracking
   - name: Cleaning
     description: Staff cleaning culture tracking
+  - name: Welcoming Customer
+    description: Staff welcoming customer behavior tracking
   - name: Extra Performance
     description: Staff extra performance submissions and approval workflow
   - name: Testimonials
     description: Peer-to-peer testimonials between staff, with manager/HR/superAdmin approval workflow
+  - name: Feedback
+    description: |
+      Customer feedback via a link a staff member sends. Admins manage a bank of yes/no
+      questions; a link snapshots the currently-active questions so later edits never change
+      what a customer already answered. The customer-facing GET/POST /feedback/{token} routes
+      are public (no auth) - everything else requires a bearer token.
   - name: Meetings
     description: Meeting creation and attendance tracking. All active staff default to present; admins/HR mark individuals absent or excused.
   - name: Scoring
@@ -8824,10 +9732,12 @@ tags:
       - Attendance: 10 points (late arrivals tracking)
       - Leaves: 10 points (approved leaves per month)
       - Appearance: 5 points (dress code violations)
+      - Cleaning Culture: 5 points (forfeited entirely if any day is marked bad)
+      - Welcoming Customer: 10 points (forfeited entirely if any day is marked bad)
       - Meeting: 5 points (forfeited if missed meetings exceed the configured limit)
       - Extra Performance: 10 points (approved submissions)
       - Testimonial: 20 points (5 points per approved testimonial, max 4)
-      - Future rules: 40 points (reserved for expansion)
+      - Future rules: 25 points (reserved for expansion)
 
 security:
   - BearerAuth: []
