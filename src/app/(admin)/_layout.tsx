@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react"
 import { View, Pressable, ScrollView, StyleSheet, Platform, StatusBar, Modal, Animated, TouchableWithoutFeedback } from "react-native"
 import { Stack, useRouter, usePathname } from "expo-router"
-import { MessageCircleMore, CalendarCheck, CalendarClock, ClipboardCheck, Trophy, Award, Users, Settings, LogOut, UsersRound, Bell, ChevronLeft, ChevronRight, IdCard, Radar, ListChecks, MessageSquareQuote, Presentation, ThumbsUp } from "lucide-react-native"
+import { MessageCircleMore, CalendarCheck, CalendarClock, ClipboardCheck, Trophy, Award, Users, Settings, Settings2, LogOut, UsersRound, Bell, ChevronLeft, ChevronRight, IdCard, Radar, ListChecks, MessageSquareQuote, Presentation, ThumbsUp, Star } from "lucide-react-native"
 import { AdminDrawerContext } from "../../contexts/adminDrawer"
 import { useQuery } from "@tanstack/react-query"
 import AppText from "../../components/ui/AppText"
@@ -36,7 +36,9 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Daily Check",         href: "/(admin)/daily-check",       icon: ClipboardCheck,    matchExact: false, roles: ["superAdmin", "manager", "hr"], section: "scoring" },
   { label: "Testimonials",        href: "/(admin)/team-testimonials", icon: MessageSquareQuote, matchExact: false, roles: ["superAdmin", "manager", "hr"], section: "scoring" },
   { label: "Extra Performance",   href: "/(admin)/team-extra-performance", icon: Award,        matchExact: false, roles: ["superAdmin", "manager", "hr"], section: "scoring" },
+  { label: "Customer Feedback",   href: "/(admin)/team-feedback-replies", icon: Star, matchExact: false, roles: ["superAdmin", "manager", "hr"], section: "scoring" },
   { label: "Scores",              href: "/(admin)/scores",            icon: Trophy,            matchExact: false, roles: ["superAdmin", "manager", "hr"], section: "scoring" },
+  { label: "Scoring Rules",       href: "/(admin)/scoring-config/departments", icon: Settings2, matchExact: false, roles: ["superAdmin"], section: "scoring" },
 
   { label: "Notifications",       href: "/notifications",             icon: Bell,              matchExact: false, roles: ["superAdmin", "manager"], section: "admin" },
   { label: "Staff",               href: "/(admin)/staff",             icon: IdCard,            matchExact: false, roles: ["superAdmin", "manager", "hr"], section: "admin" },

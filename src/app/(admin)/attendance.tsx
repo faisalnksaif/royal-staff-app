@@ -13,7 +13,8 @@ import {
 } from "react-native"
 import DateTimePicker, { DateTimePickerAndroid } from "@react-native-community/datetimepicker"
 import { useRouter } from "expo-router"
-import { CheckCircle, XCircle, UserPlus, BarChart3, ChevronDown, ChevronLeft, ChevronRight, ChevronsUpDown, LogIn, LogOut, AlertTriangle, Clock, Pencil, Trash2, Plus } from "lucide-react-native"
+import { CheckCircle, XCircle, UserPlus, BarChart3, ChevronDown, ChevronLeft, ChevronRight, ChevronsUpDown, LogIn, LogOut, AlertTriangle, Clock, Pencil, Trash2, Plus, MoreVertical } from "lucide-react-native"
+import ActionMenu, { ActionMenuItem, ActionMenuAnchor } from "../../components/shared/ActionMenu"
 import BackButton from "../../components/shared/BackButton"
 import DrawerMenuButton from "../../components/shared/DrawerMenuButton"
 import RefreshButton from "../../components/shared/RefreshButton"
@@ -68,7 +69,7 @@ function needsAttention(record: AttendanceRecord): boolean {
   return record.status === "late" || breakExcessMinutes > 0 || !!hasAutoClosed || record.overtimeApprovalStatus === "pending"
 }
 
-function OvertimeBadge({ record }: { record: AttendanceRecord }) {
+function OvertimeBadge({ record, hidePending }: { record: AttendanceRecord; hidePending?: boolean }) {
   const approved = record.approvedOvertimeMinutes ?? 0
   const pending = record.pendingOvertimeMinutes ?? 0
   const status = record.overtimeApprovalStatus
@@ -80,7 +81,7 @@ function OvertimeBadge({ record }: { record: AttendanceRecord }) {
       </AppText>
     )
   }
-  if (status === "pending" && pending > 0) {
+  if (status === "pending" && pending > 0 && !hidePending) {
     return (
       <AppText variant="caption" style={{ color: palette.warning.default }}>
         {"  ·  "}{formatWorkHours(pending / 60)} OT pending
@@ -97,21 +98,52 @@ function OvertimeBadge({ record }: { record: AttendanceRecord }) {
   return null
 }
 
-function OvertimeDecisionButtons({
+function OvertimeDecisionChip({
   record, onApprove, onReject,
 }: {
   record: AttendanceRecord
   onApprove: (record: AttendanceRecord) => void
   onReject: (record: AttendanceRecord) => void
 }) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [menuAnchor, setMenuAnchor] = useState<ActionMenuAnchor | null>(null)
+  const btnRef = useRef<View>(null)
+  const pending = record.pendingOvertimeMinutes ?? 0
+
+  function openMenu() {
+    btnRef.current?.measureInWindow((x, y, width, height) => {
+      setMenuAnchor({ x, y, width, height })
+      setMenuOpen(true)
+    })
+  }
+
+  const items: ActionMenuItem[] = [
+    {
+      label: "Approve overtime",
+      icon: <CheckCircle size={18} color={palette.success.default} strokeWidth={2} />,
+      onPress: () => onApprove(record),
+    },
+    {
+      label: "Reject overtime",
+      icon: <XCircle size={18} color={palette.error.default} strokeWidth={2} />,
+      color: palette.error.default,
+      onPress: () => onReject(record),
+    },
+  ]
+
   return (
-    <View style={{ flexDirection: "row", gap: spacing[1], marginLeft: spacing[1] }}>
-      <Pressable onPress={() => onApprove(record)} hitSlop={8}>
-        <CheckCircle size={18} color={palette.success.default} strokeWidth={2} />
+    <View ref={btnRef} collapsable={false}>
+      <Pressable
+        onPress={openMenu}
+        hitSlop={4}
+        style={[styles.otChip, { backgroundColor: palette.warning.default + "1a" }]}
+      >
+        <AppText variant="caption" style={{ color: palette.warning.default, fontSize: 11 }}>
+          {formatWorkHours(pending / 60)} OT pending
+        </AppText>
+        <MoreVertical size={13} color={palette.warning.default} strokeWidth={2} />
       </Pressable>
-      <Pressable onPress={() => onReject(record)} hitSlop={8}>
-        <XCircle size={18} color={palette.error.default} strokeWidth={2} />
-      </Pressable>
+      <ActionMenu visible={menuOpen} onClose={() => setMenuOpen(false)} items={items} anchor={menuAnchor} />
     </View>
   )
 }
@@ -698,7 +730,10 @@ function AttendanceRow({
                 {"  ·  "}{record.lateMinutes}m late
               </AppText>
             )}
-            <OvertimeBadge record={record} />
+            <OvertimeBadge record={record} hidePending={canDecideOvertime} />
+            {canDecideOvertime && record.overtimeApprovalStatus === "pending" && (
+              <OvertimeDecisionChip record={record} onApprove={onApproveOvertime} onReject={onRejectOvertime} />
+            )}
             {breakExcessMinutes > 0 && (
               <AppText variant="caption" style={{ color: palette.warning.default }}>
                 {"  ·  "}{breakExcessMinutes}m over break
@@ -717,10 +752,6 @@ function AttendanceRow({
             {STATUS_LABEL[record.status]}
           </AppText>
         </View>
-
-        {canDecideOvertime && record.overtimeApprovalStatus === "pending" && (
-          <OvertimeDecisionButtons record={record} onApprove={onApproveOvertime} onReject={onRejectOvertime} />
-        )}
 
         {canEdit && (
           <Pressable onPress={() => onEdit(record)} hitSlop={8} style={{ marginLeft: spacing[1] }}>
@@ -914,7 +945,10 @@ function StaffCardDesktop({
                 {record.totalWorkHours != null ? "  ·  " : ""}{record.lateMinutes}m late
               </AppText>
             )}
-            <OvertimeBadge record={record} />
+            <OvertimeBadge record={record} hidePending={canDecideOvertime} />
+            {canDecideOvertime && record.overtimeApprovalStatus === "pending" && (
+              <OvertimeDecisionChip record={record} onApprove={onApproveOvertime} onReject={onRejectOvertime} />
+            )}
             {breakExcessMinutes > 0 && (
               <AppText variant="caption" style={{ color: palette.warning.default }}>
                 {"  ·  "}{breakExcessMinutes}m over break
@@ -932,9 +966,6 @@ function StaffCardDesktop({
             {STATUS_LABEL[record.status]}
           </AppText>
         </View>
-        {canDecideOvertime && record.overtimeApprovalStatus === "pending" && (
-          <OvertimeDecisionButtons record={record} onApprove={onApproveOvertime} onReject={onRejectOvertime} />
-        )}
         {canEdit && (
           <Pressable onPress={() => onEdit(record)} hitSlop={8} style={{ marginLeft: spacing[2] }}>
             <Pencil size={16} color={colors.text.tertiary} strokeWidth={2} />
@@ -1553,6 +1584,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[1],
     borderRadius: radii.full,
+  },
+  otChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[1],
+    paddingHorizontal: spacing[2],
+    paddingVertical: 2,
+    borderRadius: radii.full,
+    marginLeft: spacing[1],
   },
   onlineDot: {
     position: "absolute",

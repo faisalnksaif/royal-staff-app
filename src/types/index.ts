@@ -325,6 +325,19 @@ export interface CustomerLedgerResponse {
     staffName: string | null
     source: "assigned" | "dynamic" | "unassigned"
   } | null
+  feedback?: CustomerFeedbackSubmission[]
+}
+
+export interface CustomerFeedbackSubmission {
+  _id: string
+  staffId: number
+  staffName: string | null
+  questions: FeedbackSnapshotQuestion[]
+  answers: FeedbackAnswer[]
+  flagged: boolean
+  flagReason: string | null
+  sentAt: string
+  completedAt: string
 }
 
 export interface AgingBucket {
@@ -815,6 +828,74 @@ export interface TodayCleaning {
   staff: CleaningRecord[]
 }
 
+export type CustomerDealingItemKey = "poor_customer_dealing"
+
+export interface CustomerDealingRecord {
+  staffId: number
+  staffName: string
+  date?: string
+  status?: "ok" | "bad"
+  violations?: CustomerDealingItemKey[]
+  issues?: CustomerDealingItemKey[]
+  remarks?: string | null
+  markedAt?: string | null
+}
+
+export interface TodayCustomerDealing {
+  date: string
+  count: number
+  badCount: number
+  staff: CustomerDealingRecord[]
+}
+
+export type CustomerQuotationFollowupItemKey = "missed_followup"
+
+export interface CustomerQuotationFollowupRecord {
+  staffId: number
+  staffName: string
+  date?: string
+  status?: "ok" | "bad"
+  violations?: CustomerQuotationFollowupItemKey[]
+  issues?: CustomerQuotationFollowupItemKey[]
+  remarks?: string | null
+  markedAt?: string | null
+}
+
+export interface TodayCustomerQuotationFollowup {
+  date: string
+  count: number
+  badCount: number
+  staff: CustomerQuotationFollowupRecord[]
+}
+
+export interface DailyCheckCategoryDef {
+  category: string
+  label: string
+  apiBasePath: string
+  violations: string[]
+  note?: string
+}
+
+export type DailyCheckCategoriesByDepartment = Record<string, DailyCheckCategoryDef[]>
+
+export interface DailyCheckCategoryRecord {
+  staffId: number
+  staffName: string
+  date?: string
+  status?: "ok" | "bad"
+  violations?: string[]
+  issues?: string[]
+  remarks?: string | null
+  markedAt?: string | null
+}
+
+export interface TodayDailyCheckCategory {
+  date: string
+  count: number
+  badCount: number
+  staff: DailyCheckCategoryRecord[]
+}
+
 export interface ScoreBreakdownItem {
   rule: string
   category: string
@@ -852,29 +933,133 @@ export interface ScoringConfig {
   month: string
   year: number
   monthNumber: number
-  attendance: {
+  /** @deprecated superseded by timeKeeping, kept for older config documents */
+  attendance?: {
     maxLateCases: number
     pointsIfNoLate: number
     penaltyIfExceeds: number
     lateThresholdMinutes: number
   }
-  leaves: {
+  /** @deprecated superseded by attendanceLeave, kept for older config documents */
+  leaves?: {
     maxAllowedPerMonth: number
     pointsIfWithinLimit: number
     penaltyIfExceeds: number
   }
-  appearance: {
+  timeKeeping?: {
+    maxLateCases: number
+    pointsIfWithinLimit: number
+    penaltyIfExceeds: number
+    mode?: "flat" | "perExcess"
+    pointsPerExtraCase?: number
+  }
+  attendanceLeave?: {
+    casual?: {
+      maxAllowedPerMonth: number
+      pointsIfWithinLimit: number
+      penaltyIfExceeds: number
+      pointsPerExtraLeave?: number
+    }
+    medical?: {
+      maxAllowedPerMonth: number
+      penaltyIfExceeds: number
+      pointsPerExtraLeave?: number
+    }
+    mode?: "flat" | "perExcess"
+  }
+  appearance?: {
     enabled: boolean
     pointsPerViolation: number
     maxPoints: number
+    mode?: ScoringRuleMode
     violations: string[]
   }
-  extraPerformance: {
+  cleaning?: {
+    enabled: boolean
+    maxPoints: number
+    mode?: ScoringRuleMode
+    pointsPerBadDay?: number
+  }
+  welcomingCustomer?: {
+    enabled: boolean
+    maxPoints: number
+    mode?: ScoringRuleMode
+    pointsPerBadDay?: number
+  }
+  customerDealing?: {
+    enabled: boolean
+    maxPoints: number
+    pointsPerBadFeedback?: number
+    mode?: ScoringRuleMode
+    pointsPerBadDay?: number
+  }
+  customerQuotationFollowup?: {
+    enabled: boolean
+    maxPoints: number
+    mode?: ScoringRuleMode
+    pointsPerBadMark: number
+  }
+  meeting?: {
+    enabled: boolean
+    maxPoints: number
+    maxMissedAllowed: number
+  }
+  extraPerformance?: {
     pointsPerPerformance: number
     maxPointsAllowed: number
   }
+  testimonial?: {
+    pointsPerTestimonial: number
+    maxPointsAllowed: number
+  }
+  stockMaintenance?: {
+    enabled: boolean
+    maxPoints: number
+    mode?: ScoringRuleMode
+    pointsPerBadDay?: number
+  }
+  salesReturnHandling?: {
+    enabled: boolean
+    maxPoints: number
+    mode?: ScoringRuleMode
+    pointsPerBadDay?: number
+  }
+  wastage?: {
+    enabled: boolean
+    maxPoints: number
+    mode?: ScoringRuleMode
+    pointsPerBadDay?: number
+  }
+  stockTaking?: {
+    enabled: boolean
+    maxPoints: number
+    mode?: ScoringRuleMode
+    pointsPerBadDay?: number
+  }
+  workflowStatus?: {
+    enabled: boolean
+    maxPoints: number
+    mode?: ScoringRuleMode
+    pointsPerBadDay?: number
+  }
   isActive: boolean
 }
+
+export type ScoringRuleMode = "flat" | "perDay"
+
+export type ScoringDepartmentName = "Store" | "Plywood Godown" | "Glass Godown"
+
+export interface ScoringRubricRule {
+  ruleKey: string
+  category: string
+  maxPoints: number
+}
+
+export type ScoringRubricByDepartment = Record<string, ScoringRubricRule[]>
+
+export type ScoringConfigUpdatePayload = { month: string; department: string } & Partial<
+  Omit<ScoringConfig, "_id" | "year" | "monthNumber" | "isActive" | "month">
+>
 
 export type ExtraPerformanceStatus = "pending" | "approved" | "rejected"
 export type ExtraPerformanceCategory =
@@ -969,6 +1154,7 @@ export interface FeedbackRequest {
   token: string
   staffId: number
   staffUserId: number
+  staffName?: string | null
   ledgerId: number
   customerName: string
   customerMobile: string

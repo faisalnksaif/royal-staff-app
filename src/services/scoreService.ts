@@ -1,5 +1,11 @@
 import api from "./apiClient"
-import type { MonthlyScoresData, ScoringConfig, StaffScore } from "../types"
+import type {
+  MonthlyScoresData,
+  ScoringConfig,
+  ScoringConfigUpdatePayload,
+  ScoringRubricByDepartment,
+  StaffScore,
+} from "../types"
 
 async function getMonthlyOverview(
   month: string
@@ -14,15 +20,45 @@ async function getMonthlyOverview(
 }
 
 async function getScoringConfig(
-  month: string
+  month: string,
+  department?: string
 ): Promise<{ success: boolean; data: ScoringConfig }> {
+  const query = department
+    ? `?month=${month}&department=${encodeURIComponent(department)}`
+    : `?month=${month}`
   const { data } = await api.http.request({
-    path: `/scoring-config?month=${month}`,
+    path: `/scoring-config${query}`,
     method: "GET",
     secure: true,
     format: "json",
   })
   return data as { success: boolean; data: ScoringConfig }
+}
+
+async function updateScoringConfig(
+  payload: ScoringConfigUpdatePayload
+): Promise<{ success: boolean; data: ScoringConfig }> {
+  const { data } = await api.http.request({
+    path: "/scoring-config",
+    method: "PUT",
+    body: payload,
+    secure: true,
+    format: "json",
+  })
+  return data as { success: boolean; data: ScoringConfig }
+}
+
+async function getDepartmentRubrics(): Promise<{
+  success: boolean
+  data: ScoringRubricByDepartment
+}> {
+  const { data } = await api.http.request({
+    path: "/scoring-config/departments",
+    method: "GET",
+    secure: true,
+    format: "json",
+  })
+  return data as { success: boolean; data: ScoringRubricByDepartment }
 }
 
 async function calculateMonthly(month: string): Promise<{
@@ -42,4 +78,10 @@ async function calculateMonthly(month: string): Promise<{
   }
 }
 
-export const scoreService = { getMonthlyOverview, getScoringConfig, calculateMonthly }
+export const scoreService = {
+  getMonthlyOverview,
+  getScoringConfig,
+  updateScoringConfig,
+  getDepartmentRubrics,
+  calculateMonthly,
+}

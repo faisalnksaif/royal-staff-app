@@ -32,13 +32,14 @@ import {
   Lock,
   LockOpen,
   ThumbsUp,
+  XCircle,
 } from "lucide-react-native"
 import { Linking } from "react-native"
 import AppText from "../../../components/ui/AppText"
 import AppCard from "../../../components/ui/AppCard"
 import AppButton from "../../../components/ui/AppButton"
 import { useTheme } from "../../../providers/ThemeProvider"
-import { spacing, colors as palette } from "../../../constants/theme"
+import { spacing, radii, colors as palette } from "../../../constants/theme"
 import useAuthStore from "../../../stores/useAuthStore"
 import WhatsAppActions from "../../../components/shared/WhatsAppActions"
 import ContactMethodIcon from "../../../components/shared/ContactMethodIcon"
@@ -558,8 +559,8 @@ export default function CustomerDetailScreen() {
     initialTab?: string
   }>()
 
-  const [activeTab, setActiveTab] = useState<"followups" | "ledger" | "profile">(
-    initialTab === "ledger" ? "ledger" : initialTab === "profile" ? "profile" : "followups"
+  const [activeTab, setActiveTab] = useState<"followups" | "ledger" | "profile" | "feedback">(
+    initialTab === "ledger" ? "ledger" : initialTab === "profile" ? "profile" : initialTab === "feedback" ? "feedback" : "followups"
   )
   const [chartContainerWidth, setChartContainerWidth] = useState(0)
   const [staffPickerOpen, setStaffPickerOpen] = useState(false)
@@ -610,6 +611,15 @@ export default function CustomerDetailScreen() {
     isFetchingNextPage: ledgerFetchingNext,
     fetchNextPage: ledgerFetchNext,
   } = useCustomerLedger(isStaff ? null : customerId, { limit: 500 })
+
+  const { data: feedbackLedgerData, isLoading: feedbackLoading } = useCustomerLedger(
+    isStaff ? customerId : null,
+    { limit: 1 }
+  )
+
+  const customerFeedback = isStaff
+    ? feedbackLedgerData?.pages[0]?.feedback ?? []
+    : ledgerData?.pages[0]?.feedback ?? []
 
   const ledgerEntries = ledgerData?.pages.flatMap((p) => p.data.entries) ?? []
   const ledgerSummary = ledgerData?.pages[0]?.summary
@@ -736,11 +746,12 @@ export default function CustomerDetailScreen() {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabRow} style={styles.tabWrap}>
           {([
             { value: "followups", label: "Follow-ups" },
+            { value: "feedback", label: "Feedback" },
             ...(user?.role !== "staff" ? [
               { value: "ledger",  label: "Ledger" },
               { value: "profile", label: "Profile" },
             ] : []),
-          ] as { value: "followups" | "ledger" | "profile"; label: string }[]).map(({ value, label }) => {
+          ] as { value: "followups" | "ledger" | "profile" | "feedback"; label: string }[]).map(({ value, label }) => {
             const isActive = activeTab === value
             return (
               <TouchableOpacity
@@ -788,6 +799,57 @@ export default function CustomerDetailScreen() {
             ListEmptyComponent={
               <View style={styles.center}>
                 <AppText color="tertiary">No follow-ups yet</AppText>
+              </View>
+            }
+          />
+        )
+      )}
+
+      {/* Feedback tab */}
+      {activeTab === "feedback" && (
+        feedbackLoading && isStaff ? (
+          <ActivityIndicator size="large" color={colors.accent} style={styles.center} />
+        ) : (
+          <FlatList
+            data={customerFeedback}
+            keyExtractor={(item) => item._id}
+            renderItem={({ item, index }) => (
+              <AnimatedListItem index={index}>
+                <AppCard elevation="sm" style={styles.feedbackCard}>
+                  <View style={styles.feedbackCardHeader}>
+                    <AppText variant="bodyMedium">{item.staffName ?? "Unknown staff"}</AppText>
+                    <AppText variant="caption" color="tertiary">{formatDate(item.completedAt)}</AppText>
+                  </View>
+                  {item.flagged && (
+                    <View style={styles.flaggedPill}>
+                      <AppText variant="caption" style={{ color: palette.error.default }}>
+                        {item.flagReason ?? "Flagged for review"}
+                      </AppText>
+                    </View>
+                  )}
+                  <View style={{ marginTop: spacing[3], gap: spacing[2] }}>
+                    {item.questions.map((q) => {
+                      const answer = item.answers.find((a) => a.questionId === q.questionId)?.answer
+                      return (
+                        <View key={q.questionId} style={styles.feedbackAnswerRow}>
+                          <AppText variant="bodySmall" color="secondary" style={{ flex: 1 }}>{q.text}</AppText>
+                          {answer === true ? (
+                            <CheckCircle2 size={16} color={palette.success.default} strokeWidth={2} />
+                          ) : answer === false ? (
+                            <XCircle size={16} color={palette.error.default} strokeWidth={2} />
+                          ) : null}
+                        </View>
+                      )
+                    })}
+                  </View>
+                </AppCard>
+              </AnimatedListItem>
+            )}
+            ItemSeparatorComponent={() => <View style={{ height: spacing[3] }} />}
+            contentContainerStyle={styles.list}
+            ListEmptyComponent={
+              <View style={styles.center}>
+                <AppText color="tertiary">No feedback submitted yet</AppText>
               </View>
             }
           />
@@ -1161,6 +1223,17 @@ export default function CustomerDetailScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
+  feedbackCard: { padding: spacing[4] },
+  feedbackCardHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  feedbackAnswerRow: { flexDirection: "row", alignItems: "center", gap: spacing[2] },
+  flaggedPill: {
+    marginTop: spacing[2],
+    paddingHorizontal: spacing[2],
+    paddingVertical: 3,
+    borderRadius: radii.full,
+    backgroundColor: palette.error.default + "18",
+    alignSelf: "flex-start",
+  },
   mobileContent: { flex: 1 },
   desktopContent: {
     flex: 1,

@@ -929,6 +929,51 @@ paths:
                       source:
                         type: string
                         enum: [assigned, dynamic, unassigned]
+                  feedback:
+                    type: array
+                    description: Completed customer feedback submissions for this customer, newest first (see POST /feedback/requests). Pending/expired links (no answers yet) are excluded.
+                    items:
+                      type: object
+                      properties:
+                        _id:
+                          type: string
+                        staffId:
+                          type: integer
+                          description: Staff.id (internal id) of the staff member who sent the feedback link
+                        staffName:
+                          type: string
+                          nullable: true
+                          description: Null if the staff record no longer exists
+                        questions:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              questionId:
+                                type: string
+                              text:
+                                type: string
+                        answers:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              questionId:
+                                type: string
+                              answer:
+                                type: boolean
+                        flagged:
+                          type: boolean
+                          description: See GET /feedback/flagged - a manual-review signal, not a claim of confirmed fraud
+                        flagReason:
+                          type: string
+                          nullable: true
+                        sentAt:
+                          type: string
+                          format: date-time
+                        completedAt:
+                          type: string
+                          format: date-time
         '400':
           description: activeDays/churnedDays out of order
         '403':
@@ -3817,7 +3862,7 @@ paths:
       tags:
         - Attendance
       summary: Delete a staff member's enrolled photo(s)
-      description: Removes all enrolled reference photos/descriptors for a staff member. They can re-enroll afterward. Requires owner, manager, or superAdmin role.
+      description: Removes all enrolled reference photos/descriptors for a staff member. They can re-enroll afterward. Staff can only clear their own enrollment; owner, manager, or superAdmin can clear any staff member's enrollment.
       security:
         - BearerAuth: []
       parameters:
@@ -5771,6 +5816,9 @@ paths:
           application/json:
             schema:
               type: object
+              required:
+                - violations
+                - remarks
               properties:
                 status:
                   type: string
@@ -5785,7 +5833,6 @@ paths:
                   example: [uniform, socks_banyan]
                 remarks:
                   type: string
-                  nullable: true
                   example: "Wrinkled uniform, mismatched socks"
                 date:
                   type: string
@@ -5806,7 +5853,7 @@ paths:
                   data:
                     type: object
         '400':
-          description: Bad request - issues required when status is bad
+          description: Bad request - violations and remarks (reason) required when status is bad
         '403':
           description: Forbidden - managers/superadmin only
         '404':
@@ -5901,6 +5948,7 @@ paths:
               type: object
               required:
                 - violations
+                - remarks
               properties:
                 status:
                   type: string
@@ -5915,7 +5963,6 @@ paths:
                   example: [uniform, socks_banyan]
                 remarks:
                   type: string
-                  nullable: true
                   example: "Wrinkled uniform, mismatched socks"
                 date:
                   type: string
@@ -6134,6 +6181,9 @@ paths:
           application/json:
             schema:
               type: object
+              required:
+                - violations
+                - remarks
               properties:
                 status:
                   type: string
@@ -6148,7 +6198,6 @@ paths:
                   example: [cleanliness]
                 remarks:
                   type: string
-                  nullable: true
                   example: "Workstation left uncleaned"
                 date:
                   type: string
@@ -6169,7 +6218,7 @@ paths:
                   data:
                     type: object
         '400':
-          description: Bad request - issues required when status is bad
+          description: Bad request - violations and remarks (reason) required when status is bad
         '403':
           description: Forbidden - managers/superadmin only
         '404':
@@ -6264,6 +6313,7 @@ paths:
               type: object
               required:
                 - violations
+                - remarks
               properties:
                 status:
                   type: string
@@ -6278,7 +6328,6 @@ paths:
                   example: [cleanliness]
                 remarks:
                   type: string
-                  nullable: true
                   example: "Workstation left uncleaned"
                 date:
                   type: string
@@ -6477,6 +6526,3658 @@ paths:
         '403':
           description: Forbidden - managers/superadmin only
 
+  /stock-maintenance/{staffId}:
+    put:
+      tags:
+        - StockMaintenance
+      summary: Update staff stock maintenance culture status (MANAGERS/SUPER ADMIN)
+      description: Update stock maintenance status for a staff member. Use status "ok" to reset, or "bad" with violations to mark violations.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - violations
+                - remarks
+              properties:
+                status:
+                  type: string
+                  enum: [ok, bad]
+                  example: bad
+                violations:
+                  type: array
+                  description: Required if status is "bad"
+                  items:
+                    type: string
+                    enum: [dead_stock]
+                  example: [dead_stock]
+                remarks:
+                  type: string
+                  example: "Dead stock found in mica section not reported"
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date this check applies to (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
+      responses:
+        '200':
+          description: Stock Maintenance status updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+        '400':
+          description: Bad request - violations and remarks (reason) required when status is bad
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /stock-maintenance/today:
+    get:
+      tags:
+        - StockMaintenance
+      summary: Get stock maintenance status for all staff for a given date (MANAGERS/SUPER ADMIN)
+      description: Retrieve stock maintenance status for all staff members for a given date. Defaults to OK for all staff, and to today if `date` is omitted.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: date
+          in: query
+          description: Date to retrieve (YYYY-MM-DD). Defaults to today.
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Today's stock maintenance records
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      date:
+                        type: string
+                        format: date
+                        example: "2026-08-09"
+                      count:
+                        type: integer
+                        example: 50
+                      badCount:
+                        type: integer
+                        example: 3
+                      staff:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            staffId:
+                              type: integer
+                            staffName:
+                              type: string
+                            date:
+                              type: string
+                            status:
+                              type: string
+                              enum: [ok, bad]
+                            violations:
+                              type: array
+                              items:
+                                type: string
+                                enum: [dead_stock]
+                            remarks:
+                              type: string
+                              nullable: true
+                            markedAt:
+                              type: string
+                              format: date-time
+                              nullable: true
+        '403':
+          description: Forbidden - managers/superadmin only
+
+  /stock-maintenance/mark-bad/{staffId}:
+    post:
+      tags:
+        - StockMaintenance
+      summary: Mark staff stock maintenance as bad (MANAGERS/SUPER ADMIN)
+      description: Mark stock maintenance violation for a staff member for a given date (defaults to today)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - violations
+                - remarks
+              properties:
+                status:
+                  type: string
+                  enum: [ok, bad]
+                  default: bad
+                violations:
+                  type: array
+                  description: Stock Maintenance violations to mark
+                  items:
+                    type: string
+                    enum: [dead_stock]
+                  example: [dead_stock]
+                remarks:
+                  type: string
+                  example: "Dead stock found in mica section not reported"
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date this check applies to (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
+      responses:
+        '200':
+          description: Stock Maintenance marked successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      status:
+                        type: string
+                      violations:
+                        type: array
+                        items:
+                          type: string
+                      remarks:
+                        type: string
+                      markedAt:
+                        type: string
+                        format: date-time
+        '400':
+          description: Bad request
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /stock-maintenance/reset/{staffId}:
+    post:
+      tags:
+        - StockMaintenance
+      summary: Reset stock maintenance status to OK (MANAGERS/SUPER ADMIN)
+      description: Reset staff stock maintenance status back to OK for a given date (defaults to today)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date to reset (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
+      responses:
+        '200':
+          description: Stock Maintenance status reset successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      status:
+                        type: string
+                        example: ok
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /stock-maintenance/history/{staffId}:
+    get:
+      tags:
+        - StockMaintenance
+      summary: Get stock maintenance history (MANAGERS/SUPER ADMIN)
+      description: Get stock maintenance history for a specific staff member
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: days
+          in: query
+          description: Number of days to look back (default 30)
+          schema:
+            type: integer
+            default: 30
+      responses:
+        '200':
+          description: Stock Maintenance history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      period:
+                        type: string
+                      stats:
+                        type: object
+                        properties:
+                          totalDays:
+                            type: integer
+                          badDays:
+                            type: integer
+                          okDays:
+                            type: integer
+                          badPercentage:
+                            type: string
+                      history:
+                        type: array
+                        items:
+                          type: object
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /stock-maintenance/stats/overview:
+    get:
+      tags:
+        - StockMaintenance
+      summary: Get stock maintenance statistics (MANAGERS/SUPER ADMIN)
+      description: Get aggregated stock maintenance statistics across staff
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Stock Maintenance statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      period:
+                        type: object
+                      totalStaff:
+                        type: integer
+                      staffWithBadDays:
+                        type: integer
+                      stats:
+                        type: array
+                        items:
+                          type: object
+        '403':
+          description: Forbidden - managers/superadmin only
+
+  /packing-bill-cross-check/{staffId}:
+    put:
+      tags:
+        - PackingBillCrossCheck
+      summary: Update staff packing/bill cross-check culture status (MANAGERS/SUPER ADMIN)
+      description: Update packing/bill cross-check status for a staff member. Use status "ok" to reset, or "bad" with violations to mark violations.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - violations
+                - remarks
+              properties:
+                status:
+                  type: string
+                  enum: [ok, bad]
+                  example: bad
+                violations:
+                  type: array
+                  description: Required if status is "bad"
+                  items:
+                    type: string
+                    enum: [packing_not_cross_checked]
+                  example: [packing_not_cross_checked]
+                remarks:
+                  type: string
+                  example: "Packed items did not match the bill"
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date this check applies to (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
+      responses:
+        '200':
+          description: Packing/Bill Cross-Check status updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+        '400':
+          description: Bad request - violations and remarks (reason) required when status is bad
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /packing-bill-cross-check/today:
+    get:
+      tags:
+        - PackingBillCrossCheck
+      summary: Get packing/bill cross-check status for all staff for a given date (MANAGERS/SUPER ADMIN)
+      description: Retrieve packing/bill cross-check status for all staff members for a given date. Defaults to OK for all staff, and to today if `date` is omitted.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: date
+          in: query
+          description: Date to retrieve (YYYY-MM-DD). Defaults to today.
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Today's packing/bill cross-check records
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      date:
+                        type: string
+                        format: date
+                        example: "2026-08-09"
+                      count:
+                        type: integer
+                        example: 50
+                      badCount:
+                        type: integer
+                        example: 3
+                      staff:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            staffId:
+                              type: integer
+                            staffName:
+                              type: string
+                            date:
+                              type: string
+                            status:
+                              type: string
+                              enum: [ok, bad]
+                            violations:
+                              type: array
+                              items:
+                                type: string
+                                enum: [packing_not_cross_checked]
+                            remarks:
+                              type: string
+                              nullable: true
+                            markedAt:
+                              type: string
+                              format: date-time
+                              nullable: true
+        '403':
+          description: Forbidden - managers/superadmin only
+
+  /packing-bill-cross-check/mark-bad/{staffId}:
+    post:
+      tags:
+        - PackingBillCrossCheck
+      summary: Mark staff packing/bill cross-check as bad (MANAGERS/SUPER ADMIN)
+      description: Mark packing/bill cross-check violation for a staff member for a given date (defaults to today)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - violations
+                - remarks
+              properties:
+                status:
+                  type: string
+                  enum: [ok, bad]
+                  default: bad
+                violations:
+                  type: array
+                  description: Packing/Bill Cross-Check violations to mark
+                  items:
+                    type: string
+                    enum: [packing_not_cross_checked]
+                  example: [packing_not_cross_checked]
+                remarks:
+                  type: string
+                  example: "Packed items did not match the bill"
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date this check applies to (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
+      responses:
+        '200':
+          description: Packing/Bill Cross-Check marked successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      status:
+                        type: string
+                      violations:
+                        type: array
+                        items:
+                          type: string
+                      remarks:
+                        type: string
+                      markedAt:
+                        type: string
+                        format: date-time
+        '400':
+          description: Bad request
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /packing-bill-cross-check/reset/{staffId}:
+    post:
+      tags:
+        - PackingBillCrossCheck
+      summary: Reset packing/bill cross-check status to OK (MANAGERS/SUPER ADMIN)
+      description: Reset staff packing/bill cross-check status back to OK for a given date (defaults to today)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date to reset (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
+      responses:
+        '200':
+          description: Packing/Bill Cross-Check status reset successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      status:
+                        type: string
+                        example: ok
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /packing-bill-cross-check/history/{staffId}:
+    get:
+      tags:
+        - PackingBillCrossCheck
+      summary: Get packing/bill cross-check history (MANAGERS/SUPER ADMIN)
+      description: Get packing/bill cross-check history for a specific staff member
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: days
+          in: query
+          description: Number of days to look back (default 30)
+          schema:
+            type: integer
+            default: 30
+      responses:
+        '200':
+          description: Packing/Bill Cross-Check history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      period:
+                        type: string
+                      stats:
+                        type: object
+                        properties:
+                          totalDays:
+                            type: integer
+                          badDays:
+                            type: integer
+                          okDays:
+                            type: integer
+                          badPercentage:
+                            type: string
+                      history:
+                        type: array
+                        items:
+                          type: object
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /packing-bill-cross-check/stats/overview:
+    get:
+      tags:
+        - PackingBillCrossCheck
+      summary: Get packing/bill cross-check statistics (MANAGERS/SUPER ADMIN)
+      description: Get aggregated packing/bill cross-check statistics across staff
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Packing/Bill Cross-Check statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      period:
+                        type: object
+                      totalStaff:
+                        type: integer
+                      staffWithBadDays:
+                        type: integer
+                      stats:
+                        type: array
+                        items:
+                          type: object
+        '403':
+          description: Forbidden - managers/superadmin only
+
+
+  /sales-return-handling/{staffId}:
+    put:
+      tags:
+        - SalesReturnHandling
+      summary: Update staff sales return handling culture status (MANAGERS/SUPER ADMIN)
+      description: Update sales return handling status for a staff member. Use status "ok" to reset, or "bad" with violations to mark violations.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - violations
+                - remarks
+              properties:
+                status:
+                  type: string
+                  enum: [ok, bad]
+                  example: bad
+                violations:
+                  type: array
+                  description: Required if status is "bad"
+                  items:
+                    type: string
+                    enum: [late_sales_return]
+                  example: [late_sales_return]
+                remarks:
+                  type: string
+                  example: "Sales return not processed within SLA"
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date this check applies to (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
+      responses:
+        '200':
+          description: Sales Return Handling status updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+        '400':
+          description: Bad request - violations and remarks (reason) required when status is bad
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /sales-return-handling/today:
+    get:
+      tags:
+        - SalesReturnHandling
+      summary: Get sales return handling status for all staff for a given date (MANAGERS/SUPER ADMIN)
+      description: Retrieve sales return handling status for all staff members for a given date. Defaults to OK for all staff, and to today if `date` is omitted.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: date
+          in: query
+          description: Date to retrieve (YYYY-MM-DD). Defaults to today.
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Today's sales return handling records
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      date:
+                        type: string
+                        format: date
+                        example: "2026-08-09"
+                      count:
+                        type: integer
+                        example: 50
+                      badCount:
+                        type: integer
+                        example: 3
+                      staff:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            staffId:
+                              type: integer
+                            staffName:
+                              type: string
+                            date:
+                              type: string
+                            status:
+                              type: string
+                              enum: [ok, bad]
+                            violations:
+                              type: array
+                              items:
+                                type: string
+                                enum: [late_sales_return]
+                            remarks:
+                              type: string
+                              nullable: true
+                            markedAt:
+                              type: string
+                              format: date-time
+                              nullable: true
+        '403':
+          description: Forbidden - managers/superadmin only
+
+  /sales-return-handling/mark-bad/{staffId}:
+    post:
+      tags:
+        - SalesReturnHandling
+      summary: Mark staff sales return handling as bad (MANAGERS/SUPER ADMIN)
+      description: Mark sales return handling violation for a staff member for a given date (defaults to today)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - violations
+                - remarks
+              properties:
+                status:
+                  type: string
+                  enum: [ok, bad]
+                  default: bad
+                violations:
+                  type: array
+                  description: Sales Return Handling violations to mark
+                  items:
+                    type: string
+                    enum: [late_sales_return]
+                  example: [late_sales_return]
+                remarks:
+                  type: string
+                  example: "Sales return not processed within SLA"
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date this check applies to (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
+      responses:
+        '200':
+          description: Sales Return Handling marked successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      status:
+                        type: string
+                      violations:
+                        type: array
+                        items:
+                          type: string
+                      remarks:
+                        type: string
+                      markedAt:
+                        type: string
+                        format: date-time
+        '400':
+          description: Bad request
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /sales-return-handling/reset/{staffId}:
+    post:
+      tags:
+        - SalesReturnHandling
+      summary: Reset sales return handling status to OK (MANAGERS/SUPER ADMIN)
+      description: Reset staff sales return handling status back to OK for a given date (defaults to today)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date to reset (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
+      responses:
+        '200':
+          description: Sales Return Handling status reset successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      status:
+                        type: string
+                        example: ok
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /sales-return-handling/history/{staffId}:
+    get:
+      tags:
+        - SalesReturnHandling
+      summary: Get sales return handling history (MANAGERS/SUPER ADMIN)
+      description: Get sales return handling history for a specific staff member
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: days
+          in: query
+          description: Number of days to look back (default 30)
+          schema:
+            type: integer
+            default: 30
+      responses:
+        '200':
+          description: Sales Return Handling history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      period:
+                        type: string
+                      stats:
+                        type: object
+                        properties:
+                          totalDays:
+                            type: integer
+                          badDays:
+                            type: integer
+                          okDays:
+                            type: integer
+                          badPercentage:
+                            type: string
+                      history:
+                        type: array
+                        items:
+                          type: object
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /sales-return-handling/stats/overview:
+    get:
+      tags:
+        - SalesReturnHandling
+      summary: Get sales return handling statistics (MANAGERS/SUPER ADMIN)
+      description: Get aggregated sales return handling statistics across staff
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Sales Return Handling statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      period:
+                        type: object
+                      totalStaff:
+                        type: integer
+                      staffWithBadDays:
+                        type: integer
+                      stats:
+                        type: array
+                        items:
+                          type: object
+        '403':
+          description: Forbidden - managers/superadmin only
+
+  /wastage/{staffId}:
+    put:
+      tags:
+        - Wastage
+      summary: Update staff wastage culture status (MANAGERS/SUPER ADMIN)
+      description: Update wastage status for a staff member. Use status "ok" to reset, or "bad" with violations to mark violations.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - violations
+                - remarks
+              properties:
+                status:
+                  type: string
+                  enum: [ok, bad]
+                  example: bad
+                violations:
+                  type: array
+                  description: Required if status is "bad"
+                  items:
+                    type: string
+                    enum: [wastage]
+                  example: [wastage]
+                remarks:
+                  type: string
+                  example: "Excess mica offcuts not logged as wastage"
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date this check applies to (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
+      responses:
+        '200':
+          description: Avoiding Wastage status updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+        '400':
+          description: Bad request - violations and remarks (reason) required when status is bad
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /wastage/today:
+    get:
+      tags:
+        - Wastage
+      summary: Get wastage status for all staff for a given date (MANAGERS/SUPER ADMIN)
+      description: Retrieve wastage status for all staff members for a given date. Defaults to OK for all staff, and to today if `date` is omitted.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: date
+          in: query
+          description: Date to retrieve (YYYY-MM-DD). Defaults to today.
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Today's wastage records
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      date:
+                        type: string
+                        format: date
+                        example: "2026-08-09"
+                      count:
+                        type: integer
+                        example: 50
+                      badCount:
+                        type: integer
+                        example: 3
+                      staff:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            staffId:
+                              type: integer
+                            staffName:
+                              type: string
+                            date:
+                              type: string
+                            status:
+                              type: string
+                              enum: [ok, bad]
+                            violations:
+                              type: array
+                              items:
+                                type: string
+                                enum: [wastage]
+                            remarks:
+                              type: string
+                              nullable: true
+                            markedAt:
+                              type: string
+                              format: date-time
+                              nullable: true
+        '403':
+          description: Forbidden - managers/superadmin only
+
+  /wastage/mark-bad/{staffId}:
+    post:
+      tags:
+        - Wastage
+      summary: Mark staff wastage as bad (MANAGERS/SUPER ADMIN)
+      description: Mark wastage violation for a staff member for a given date (defaults to today)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - violations
+                - remarks
+              properties:
+                status:
+                  type: string
+                  enum: [ok, bad]
+                  default: bad
+                violations:
+                  type: array
+                  description: Avoiding Wastage violations to mark
+                  items:
+                    type: string
+                    enum: [wastage]
+                  example: [wastage]
+                remarks:
+                  type: string
+                  example: "Excess mica offcuts not logged as wastage"
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date this check applies to (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
+      responses:
+        '200':
+          description: Avoiding Wastage marked successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      status:
+                        type: string
+                      violations:
+                        type: array
+                        items:
+                          type: string
+                      remarks:
+                        type: string
+                      markedAt:
+                        type: string
+                        format: date-time
+        '400':
+          description: Bad request
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /wastage/reset/{staffId}:
+    post:
+      tags:
+        - Wastage
+      summary: Reset wastage status to OK (MANAGERS/SUPER ADMIN)
+      description: Reset staff wastage status back to OK for a given date (defaults to today)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date to reset (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
+      responses:
+        '200':
+          description: Avoiding Wastage status reset successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      status:
+                        type: string
+                        example: ok
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /wastage/history/{staffId}:
+    get:
+      tags:
+        - Wastage
+      summary: Get wastage history (MANAGERS/SUPER ADMIN)
+      description: Get wastage history for a specific staff member
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: days
+          in: query
+          description: Number of days to look back (default 30)
+          schema:
+            type: integer
+            default: 30
+      responses:
+        '200':
+          description: Avoiding Wastage history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      period:
+                        type: string
+                      stats:
+                        type: object
+                        properties:
+                          totalDays:
+                            type: integer
+                          badDays:
+                            type: integer
+                          okDays:
+                            type: integer
+                          badPercentage:
+                            type: string
+                      history:
+                        type: array
+                        items:
+                          type: object
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /wastage/stats/overview:
+    get:
+      tags:
+        - Wastage
+      summary: Get wastage statistics (MANAGERS/SUPER ADMIN)
+      description: Get aggregated wastage statistics across staff
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Avoiding Wastage statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      period:
+                        type: object
+                      totalStaff:
+                        type: integer
+                      staffWithBadDays:
+                        type: integer
+                      stats:
+                        type: array
+                        items:
+                          type: object
+        '403':
+          description: Forbidden - managers/superadmin only
+
+  /stock-taking/{staffId}:
+    put:
+      tags:
+        - StockTaking
+      summary: Update staff stock taking culture status (MANAGERS/SUPER ADMIN)
+      description: Update stock taking status for a staff member. Use status "ok" to reset, or "bad" with violations to mark violations.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - violations
+                - remarks
+              properties:
+                status:
+                  type: string
+                  enum: [ok, bad]
+                  example: bad
+                violations:
+                  type: array
+                  description: Required if status is "bad"
+                  items:
+                    type: string
+                    enum: [stock_taking_incomplete]
+                  example: [stock_taking_incomplete]
+                remarks:
+                  type: string
+                  example: "Monthly stock take not completed"
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date this check applies to (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
+      responses:
+        '200':
+          description: Stock Taking status updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+        '400':
+          description: Bad request - violations and remarks (reason) required when status is bad
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /stock-taking/today:
+    get:
+      tags:
+        - StockTaking
+      summary: Get stock taking status for all staff for a given date (MANAGERS/SUPER ADMIN)
+      description: Retrieve stock taking status for all staff members for a given date. Defaults to OK for all staff, and to today if `date` is omitted.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: date
+          in: query
+          description: Date to retrieve (YYYY-MM-DD). Defaults to today.
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Today's stock taking records
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      date:
+                        type: string
+                        format: date
+                        example: "2026-08-09"
+                      count:
+                        type: integer
+                        example: 50
+                      badCount:
+                        type: integer
+                        example: 3
+                      staff:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            staffId:
+                              type: integer
+                            staffName:
+                              type: string
+                            date:
+                              type: string
+                            status:
+                              type: string
+                              enum: [ok, bad]
+                            violations:
+                              type: array
+                              items:
+                                type: string
+                                enum: [stock_taking_incomplete]
+                            remarks:
+                              type: string
+                              nullable: true
+                            markedAt:
+                              type: string
+                              format: date-time
+                              nullable: true
+        '403':
+          description: Forbidden - managers/superadmin only
+
+  /stock-taking/mark-bad/{staffId}:
+    post:
+      tags:
+        - StockTaking
+      summary: Mark staff stock taking as bad (MANAGERS/SUPER ADMIN)
+      description: Mark stock taking violation for a staff member for a given date (defaults to today)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - violations
+                - remarks
+              properties:
+                status:
+                  type: string
+                  enum: [ok, bad]
+                  default: bad
+                violations:
+                  type: array
+                  description: Stock Taking violations to mark
+                  items:
+                    type: string
+                    enum: [stock_taking_incomplete]
+                  example: [stock_taking_incomplete]
+                remarks:
+                  type: string
+                  example: "Monthly stock take not completed"
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date this check applies to (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
+      responses:
+        '200':
+          description: Stock Taking marked successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      status:
+                        type: string
+                      violations:
+                        type: array
+                        items:
+                          type: string
+                      remarks:
+                        type: string
+                      markedAt:
+                        type: string
+                        format: date-time
+        '400':
+          description: Bad request
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /stock-taking/reset/{staffId}:
+    post:
+      tags:
+        - StockTaking
+      summary: Reset stock taking status to OK (MANAGERS/SUPER ADMIN)
+      description: Reset staff stock taking status back to OK for a given date (defaults to today)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date to reset (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
+      responses:
+        '200':
+          description: Stock Taking status reset successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      status:
+                        type: string
+                        example: ok
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /stock-taking/history/{staffId}:
+    get:
+      tags:
+        - StockTaking
+      summary: Get stock taking history (MANAGERS/SUPER ADMIN)
+      description: Get stock taking history for a specific staff member
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: days
+          in: query
+          description: Number of days to look back (default 30)
+          schema:
+            type: integer
+            default: 30
+      responses:
+        '200':
+          description: Stock Taking history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      period:
+                        type: string
+                      stats:
+                        type: object
+                        properties:
+                          totalDays:
+                            type: integer
+                          badDays:
+                            type: integer
+                          okDays:
+                            type: integer
+                          badPercentage:
+                            type: string
+                      history:
+                        type: array
+                        items:
+                          type: object
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /stock-taking/stats/overview:
+    get:
+      tags:
+        - StockTaking
+      summary: Get stock taking statistics (MANAGERS/SUPER ADMIN)
+      description: Get aggregated stock taking statistics across staff
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Stock Taking statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      period:
+                        type: object
+                      totalStaff:
+                        type: integer
+                      staffWithBadDays:
+                        type: integer
+                      stats:
+                        type: array
+                        items:
+                          type: object
+        '403':
+          description: Forbidden - managers/superadmin only
+
+  /workflow-status/{staffId}:
+    put:
+      tags:
+        - WorkflowStatus
+      summary: Update staff workflow status culture status (MANAGERS/SUPER ADMIN)
+      description: Update workflow status status for a staff member. Use status "ok" to reset, or "bad" with violations to mark violations.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - violations
+                - remarks
+              properties:
+                status:
+                  type: string
+                  enum: [ok, bad]
+                  example: bad
+                violations:
+                  type: array
+                  description: Required if status is "bad"
+                  items:
+                    type: string
+                    enum: [workflow_status_not_updated]
+                  example: [workflow_status_not_updated]
+                remarks:
+                  type: string
+                  example: "Workflow status not updated for the day"
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date this check applies to (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
+      responses:
+        '200':
+          description: Workflow Status Updating status updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+        '400':
+          description: Bad request - violations and remarks (reason) required when status is bad
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /workflow-status/today:
+    get:
+      tags:
+        - WorkflowStatus
+      summary: Get workflow status status for all staff for a given date (MANAGERS/SUPER ADMIN)
+      description: Retrieve workflow status status for all staff members for a given date. Defaults to OK for all staff, and to today if `date` is omitted.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: date
+          in: query
+          description: Date to retrieve (YYYY-MM-DD). Defaults to today.
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Today's workflow status records
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      date:
+                        type: string
+                        format: date
+                        example: "2026-08-09"
+                      count:
+                        type: integer
+                        example: 50
+                      badCount:
+                        type: integer
+                        example: 3
+                      staff:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            staffId:
+                              type: integer
+                            staffName:
+                              type: string
+                            date:
+                              type: string
+                            status:
+                              type: string
+                              enum: [ok, bad]
+                            violations:
+                              type: array
+                              items:
+                                type: string
+                                enum: [workflow_status_not_updated]
+                            remarks:
+                              type: string
+                              nullable: true
+                            markedAt:
+                              type: string
+                              format: date-time
+                              nullable: true
+        '403':
+          description: Forbidden - managers/superadmin only
+
+  /workflow-status/mark-bad/{staffId}:
+    post:
+      tags:
+        - WorkflowStatus
+      summary: Mark staff workflow status as bad (MANAGERS/SUPER ADMIN)
+      description: Mark workflow status violation for a staff member for a given date (defaults to today)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - violations
+                - remarks
+              properties:
+                status:
+                  type: string
+                  enum: [ok, bad]
+                  default: bad
+                violations:
+                  type: array
+                  description: Workflow Status Updating violations to mark
+                  items:
+                    type: string
+                    enum: [workflow_status_not_updated]
+                  example: [workflow_status_not_updated]
+                remarks:
+                  type: string
+                  example: "Workflow status not updated for the day"
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date this check applies to (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
+      responses:
+        '200':
+          description: Workflow Status Updating marked successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      status:
+                        type: string
+                      violations:
+                        type: array
+                        items:
+                          type: string
+                      remarks:
+                        type: string
+                      markedAt:
+                        type: string
+                        format: date-time
+        '400':
+          description: Bad request
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /workflow-status/reset/{staffId}:
+    post:
+      tags:
+        - WorkflowStatus
+      summary: Reset workflow status status to OK (MANAGERS/SUPER ADMIN)
+      description: Reset staff workflow status status back to OK for a given date (defaults to today)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date to reset (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
+      responses:
+        '200':
+          description: Workflow Status Updating status reset successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      status:
+                        type: string
+                        example: ok
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /workflow-status/history/{staffId}:
+    get:
+      tags:
+        - WorkflowStatus
+      summary: Get workflow status history (MANAGERS/SUPER ADMIN)
+      description: Get workflow status history for a specific staff member
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: days
+          in: query
+          description: Number of days to look back (default 30)
+          schema:
+            type: integer
+            default: 30
+      responses:
+        '200':
+          description: Workflow Status Updating history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      period:
+                        type: string
+                      stats:
+                        type: object
+                        properties:
+                          totalDays:
+                            type: integer
+                          badDays:
+                            type: integer
+                          okDays:
+                            type: integer
+                          badPercentage:
+                            type: string
+                      history:
+                        type: array
+                        items:
+                          type: object
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /workflow-status/stats/overview:
+    get:
+      tags:
+        - WorkflowStatus
+      summary: Get workflow status statistics (MANAGERS/SUPER ADMIN)
+      description: Get aggregated workflow status statistics across staff
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Workflow Status Updating statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      period:
+                        type: object
+                      totalStaff:
+                        type: integer
+                      staffWithBadDays:
+                        type: integer
+                      stats:
+                        type: array
+                        items:
+                          type: object
+        '403':
+          description: Forbidden - managers/superadmin only
+
+  /major-violation/{staffId}:
+    put:
+      tags:
+        - MajorViolation
+      summary: Update staff major violation status (MANAGERS/SUPER ADMIN)
+      description: Update major violation status for a staff member. Use status "ok" to reset, or "bad" with violations to mark violations. Deduction only - no points earned.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - violations
+                - remarks
+              properties:
+                status:
+                  type: string
+                  enum: [ok, bad]
+                  example: bad
+                violations:
+                  type: array
+                  description: Required if status is "bad"
+                  items:
+                    type: string
+                    enum: [direct_delivery_no_billing, loading_mistake, interfere_md_authority, dead_stock_reporting, item_change_after_billing_not_edited, no_random_stock_updation, mobile_usage, angry_with_customer, conflict_between_staff]
+                  example: [loading_mistake]
+                remarks:
+                  type: string
+                  example: "Loaded wrong material onto delivery truck"
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date this check applies to (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
+      responses:
+        '200':
+          description: Major Violations status updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+        '400':
+          description: Bad request - violations and remarks (reason) required when status is bad
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /major-violation/today:
+    get:
+      tags:
+        - MajorViolation
+      summary: Get major violation status for all staff for a given date (MANAGERS/SUPER ADMIN)
+      description: Retrieve major violation status for all staff members for a given date. Defaults to OK for all staff, and to today if `date` is omitted.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: date
+          in: query
+          description: Date to retrieve (YYYY-MM-DD). Defaults to today.
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Today's major violation records
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      date:
+                        type: string
+                        format: date
+                        example: "2026-08-09"
+                      count:
+                        type: integer
+                        example: 50
+                      badCount:
+                        type: integer
+                        example: 3
+                      staff:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            staffId:
+                              type: integer
+                            staffName:
+                              type: string
+                            date:
+                              type: string
+                            status:
+                              type: string
+                              enum: [ok, bad]
+                            violations:
+                              type: array
+                              items:
+                                type: string
+                                enum: [direct_delivery_no_billing, loading_mistake, interfere_md_authority, dead_stock_reporting, item_change_after_billing_not_edited, no_random_stock_updation, mobile_usage, angry_with_customer, conflict_between_staff]
+                            remarks:
+                              type: string
+                              nullable: true
+                            markedAt:
+                              type: string
+                              format: date-time
+                              nullable: true
+        '403':
+          description: Forbidden - managers/superadmin only
+
+  /major-violation/mark-bad/{staffId}:
+    post:
+      tags:
+        - MajorViolation
+      summary: Mark staff major violation as bad (MANAGERS/SUPER ADMIN)
+      description: Mark major violation for a staff member for a given date (defaults to today)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - violations
+                - remarks
+              properties:
+                status:
+                  type: string
+                  enum: [ok, bad]
+                  default: bad
+                violations:
+                  type: array
+                  description: Major violations to mark
+                  items:
+                    type: string
+                    enum: [direct_delivery_no_billing, loading_mistake, interfere_md_authority, dead_stock_reporting, item_change_after_billing_not_edited, no_random_stock_updation, mobile_usage, angry_with_customer, conflict_between_staff]
+                  example: [loading_mistake]
+                remarks:
+                  type: string
+                  example: "Loaded wrong material onto delivery truck"
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date this check applies to (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
+      responses:
+        '200':
+          description: Major Violations marked successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      status:
+                        type: string
+                      violations:
+                        type: array
+                        items:
+                          type: string
+                      remarks:
+                        type: string
+                      markedAt:
+                        type: string
+                        format: date-time
+        '400':
+          description: Bad request
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /major-violation/reset/{staffId}:
+    post:
+      tags:
+        - MajorViolation
+      summary: Reset major violation status to OK (MANAGERS/SUPER ADMIN)
+      description: Reset staff major violation status back to OK for a given date (defaults to today)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date to reset (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
+      responses:
+        '200':
+          description: Major Violations status reset successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      status:
+                        type: string
+                        example: ok
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /major-violation/history/{staffId}:
+    get:
+      tags:
+        - MajorViolation
+      summary: Get major violation history (MANAGERS/SUPER ADMIN)
+      description: Get major violation history for a specific staff member
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: days
+          in: query
+          description: Number of days to look back (default 30)
+          schema:
+            type: integer
+            default: 30
+      responses:
+        '200':
+          description: Major Violations history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      period:
+                        type: string
+                      stats:
+                        type: object
+                        properties:
+                          totalDays:
+                            type: integer
+                          badDays:
+                            type: integer
+                          okDays:
+                            type: integer
+                          badPercentage:
+                            type: string
+                      history:
+                        type: array
+                        items:
+                          type: object
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /major-violation/stats/overview:
+    get:
+      tags:
+        - MajorViolation
+      summary: Get major violation statistics (MANAGERS/SUPER ADMIN)
+      description: Get aggregated major violation statistics across staff
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Major Violations statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      period:
+                        type: object
+                      totalStaff:
+                        type: integer
+                      staffWithBadDays:
+                        type: integer
+                      stats:
+                        type: array
+                        items:
+                          type: object
+        '403':
+          description: Forbidden - managers/superadmin only
+
+  /major-violation-glass/{staffId}:
+    put:
+      tags:
+        - MajorViolationGlass
+      summary: Update staff major violation status (MANAGERS/SUPER ADMIN)
+      description: Update major violation status for a staff member. Use status "ok" to reset, or "bad" with violations to mark violations. Deduction only - no points earned.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - violations
+                - remarks
+              properties:
+                status:
+                  type: string
+                  enum: [ok, bad]
+                  example: bad
+                violations:
+                  type: array
+                  description: Required if status is "bad"
+                  items:
+                    type: string
+                    enum: [interfere_md_authority, cutting_mistake, mobile_usage, angry_with_customer, conflict_between_staff]
+                  example: [cutting_mistake]
+                remarks:
+                  type: string
+                  example: "Wrong cutting size for customer order"
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date this check applies to (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
+      responses:
+        '200':
+          description: Major Violations status updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+        '400':
+          description: Bad request - violations and remarks (reason) required when status is bad
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /major-violation-glass/today:
+    get:
+      tags:
+        - MajorViolationGlass
+      summary: Get major violation status for all staff for a given date (MANAGERS/SUPER ADMIN)
+      description: Retrieve major violation status for all staff members for a given date. Defaults to OK for all staff, and to today if `date` is omitted.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: date
+          in: query
+          description: Date to retrieve (YYYY-MM-DD). Defaults to today.
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Today's major violation records
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      date:
+                        type: string
+                        format: date
+                        example: "2026-08-09"
+                      count:
+                        type: integer
+                        example: 50
+                      badCount:
+                        type: integer
+                        example: 3
+                      staff:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            staffId:
+                              type: integer
+                            staffName:
+                              type: string
+                            date:
+                              type: string
+                            status:
+                              type: string
+                              enum: [ok, bad]
+                            violations:
+                              type: array
+                              items:
+                                type: string
+                                enum: [interfere_md_authority, cutting_mistake, mobile_usage, angry_with_customer, conflict_between_staff]
+                            remarks:
+                              type: string
+                              nullable: true
+                            markedAt:
+                              type: string
+                              format: date-time
+                              nullable: true
+        '403':
+          description: Forbidden - managers/superadmin only
+
+  /major-violation-glass/mark-bad/{staffId}:
+    post:
+      tags:
+        - MajorViolationGlass
+      summary: Mark staff major violation as bad (MANAGERS/SUPER ADMIN)
+      description: Mark major violation for a staff member for a given date (defaults to today)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - violations
+                - remarks
+              properties:
+                status:
+                  type: string
+                  enum: [ok, bad]
+                  default: bad
+                violations:
+                  type: array
+                  description: Major violations to mark
+                  items:
+                    type: string
+                    enum: [interfere_md_authority, cutting_mistake, mobile_usage, angry_with_customer, conflict_between_staff]
+                  example: [cutting_mistake]
+                remarks:
+                  type: string
+                  example: "Wrong cutting size for customer order"
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date this check applies to (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
+      responses:
+        '200':
+          description: Major Violations marked successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      status:
+                        type: string
+                      violations:
+                        type: array
+                        items:
+                          type: string
+                      remarks:
+                        type: string
+                      markedAt:
+                        type: string
+                        format: date-time
+        '400':
+          description: Bad request
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /major-violation-glass/reset/{staffId}:
+    post:
+      tags:
+        - MajorViolationGlass
+      summary: Reset major violation status to OK (MANAGERS/SUPER ADMIN)
+      description: Reset staff major violation status back to OK for a given date (defaults to today)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date to reset (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
+      responses:
+        '200':
+          description: Major Violations status reset successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      status:
+                        type: string
+                        example: ok
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /major-violation-glass/history/{staffId}:
+    get:
+      tags:
+        - MajorViolationGlass
+      summary: Get major violation history (MANAGERS/SUPER ADMIN)
+      description: Get major violation history for a specific staff member
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: days
+          in: query
+          description: Number of days to look back (default 30)
+          schema:
+            type: integer
+            default: 30
+      responses:
+        '200':
+          description: Major Violations history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      period:
+                        type: string
+                      stats:
+                        type: object
+                        properties:
+                          totalDays:
+                            type: integer
+                          badDays:
+                            type: integer
+                          okDays:
+                            type: integer
+                          badPercentage:
+                            type: string
+                      history:
+                        type: array
+                        items:
+                          type: object
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /major-violation-glass/stats/overview:
+    get:
+      tags:
+        - MajorViolationGlass
+      summary: Get major violation statistics (MANAGERS/SUPER ADMIN)
+      description: Get aggregated major violation statistics across staff
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Major Violations statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      period:
+                        type: object
+                      totalStaff:
+                        type: integer
+                      staffWithBadDays:
+                        type: integer
+                      stats:
+                        type: array
+                        items:
+                          type: object
+        '403':
+          description: Forbidden - managers/superadmin only
+
+  /major-violation-store/{staffId}:
+    put:
+      tags:
+        - MajorViolationStore
+      summary: Update staff major violation status (MANAGERS/SUPER ADMIN)
+      description: Update major violation status for a staff member. Use status "ok" to reset, or "bad" with violations to mark violations. Deduction only - no points earned.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - violations
+                - remarks
+              properties:
+                status:
+                  type: string
+                  enum: [ok, bad]
+                  example: bad
+                violations:
+                  type: array
+                  description: Required if status is "bad"
+                  items:
+                    type: string
+                    enum: [mobile_usage, angry_with_customer, conflict_between_staff, billing_mistake]
+                  example: [billing_mistake]
+                remarks:
+                  type: string
+                  example: "Billed the wrong item/quantity"
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date this check applies to (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
+      responses:
+        '200':
+          description: Major Violations status updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+        '400':
+          description: Bad request - violations and remarks (reason) required when status is bad
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /major-violation-store/today:
+    get:
+      tags:
+        - MajorViolationStore
+      summary: Get major violation status for all staff for a given date (MANAGERS/SUPER ADMIN)
+      description: Retrieve major violation status for all staff members for a given date. Defaults to OK for all staff, and to today if `date` is omitted.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: date
+          in: query
+          description: Date to retrieve (YYYY-MM-DD). Defaults to today.
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Today's major violation records
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      date:
+                        type: string
+                        format: date
+                        example: "2026-08-09"
+                      count:
+                        type: integer
+                        example: 50
+                      badCount:
+                        type: integer
+                        example: 3
+                      staff:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            staffId:
+                              type: integer
+                            staffName:
+                              type: string
+                            date:
+                              type: string
+                            status:
+                              type: string
+                              enum: [ok, bad]
+                            violations:
+                              type: array
+                              items:
+                                type: string
+                                enum: [mobile_usage, angry_with_customer, conflict_between_staff, billing_mistake]
+                            remarks:
+                              type: string
+                              nullable: true
+                            markedAt:
+                              type: string
+                              format: date-time
+                              nullable: true
+        '403':
+          description: Forbidden - managers/superadmin only
+
+  /major-violation-store/mark-bad/{staffId}:
+    post:
+      tags:
+        - MajorViolationStore
+      summary: Mark staff major violation as bad (MANAGERS/SUPER ADMIN)
+      description: Mark major violation for a staff member for a given date (defaults to today)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - violations
+                - remarks
+              properties:
+                status:
+                  type: string
+                  enum: [ok, bad]
+                  default: bad
+                violations:
+                  type: array
+                  description: Major violations to mark
+                  items:
+                    type: string
+                    enum: [mobile_usage, angry_with_customer, conflict_between_staff, billing_mistake]
+                  example: [billing_mistake]
+                remarks:
+                  type: string
+                  example: "Billed the wrong item/quantity"
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date this check applies to (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
+      responses:
+        '200':
+          description: Major Violations marked successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      status:
+                        type: string
+                      violations:
+                        type: array
+                        items:
+                          type: string
+                      remarks:
+                        type: string
+                      markedAt:
+                        type: string
+                        format: date-time
+        '400':
+          description: Bad request
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /major-violation-store/reset/{staffId}:
+    post:
+      tags:
+        - MajorViolationStore
+      summary: Reset major violation status to OK (MANAGERS/SUPER ADMIN)
+      description: Reset staff major violation status back to OK for a given date (defaults to today)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date to reset (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
+      responses:
+        '200':
+          description: Major Violations status reset successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      status:
+                        type: string
+                        example: ok
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /major-violation-store/history/{staffId}:
+    get:
+      tags:
+        - MajorViolationStore
+      summary: Get major violation history (MANAGERS/SUPER ADMIN)
+      description: Get major violation history for a specific staff member
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: days
+          in: query
+          description: Number of days to look back (default 30)
+          schema:
+            type: integer
+            default: 30
+      responses:
+        '200':
+          description: Major Violations history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      period:
+                        type: string
+                      stats:
+                        type: object
+                        properties:
+                          totalDays:
+                            type: integer
+                          badDays:
+                            type: integer
+                          okDays:
+                            type: integer
+                          badPercentage:
+                            type: string
+                      history:
+                        type: array
+                        items:
+                          type: object
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /major-violation-store/stats/overview:
+    get:
+      tags:
+        - MajorViolationStore
+      summary: Get major violation statistics (MANAGERS/SUPER ADMIN)
+      description: Get aggregated major violation statistics across staff
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Major Violations statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      period:
+                        type: object
+                      totalStaff:
+                        type: integer
+                      staffWithBadDays:
+                        type: integer
+                      stats:
+                        type: array
+                        items:
+                          type: object
+        '403':
+          description: Forbidden - managers/superadmin only
+
+  /major-violation-hardware/{staffId}:
+    put:
+      tags:
+        - MajorViolationHardware
+      summary: Update staff major violation status (MANAGERS/SUPER ADMIN)
+      description: Update major violation status for a staff member. Use status "ok" to reset, or "bad" with violations to mark violations. Deduction only - no points earned.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - violations
+                - remarks
+              properties:
+                status:
+                  type: string
+                  enum: [ok, bad]
+                  example: bad
+                violations:
+                  type: array
+                  description: Required if status is "bad"
+                  items:
+                    type: string
+                    enum: [late_sales_return_handling, mobile_usage, conflict_between_staff]
+                  example: [late_sales_return_handling]
+                remarks:
+                  type: string
+                  example: "Billed the wrong item/quantity"
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date this check applies to (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
+      responses:
+        '200':
+          description: Major Violations status updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+        '400':
+          description: Bad request - violations and remarks (reason) required when status is bad
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /major-violation-hardware/today:
+    get:
+      tags:
+        - MajorViolationHardware
+      summary: Get major violation status for all staff for a given date (MANAGERS/SUPER ADMIN)
+      description: Retrieve major violation status for all staff members for a given date. Defaults to OK for all staff, and to today if `date` is omitted.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: date
+          in: query
+          description: Date to retrieve (YYYY-MM-DD). Defaults to today.
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Today's major violation records
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      date:
+                        type: string
+                        format: date
+                        example: "2026-08-09"
+                      count:
+                        type: integer
+                        example: 50
+                      badCount:
+                        type: integer
+                        example: 3
+                      staff:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            staffId:
+                              type: integer
+                            staffName:
+                              type: string
+                            date:
+                              type: string
+                            status:
+                              type: string
+                              enum: [ok, bad]
+                            violations:
+                              type: array
+                              items:
+                                type: string
+                                enum: [late_sales_return_handling, mobile_usage, conflict_between_staff]
+                            remarks:
+                              type: string
+                              nullable: true
+                            markedAt:
+                              type: string
+                              format: date-time
+                              nullable: true
+        '403':
+          description: Forbidden - managers/superadmin only
+
+  /major-violation-hardware/mark-bad/{staffId}:
+    post:
+      tags:
+        - MajorViolationHardware
+      summary: Mark staff major violation as bad (MANAGERS/SUPER ADMIN)
+      description: Mark major violation for a staff member for a given date (defaults to today)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - violations
+                - remarks
+              properties:
+                status:
+                  type: string
+                  enum: [ok, bad]
+                  default: bad
+                violations:
+                  type: array
+                  description: Major violations to mark
+                  items:
+                    type: string
+                    enum: [late_sales_return_handling, mobile_usage, conflict_between_staff]
+                  example: [late_sales_return_handling]
+                remarks:
+                  type: string
+                  example: "Billed the wrong item/quantity"
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date this check applies to (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
+      responses:
+        '200':
+          description: Major Violations marked successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      status:
+                        type: string
+                      violations:
+                        type: array
+                        items:
+                          type: string
+                      remarks:
+                        type: string
+                      markedAt:
+                        type: string
+                        format: date-time
+        '400':
+          description: Bad request
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /major-violation-hardware/reset/{staffId}:
+    post:
+      tags:
+        - MajorViolationHardware
+      summary: Reset major violation status to OK (MANAGERS/SUPER ADMIN)
+      description: Reset staff major violation status back to OK for a given date (defaults to today)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date to reset (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
+      responses:
+        '200':
+          description: Major Violations status reset successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      status:
+                        type: string
+                        example: ok
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /major-violation-hardware/history/{staffId}:
+    get:
+      tags:
+        - MajorViolationHardware
+      summary: Get major violation history (MANAGERS/SUPER ADMIN)
+      description: Get major violation history for a specific staff member
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: days
+          in: query
+          description: Number of days to look back (default 30)
+          schema:
+            type: integer
+            default: 30
+      responses:
+        '200':
+          description: Major Violations history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      period:
+                        type: string
+                      stats:
+                        type: object
+                        properties:
+                          totalDays:
+                            type: integer
+                          badDays:
+                            type: integer
+                          okDays:
+                            type: integer
+                          badPercentage:
+                            type: string
+                      history:
+                        type: array
+                        items:
+                          type: object
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /major-violation-hardware/stats/overview:
+    get:
+      tags:
+        - MajorViolationHardware
+      summary: Get major violation statistics (MANAGERS/SUPER ADMIN)
+      description: Get aggregated major violation statistics across staff
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Major Violations statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      period:
+                        type: object
+                      totalStaff:
+                        type: integer
+                      staffWithBadDays:
+                        type: integer
+                      stats:
+                        type: array
+                        items:
+                          type: object
+        '403':
+          description: Forbidden - managers/superadmin only
+
+
   /welcoming-customer/{staffId}:
     put:
       tags:
@@ -6497,6 +10198,9 @@ paths:
           application/json:
             schema:
               type: object
+              required:
+                - violations
+                - remarks
               properties:
                 status:
                   type: string
@@ -6511,7 +10215,6 @@ paths:
                   example: [no_greeting]
                 remarks:
                   type: string
-                  nullable: true
                   example: "Did not greet customer at entry"
                 date:
                   type: string
@@ -6532,7 +10235,7 @@ paths:
                   data:
                     type: object
         '400':
-          description: Bad request - issues required when status is bad
+          description: Bad request - violations and remarks (reason) required when status is bad
         '403':
           description: Forbidden - managers/superadmin only
         '404':
@@ -6627,6 +10330,7 @@ paths:
               type: object
               required:
                 - violations
+                - remarks
               properties:
                 status:
                   type: string
@@ -6641,7 +10345,6 @@ paths:
                   example: [no_greeting]
                 remarks:
                   type: string
-                  nullable: true
                   example: "Did not greet customer at entry"
                 date:
                   type: string
@@ -6840,6 +10543,744 @@ paths:
         '403':
           description: Forbidden - managers/superadmin only
 
+  /customer-dealing/{staffId}:
+    put:
+      tags:
+        - Customer Dealing
+      summary: Update staff customer dealing status (MANAGERS/SUPER ADMIN)
+      description: |
+        Update customer dealing status for a staff member. Use status "ok" to reset, or "bad" with
+        violations to mark violations. Store-department staff are scored from customer feedback
+        instead (see POST /feedback/requests) - marking one here is rejected with 400, since it
+        would have no effect on their score.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - violations
+                - remarks
+              properties:
+                status:
+                  type: string
+                  enum: [ok, bad]
+                  example: bad
+                violations:
+                  type: array
+                  description: Required if status is "bad"
+                  items:
+                    type: string
+                    enum: [poor_customer_dealing]
+                  example: [poor_customer_dealing]
+                remarks:
+                  type: string
+                  example: "Rude to a customer at the counter"
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date this check applies to (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
+      responses:
+        '200':
+          description: Customer dealing status updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+        '400':
+          description: Bad request - violations required when status is bad, or this staff member is in the Store department (scored from feedback instead)
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /customer-dealing/today:
+    get:
+      tags:
+        - Customer Dealing
+      summary: Get customer dealing status for all staff for a given date (MANAGERS/SUPER ADMIN)
+      description: Retrieve customer dealing status for all staff members for a given date. Defaults to OK for all staff, and to today if `date` is omitted. Includes Store-department staff too, though their entries never affect scoring.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: date
+          in: query
+          description: Date to retrieve (YYYY-MM-DD). Defaults to today.
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Today's customer dealing records
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      date:
+                        type: string
+                        format: date
+                        example: "2026-08-09"
+                      count:
+                        type: integer
+                        example: 50
+                      badCount:
+                        type: integer
+                        example: 2
+                      staff:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            staffId:
+                              type: integer
+                            staffName:
+                              type: string
+                            date:
+                              type: string
+                            status:
+                              type: string
+                              enum: [ok, bad]
+                            violations:
+                              type: array
+                              items:
+                                type: string
+                                enum: [poor_customer_dealing]
+                            remarks:
+                              type: string
+                              nullable: true
+                            markedAt:
+                              type: string
+                              format: date-time
+                              nullable: true
+        '403':
+          description: Forbidden - managers/superadmin only
+
+  /customer-dealing/mark-bad/{staffId}:
+    post:
+      tags:
+        - Customer Dealing
+      summary: Mark staff customer dealing status as bad (MANAGERS/SUPER ADMIN)
+      description: Mark a customer dealing violation for a staff member for a given date (defaults to today). Rejected with 400 for Store-department staff.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - violations
+                - remarks
+              properties:
+                status:
+                  type: string
+                  enum: [ok, bad]
+                  default: bad
+                violations:
+                  type: array
+                  description: Customer dealing violations to mark
+                  items:
+                    type: string
+                    enum: [poor_customer_dealing]
+                  example: [poor_customer_dealing]
+                remarks:
+                  type: string
+                  example: "Rude to a customer at the counter"
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date this check applies to (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
+      responses:
+        '200':
+          description: Customer dealing marked successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      status:
+                        type: string
+                      violations:
+                        type: array
+                        items:
+                          type: string
+                      remarks:
+                        type: string
+                      markedAt:
+                        type: string
+                        format: date-time
+        '400':
+          description: Bad request - violations required, or this staff member is in the Store department
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /customer-dealing/reset/{staffId}:
+    post:
+      tags:
+        - Customer Dealing
+      summary: Reset customer dealing status to OK (MANAGERS/SUPER ADMIN)
+      description: Reset staff customer dealing status back to OK for a given date (defaults to today)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date to reset (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
+      responses:
+        '200':
+          description: Customer dealing status reset successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      status:
+                        type: string
+                        example: ok
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /customer-dealing/history/{staffId}:
+    get:
+      tags:
+        - Customer Dealing
+      summary: Get customer dealing history (MANAGERS/SUPER ADMIN)
+      description: Get customer dealing history for a specific staff member
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: days
+          in: query
+          description: Number of days to look back (default 30)
+          schema:
+            type: integer
+            default: 30
+      responses:
+        '200':
+          description: Customer dealing history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      period:
+                        type: string
+                      stats:
+                        type: object
+                        properties:
+                          totalDays:
+                            type: integer
+                          badDays:
+                            type: integer
+                          okDays:
+                            type: integer
+                          badPercentage:
+                            type: string
+                      history:
+                        type: array
+                        items:
+                          type: object
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /customer-dealing/stats/overview:
+    get:
+      tags:
+        - Customer Dealing
+      summary: Get customer dealing statistics (MANAGERS/SUPER ADMIN)
+      description: Get aggregated customer dealing statistics across staff (manual daily-check entries only - does not include Store staff's feedback-derived scoring)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Customer dealing statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      period:
+                        type: object
+                      totalStaff:
+                        type: integer
+                      staffWithBadDays:
+                        type: integer
+                      stats:
+                        type: array
+                        items:
+                          type: object
+        '403':
+          description: Forbidden - managers/superadmin only
+
+  /customer-quotation-followup/{staffId}:
+    put:
+      tags:
+        - Customer & Quotation Followup
+      summary: Update staff customer & quotation followup status (MANAGERS/SUPER ADMIN)
+      description: |
+        Update customer & quotation followup status for a staff member. Use status "ok" to reset,
+        or "bad" with violations to mark a missed follow-up. Unlike Appearance/Cleaning/Welcoming
+        Customer/Customer Dealing, a bad mark here does NOT forfeit the whole month's points - it
+        deducts pointsPerBadMark and compounds across multiple bad days (see GET /scoring-config).
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - violations
+                - remarks
+              properties:
+                status:
+                  type: string
+                  enum: [ok, bad]
+                  example: bad
+                violations:
+                  type: array
+                  description: Required if status is "bad"
+                  items:
+                    type: string
+                    enum: [missed_followup]
+                  example: [missed_followup]
+                remarks:
+                  type: string
+                  example: "Did not follow up on a pending quotation"
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date this check applies to (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
+      responses:
+        '200':
+          description: Customer & quotation followup status updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+        '400':
+          description: Bad request - violations required when status is bad
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /customer-quotation-followup/today:
+    get:
+      tags:
+        - Customer & Quotation Followup
+      summary: Get customer & quotation followup status for all staff for a given date (MANAGERS/SUPER ADMIN)
+      description: Retrieve customer & quotation followup status for all staff members for a given date. Defaults to OK for all staff, and to today if `date` is omitted.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: date
+          in: query
+          description: Date to retrieve (YYYY-MM-DD). Defaults to today.
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Today's customer & quotation followup records
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      date:
+                        type: string
+                        format: date
+                        example: "2026-08-09"
+                      count:
+                        type: integer
+                        example: 50
+                      badCount:
+                        type: integer
+                        example: 4
+                      staff:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            staffId:
+                              type: integer
+                            staffName:
+                              type: string
+                            date:
+                              type: string
+                            status:
+                              type: string
+                              enum: [ok, bad]
+                            violations:
+                              type: array
+                              items:
+                                type: string
+                                enum: [missed_followup]
+                            remarks:
+                              type: string
+                              nullable: true
+                            markedAt:
+                              type: string
+                              format: date-time
+                              nullable: true
+        '403':
+          description: Forbidden - managers/superadmin only
+
+  /customer-quotation-followup/mark-bad/{staffId}:
+    post:
+      tags:
+        - Customer & Quotation Followup
+      summary: Mark staff customer & quotation followup status as bad (MANAGERS/SUPER ADMIN)
+      description: Mark a missed follow-up for a staff member for a given date (defaults to today). Deducts pointsPerBadMark for the month rather than forfeiting all points.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - violations
+                - remarks
+              properties:
+                status:
+                  type: string
+                  enum: [ok, bad]
+                  default: bad
+                violations:
+                  type: array
+                  description: Customer & quotation followup violations to mark
+                  items:
+                    type: string
+                    enum: [missed_followup]
+                  example: [missed_followup]
+                remarks:
+                  type: string
+                  example: "Did not follow up on a pending quotation"
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date this check applies to (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
+      responses:
+        '200':
+          description: Customer & quotation followup marked successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      status:
+                        type: string
+                      violations:
+                        type: array
+                        items:
+                          type: string
+                      remarks:
+                        type: string
+                      markedAt:
+                        type: string
+                        format: date-time
+        '400':
+          description: Bad request
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /customer-quotation-followup/reset/{staffId}:
+    post:
+      tags:
+        - Customer & Quotation Followup
+      summary: Reset customer & quotation followup status to OK (MANAGERS/SUPER ADMIN)
+      description: Reset staff customer & quotation followup status back to OK for a given date (defaults to today)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Date to reset (YYYY-MM-DD). Defaults to today.
+                  example: "2026-08-09"
+      responses:
+        '200':
+          description: Customer & quotation followup status reset successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      status:
+                        type: string
+                        example: ok
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /customer-quotation-followup/history/{staffId}:
+    get:
+      tags:
+        - Customer & Quotation Followup
+      summary: Get customer & quotation followup history (MANAGERS/SUPER ADMIN)
+      description: Get customer & quotation followup history for a specific staff member
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: days
+          in: query
+          description: Number of days to look back (default 30)
+          schema:
+            type: integer
+            default: 30
+      responses:
+        '200':
+          description: Customer & quotation followup history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      staffName:
+                        type: string
+                      period:
+                        type: string
+                      stats:
+                        type: object
+                        properties:
+                          totalDays:
+                            type: integer
+                          badDays:
+                            type: integer
+                          okDays:
+                            type: integer
+                          badPercentage:
+                            type: string
+                      history:
+                        type: array
+                        items:
+                          type: object
+        '403':
+          description: Forbidden - managers/superadmin only
+        '404':
+          description: Staff not found
+
+  /customer-quotation-followup/stats/overview:
+    get:
+      tags:
+        - Customer & Quotation Followup
+      summary: Get customer & quotation followup statistics (MANAGERS/SUPER ADMIN)
+      description: Get aggregated customer & quotation followup statistics across staff
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Customer & quotation followup statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      period:
+                        type: object
+                      totalStaff:
+                        type: integer
+                      staffWithBadDays:
+                        type: integer
+                      stats:
+                        type: array
+                        items:
+                          type: object
+        '403':
+          description: Forbidden - managers/superadmin only
+
   /scores/{staffId}/month/{month}:
     get:
       tags:
@@ -6945,7 +11386,13 @@ paths:
         - Attendance: 10 points (late arrivals tracking)
         - Leaves: 10 points (approved leaves per month)
         - Appearance: 5 points (dress code violations)
-        - Future rules: 75 points (reserved for expansion)
+        - Cleaning Culture: 5 points
+        - Welcoming Customer: 10 points
+        - Customer Dealing: 15 points
+        - Customer & Quotation Followup: 10 points
+        - Meeting: 5 points
+        - Extra Performance: 10 points
+        - Testimonial: 20 points
 
         Returns: Staff scores sorted by performance, plus aggregated statistics and performance distribution.
       security:
@@ -7890,7 +12337,12 @@ paths:
       tags:
         - Scoring
       summary: Get scoring configuration (MANAGERS/SUPER ADMIN)
-      description: Retrieve the scoring rules and parameters for a given month.
+      description: |
+        Retrieve the scoring rules and parameters for a given month and department.
+
+        Each department has its own rubric (see `GET /scoring-config/departments` for the
+        static rule list per department); the returned config only has the rule keys that
+        apply to the requested department populated.
       security:
         - BearerAuth: []
       parameters:
@@ -7902,6 +12354,13 @@ paths:
             pattern: '^\d{4}-\d{2}$'
           description: Month in YYYY-MM format (default current month)
           example: "2026-06"
+        - name: department
+          in: query
+          schema:
+            type: string
+            enum: [Store, Plywood Godown, Glass Godown, Hardware]
+          description: Department name (default "Store")
+          example: "Store"
       responses:
         '200':
           description: Scoring configuration
@@ -7923,7 +12382,11 @@ paths:
       tags:
         - Scoring
       summary: Update scoring configuration (MANAGERS/SUPER ADMIN)
-      description: Update the scoring rules and parameters for a month. SuperAdmin only.
+      description: |
+        Update the scoring rules and parameters for a month and department. SuperAdmin only.
+
+        Only the rule keys belonging to the target department's rubric are applied - see
+        `GET /scoring-config/departments` for which keys apply to which department.
       security:
         - BearerAuth: []
       requestBody:
@@ -7932,6 +12395,9 @@ paths:
           application/json:
             schema:
               type: object
+              required:
+                - month
+                - department
               properties:
                 month:
                   type: string
@@ -7939,6 +12405,11 @@ paths:
                   pattern: '^\d{4}-\d{2}$'
                   example: "2026-06"
                   description: Month to update
+                department:
+                  type: string
+                  enum: [Store, Plywood Godown, Glass Godown, Hardware]
+                  example: "Store"
+                  description: Department whose rubric to update
                 attendance:
                   type: object
                   properties:
@@ -7966,6 +12437,69 @@ paths:
                     penaltyIfExceeds:
                       type: integer
                       example: -10
+                timeKeeping:
+                  type: object
+                  description: Late arrival/early leaving/break-overage cases combined, counted per case-day
+                  properties:
+                    maxLateCases:
+                      type: integer
+                      example: 3
+                      description: Max case-days allowed before penalty
+                    pointsIfWithinLimit:
+                      type: integer
+                      example: 10
+                    penaltyIfExceeds:
+                      type: integer
+                      example: -10
+                      description: Applied once when mode is "flat" and maxLateCases is exceeded
+                    mode:
+                      type: string
+                      enum: [flat, perExcess]
+                      default: flat
+                      description: "'flat' (default): penaltyIfExceeds applied once, any excess. 'perExcess': pointsPerExtraCase deducted for every case-day beyond maxLateCases."
+                    pointsPerExtraCase:
+                      type: integer
+                      example: 5
+                      description: Used when mode is "perExcess"
+                attendanceLeave:
+                  type: object
+                  description: Casual and medical leave, scored independently each month
+                  properties:
+                    casual:
+                      type: object
+                      properties:
+                        maxAllowedPerMonth:
+                          type: integer
+                          example: 1
+                        pointsIfWithinLimit:
+                          type: integer
+                          example: 10
+                        penaltyIfExceeds:
+                          type: integer
+                          example: -10
+                        pointsPerExtraLeave:
+                          type: integer
+                          example: 5
+                          description: Used when mode is "perExcess" - deducted per unexempt casual leave beyond maxAllowedPerMonth
+                    medical:
+                      type: object
+                      properties:
+                        maxAllowedPerMonth:
+                          type: integer
+                          example: 1
+                          description: Beyond this, medicalProofSubmitted is required on the excess leave(s) to avoid the penalty
+                        penaltyIfExceeds:
+                          type: integer
+                          example: -10
+                        pointsPerExtraLeave:
+                          type: integer
+                          example: 5
+                          description: Used when mode is "perExcess" - deducted per unproven medical leave beyond maxAllowedPerMonth
+                    mode:
+                      type: string
+                      enum: [flat, perExcess]
+                      default: flat
+                      description: "'flat' (default): flat penalty if either cap is exceeded without exemption/proof. 'perExcess': pointsPerExtraLeave deducted per unexempt/unproven excess leave, independently for casual and medical."
                 appearance:
                   type: object
                   properties:
@@ -7978,6 +12512,11 @@ paths:
                     maxPoints:
                       type: integer
                       example: 5
+                    mode:
+                      type: string
+                      enum: [flat, perDay]
+                      default: perDay
+                      description: "'perDay' (default): deducts |pointsPerViolation| for every bad day, recurring. 'flat': forfeits it once, first bad day."
                     violations:
                       type: array
                       items:
@@ -7992,7 +12531,16 @@ paths:
                     maxPoints:
                       type: integer
                       example: 5
-                      description: Full points forfeited for the month if any single day is marked bad
+                      description: Full points forfeited for the month if any single day is marked bad (when mode is "flat")
+                    mode:
+                      type: string
+                      enum: [flat, perDay]
+                      default: flat
+                      description: "'flat' (default): forfeits pointsPerBadDay once, first bad day. 'perDay': deducts pointsPerBadDay for every bad day, recurring."
+                    pointsPerBadDay:
+                      type: integer
+                      example: 5
+                      description: Points deducted per the mode above
                 welcomingCustomer:
                   type: object
                   properties:
@@ -8002,7 +12550,58 @@ paths:
                     maxPoints:
                       type: integer
                       example: 10
-                      description: Full points forfeited for the month if any single day is marked bad
+                      description: Full points forfeited for the month if any single day is marked bad (when mode is "flat")
+                    mode:
+                      type: string
+                      enum: [flat, perDay]
+                      default: flat
+                      description: "'flat' (default): forfeits pointsPerBadDay once, first bad day. 'perDay': deducts pointsPerBadDay for every bad day, recurring."
+                    pointsPerBadDay:
+                      type: integer
+                      example: 10
+                      description: Points deducted per the mode above
+                customerDealing:
+                  type: object
+                  description: Store-department staff are scored from customer feedback (pointsPerBadFeedback), everyone else from the customer_dealing daily check (mode/pointsPerBadDay)
+                  properties:
+                    enabled:
+                      type: boolean
+                      example: true
+                    maxPoints:
+                      type: integer
+                      example: 15
+                    pointsPerBadFeedback:
+                      type: integer
+                      example: 15
+                      description: Store staff only - deducted per completed feedback submission containing at least one "no" answer (not deduplicated per customer)
+                    mode:
+                      type: string
+                      enum: [flat, perDay]
+                      default: flat
+                      description: "Non-Store staff only (daily-check based). 'flat' (default): forfeits pointsPerBadDay once, first bad day. 'perDay': deducts pointsPerBadDay for every bad day, recurring."
+                    pointsPerBadDay:
+                      type: integer
+                      example: 15
+                      description: Non-Store staff only - points deducted per the mode above
+                customerQuotationFollowup:
+                  type: object
+                  description: Customer & quotation follow-up scoring rules
+                  properties:
+                    enabled:
+                      type: boolean
+                      example: true
+                    maxPoints:
+                      type: integer
+                      example: 10
+                    mode:
+                      type: string
+                      enum: [flat, perDay]
+                      default: perDay
+                      description: "'perDay' (default): pointsPerBadMark deducted per bad day, compounds. 'flat': forfeited once, first bad day."
+                    pointsPerBadMark:
+                      type: integer
+                      example: 10
+                      description: Points deducted per the mode above (perDay compounds - e.g. 2 bad days = -20, floored at 0)
                 meeting:
                   type: object
                   properties:
@@ -8034,6 +12633,114 @@ paths:
                     maxPointsAllowed:
                       type: integer
                       example: 20
+                stockMaintenance:
+                  type: object
+                  description: Plywood Godown only - zero dead stock, marked via the stock_maintenance daily check
+                  properties:
+                    enabled:
+                      type: boolean
+                      example: true
+                    maxPoints:
+                      type: integer
+                      example: 20
+                    mode:
+                      type: string
+                      enum: [flat, perDay]
+                      default: flat
+                      description: "'flat' (default): forfeits pointsPerBadDay once, first bad day. 'perDay': deducts pointsPerBadDay for every bad day, recurring."
+                    pointsPerBadDay:
+                      type: integer
+                      example: 20
+                salesReturnHandling:
+                  type: object
+                  description: Plywood Godown only - sales returns handled on time, marked via the sales_return_handling daily check
+                  properties:
+                    enabled:
+                      type: boolean
+                      example: true
+                    maxPoints:
+                      type: integer
+                      example: 5
+                    mode:
+                      type: string
+                      enum: [flat, perDay]
+                      default: flat
+                      description: "'flat' (default): forfeits pointsPerBadDay once, first bad day. 'perDay': deducts pointsPerBadDay for every bad day, recurring."
+                    pointsPerBadDay:
+                      type: integer
+                      example: 5
+                wastage:
+                  type: object
+                  description: Glass Godown only - avoiding wastage, marked via the wastage daily check
+                  properties:
+                    enabled:
+                      type: boolean
+                      example: true
+                    maxPoints:
+                      type: integer
+                      example: 10
+                    mode:
+                      type: string
+                      enum: [flat, perDay]
+                      default: flat
+                      description: "'flat' (default): forfeits pointsPerBadDay once, first bad day. 'perDay': deducts pointsPerBadDay for every bad day, recurring."
+                    pointsPerBadDay:
+                      type: integer
+                      example: 10
+                stockTaking:
+                  type: object
+                  description: Glass Godown only - monthly stock taking, marked via the stock_taking daily check
+                  properties:
+                    enabled:
+                      type: boolean
+                      example: true
+                    maxPoints:
+                      type: integer
+                      example: 10
+                    mode:
+                      type: string
+                      enum: [flat, perDay]
+                      default: flat
+                      description: "'flat' (default): forfeits pointsPerBadDay once, first bad day. 'perDay': deducts pointsPerBadDay for every bad day, recurring."
+                    pointsPerBadDay:
+                      type: integer
+                      example: 10
+                workflowStatus:
+                  type: object
+                  description: Glass Godown/Hardware only - workflow status updating, marked via the workflow_status daily check
+                  properties:
+                    enabled:
+                      type: boolean
+                      example: true
+                    maxPoints:
+                      type: integer
+                      example: 10
+                    mode:
+                      type: string
+                      enum: [flat, perDay]
+                      default: flat
+                      description: "'flat' (default): forfeits pointsPerBadDay once, first bad day. 'perDay': deducts pointsPerBadDay for every bad day, recurring."
+                    pointsPerBadDay:
+                      type: integer
+                      example: 10
+                packingBillCrossCheck:
+                  type: object
+                  description: Hardware only - cross-checking packed items with the bill, marked via the packing_bill_cross_check daily check
+                  properties:
+                    enabled:
+                      type: boolean
+                      example: true
+                    maxPoints:
+                      type: integer
+                      example: 5
+                    mode:
+                      type: string
+                      enum: [flat, perDay]
+                      default: perDay
+                      description: "'flat': forfeits pointsPerBadDay once, first bad day. 'perDay' (default, Hardware): deducts pointsPerBadDay for every bad day, recurring."
+                    pointsPerBadDay:
+                      type: integer
+                      example: 5
       responses:
         '200':
           description: Configuration updated successfully
@@ -8050,6 +12757,178 @@ paths:
           description: Forbidden - managers/superadmin only
         '400':
           description: Bad request - invalid configuration
+
+  /scoring-config/departments:
+    get:
+      tags:
+        - Scoring
+      summary: List scoring rubrics per department (MANAGERS/SUPER ADMIN)
+      description: |
+        Returns the static 100-point rule breakdown for each department (Store, Plywood
+        Godown, Glass Godown) - the rule keys, categories, and default max points that make
+        up that department's rubric. Drivers have no scoring rubric.
+
+        Use this to render "how is this department scored" in an admin UI, and to know which
+        `ScoringConfigResponse` rule keys are meaningful for a given department (config keys
+        outside a department's rubric are always absent from its config document).
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Scoring rubric per department
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    additionalProperties:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          ruleKey:
+                            type: string
+                            description: Key under which this rule's config appears in ScoringConfigResponse
+                          category:
+                            type: string
+                            description: Human-readable category name
+                          maxPoints:
+                            type: integer
+                    example:
+                      Store:
+                        - { ruleKey: timeKeeping, category: "Timing", maxPoints: 10 }
+                        - { ruleKey: attendanceLeave, category: "Attendance", maxPoints: 10 }
+                        - { ruleKey: appearance, category: "Appearance", maxPoints: 5 }
+                        - { ruleKey: welcomingCustomer, category: "Welcoming Customer", maxPoints: 10 }
+                        - { ruleKey: customerDealing, category: "Customer Dealing", maxPoints: 15 }
+                        - { ruleKey: customerQuotationFollowup, category: "Customer Follow-up", maxPoints: 10 }
+                        - { ruleKey: meeting, category: "Attending Meetings", maxPoints: 5 }
+                        - { ruleKey: cleaning, category: "Cleaning Culture", maxPoints: 5 }
+                        - { ruleKey: extraPerformance, category: "Extra Performance", maxPoints: 10 }
+                        - { ruleKey: testimonial, category: "Testimonial", maxPoints: 20 }
+                        - { ruleKey: majorViolationStore, category: "Major Violations", maxPoints: 0 }
+                      Plywood Godown:
+                        - { ruleKey: timeKeeping, category: "Timing", maxPoints: 10 }
+                        - { ruleKey: attendanceLeave, category: "Attendance", maxPoints: 10 }
+                        - { ruleKey: appearance, category: "Appearance", maxPoints: 5 }
+                        - { ruleKey: customerDealing, category: "Customer Dealing", maxPoints: 10 }
+                        - { ruleKey: stockMaintenance, category: "Stock Maintenance (zero dead stock)", maxPoints: 20 }
+                        - { ruleKey: salesReturnHandling, category: "Sales Return Handling", maxPoints: 5 }
+                        - { ruleKey: meeting, category: "Attending Meetings", maxPoints: 5 }
+                        - { ruleKey: cleaning, category: "Cleanliness", maxPoints: 5 }
+                        - { ruleKey: extraPerformance, category: "Extra Performance", maxPoints: 10 }
+                        - { ruleKey: testimonial, category: "Testimonial", maxPoints: 20 }
+                        - { ruleKey: majorViolation, category: "Major Violations", maxPoints: 0 }
+                      Glass Godown:
+                        - { ruleKey: timeKeeping, category: "Timing", maxPoints: 10 }
+                        - { ruleKey: attendanceLeave, category: "Attendance", maxPoints: 10 }
+                        - { ruleKey: appearance, category: "Appearance", maxPoints: 5 }
+                        - { ruleKey: wastage, category: "Avoiding Wastage", maxPoints: 10 }
+                        - { ruleKey: customerDealing, category: "Fair Dealing with Customers/Auto Drivers", maxPoints: 15 }
+                        - { ruleKey: stockTaking, category: "Stock Taking (monthly)", maxPoints: 10 }
+                        - { ruleKey: workflowStatus, category: "Work Flow Status Updating", maxPoints: 10 }
+                        - { ruleKey: meeting, category: "Attending Weekly Meeting", maxPoints: 5 }
+                        - { ruleKey: cleaning, category: "Cleanliness", maxPoints: 5 }
+                        - { ruleKey: extraPerformance, category: "Extra Performance", maxPoints: 10 }
+                        - { ruleKey: testimonial, category: "Testimonials (min 2)", maxPoints: 10 }
+                        - { ruleKey: majorViolationGlass, category: "Major Violations", maxPoints: 0 }
+                      Hardware:
+                        - { ruleKey: timeKeeping, category: "Timing", maxPoints: 10 }
+                        - { ruleKey: attendanceLeave, category: "Attendance", maxPoints: 10 }
+                        - { ruleKey: stockMaintenance, category: "Dead Stock Reporting", maxPoints: 5 }
+                        - { ruleKey: packingBillCrossCheck, category: "Cross Checking With Bill After Packing", maxPoints: 5 }
+                        - { ruleKey: stockTaking, category: "Stock Taking (monthly)", maxPoints: 20 }
+                        - { ruleKey: workflowStatus, category: "Work Flow Status Updating", maxPoints: 10 }
+                        - { ruleKey: meeting, category: "Attending Meetings", maxPoints: 5 }
+                        - { ruleKey: cleaning, category: "Cleanliness", maxPoints: 5 }
+                        - { ruleKey: extraPerformance, category: "Extra Performance", maxPoints: 5 }
+                        - { ruleKey: salesReturnHandling, category: "Sales Return Handling", maxPoints: 5 }
+                        - { ruleKey: testimonial, category: "Testimonials (min 4)", maxPoints: 20 }
+                        - { ruleKey: majorViolationHardware, category: "Major Violations", maxPoints: 0 }
+        '403':
+          description: Forbidden - managers/superadmin only
+
+  /daily-check/categories-by-department:
+    get:
+      tags:
+        - Scoring
+      summary: List DailyCheck categories per department (MANAGERS/SUPER ADMIN)
+      description: |
+        Returns which `DailyCheck` categories apply to each department, so a unified daily
+        check screen can render the right set of toggles per staff card instead of a fixed
+        list for everyone. Each category entry includes the API base path its mini-router is
+        mounted at (e.g. `/api/appearance`), matching the per-category endpoints documented
+        under the Appearance/Cleaning/Wastage/etc. tags.
+
+        Not every rubric category is DailyCheck-backed (e.g. Timing, Meeting, Extra
+        Performance, Testimonial come from other data sources), so this list is a subset of
+        the full rubric returned by `GET /scoring-config/departments`.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: DailyCheck categories per department
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    additionalProperties:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          category:
+                            type: string
+                          label:
+                            type: string
+                          apiBasePath:
+                            type: string
+                          violations:
+                            type: array
+                            items:
+                              type: string
+                    example:
+                      Store:
+                        - { category: appearance, label: "Appearance", apiBasePath: "/api/appearance", violations: ["uniform", "hair_beard_moustache"] }
+                        - { category: cleaning, label: "Cleaning", apiBasePath: "/api/cleaning", violations: ["cleanliness"] }
+                        - { category: welcoming_customer, label: "Welcoming Customer", apiBasePath: "/api/welcoming-customer", violations: ["no_greeting", "no_smile", "ignored_customer"] }
+                        - { category: customer_dealing, label: "Customer Dealing", apiBasePath: "/api/customer-dealing", violations: ["poor_customer_dealing"] }
+                        - { category: customer_quotation_followup, label: "Customer & Quotation Follow-up", apiBasePath: "/api/customer-quotation-followup", violations: ["missed_followup"] }
+                        - { category: major_violation_store, label: "Major Violations", apiBasePath: "/api/major-violation-store", violations: ["mobile_usage", "angry_with_customer", "conflict_between_staff", "billing_mistake"] }
+                      Plywood Godown:
+                        - { category: appearance, label: "Appearance", apiBasePath: "/api/appearance", violations: ["uniform", "hair_beard_moustache"] }
+                        - { category: cleaning, label: "Cleaning", apiBasePath: "/api/cleaning", violations: ["cleanliness"] }
+                        - { category: customer_dealing, label: "Customer Dealing", apiBasePath: "/api/customer-dealing", violations: ["poor_customer_dealing"] }
+                        - { category: stock_maintenance, label: "Stock Maintenance", apiBasePath: "/api/stock-maintenance", violations: ["dead_stock"] }
+                        - { category: sales_return_handling, label: "Sales Return Handling", apiBasePath: "/api/sales-return-handling", violations: ["late_sales_return"] }
+                        - { category: major_violation, label: "Major Violations", apiBasePath: "/api/major-violation", violations: ["direct_delivery_no_billing", "loading_mistake", "interfere_md_authority", "dead_stock_reporting", "item_change_after_billing_not_edited", "no_random_stock_updation", "mobile_usage", "angry_with_customer", "conflict_between_staff"] }
+                      Glass Godown:
+                        - { category: appearance, label: "Appearance", apiBasePath: "/api/appearance", violations: ["uniform", "hair_beard_moustache"] }
+                        - { category: cleaning, label: "Cleaning", apiBasePath: "/api/cleaning", violations: ["cleanliness"] }
+                        - { category: customer_dealing, label: "Customer Dealing", apiBasePath: "/api/customer-dealing", violations: ["poor_customer_dealing"] }
+                        - { category: wastage, label: "Avoiding Wastage", apiBasePath: "/api/wastage", violations: ["wastage"] }
+                        - { category: stock_taking, label: "Stock Taking", apiBasePath: "/api/stock-taking", violations: ["stock_taking_incomplete"] }
+                        - { category: workflow_status, label: "Workflow Status Updating", apiBasePath: "/api/workflow-status", violations: ["workflow_status_not_updated"] }
+                        - { category: major_violation_glass, label: "Major Violations", apiBasePath: "/api/major-violation-glass", violations: ["interfere_md_authority", "cutting_mistake", "mobile_usage", "angry_with_customer", "conflict_between_staff"] }
+                      Hardware:
+                        - { category: cleaning, label: "Cleaning", apiBasePath: "/api/cleaning", violations: ["cleanliness"] }
+                        - { category: stock_maintenance, label: "Stock Maintenance", apiBasePath: "/api/stock-maintenance", violations: ["dead_stock"] }
+                        - { category: sales_return_handling, label: "Sales Return Handling", apiBasePath: "/api/sales-return-handling", violations: ["late_sales_return"] }
+                        - { category: stock_taking, label: "Stock Taking", apiBasePath: "/api/stock-taking", violations: ["stock_taking_incomplete"] }
+                        - { category: workflow_status, label: "Workflow Status Updating", apiBasePath: "/api/workflow-status", violations: ["workflow_status_not_updated"] }
+                        - { category: packing_bill_cross_check, label: "Cross Checking With Bill After Packing", apiBasePath: "/api/packing-bill-cross-check", violations: ["packing_not_cross_checked"] }
+                        - { category: major_violation_hardware, label: "Major Violations", apiBasePath: "/api/major-violation-hardware", violations: ["late_sales_return_handling", "mobile_usage", "conflict_between_staff"] }
+        '403':
+          description: Forbidden - managers/superadmin only
 
   /feedback/questions:
     get:
@@ -8163,6 +13042,75 @@ paths:
           description: Question not found
 
   /feedback/requests:
+    get:
+      tags:
+        - Feedback
+      summary: List all feedback requests, any status (MANAGERS/HR/SUPER ADMIN)
+      description: Every feedback link sent, across all staff and customers, with the sending staff member's name resolved (staffName). Includes pending/expired links as well as completed ones - filter by status to narrow. This is the full request/response record; for one customer's completed feedback only, see the `feedback` field on GET /ledger/customers/{ledgerId} instead.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, completed, expired]
+          description: Filter to one status
+        - name: staffId
+          in: query
+          schema:
+            type: integer
+          description: Filter to one staff member (Staff.id, internal id)
+        - name: ledgerId
+          in: query
+          schema:
+            type: integer
+          description: Filter to one customer
+      responses:
+        '200':
+          description: Feedback requests, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  pagination:
+                    type: object
+                    properties:
+                      page:
+                        type: integer
+                      limit:
+                        type: integer
+                      total:
+                        type: integer
+                      pages:
+                        type: integer
+                  data:
+                    type: array
+                    items:
+                      allOf:
+                        - $ref: '#/components/schemas/FeedbackRequest'
+                        - type: object
+                          properties:
+                            staffName:
+                              type: string
+                              nullable: true
+                              description: Null if the staff record no longer exists
+        '403':
+          description: Forbidden - managers/HR/superAdmin only
     post:
       tags:
         - Feedback
@@ -9162,7 +14110,13 @@ components:
             - Attendance: 10 points
             - Leaves: 10 points
             - Appearance: 5 points
-            - Future rules: 75 points (reserved)
+            - Cleaning Culture: 5 points
+            - Welcoming Customer: 10 points
+            - Customer Dealing: 15 points
+            - Customer & Quotation Followup: 10 points
+            - Meeting: 5 points
+            - Extra Performance: 10 points
+            - Testimonial: 20 points
           example: 25
         percentageScore:
           type: number
@@ -9433,9 +14387,11 @@ components:
         - Appearance: 5 points
         - Cleaning Culture: 5 points
         - Welcoming Customer: 10 points
+        - Customer Dealing: 15 points
+        - Customer & Quotation Followup: 10 points
+        - Meeting: 5 points
         - Extra Performance: 10 points
         - Testimonial: 20 points
-        - Future rules: 30 points (reserved)
       properties:
         _id:
           type: string
@@ -9504,6 +14460,11 @@ components:
               type: integer
               description: Maximum points for appearance category
               example: 5
+            mode:
+              type: string
+              enum: [flat, perDay]
+              default: perDay
+              description: "'perDay' (default): deducts |pointsPerViolation| for every bad day, recurring. 'flat': forfeits it once, first bad day."
             violations:
               type: array
               description: Types of violations to track
@@ -9513,7 +14474,7 @@ components:
               example: ["uniform", "socks_banyan", "hair_beard_moustache"]
         cleaning:
           type: object
-          description: Cleaning culture scoring rules (binary - full points forfeited for the month on any single bad day)
+          description: Cleaning culture scoring rules (mode "flat" forfeits pointsPerBadDay once for the month; "perDay" deducts it per bad day, recurring)
           properties:
             enabled:
               type: boolean
@@ -9521,11 +14482,20 @@ components:
               example: true
             maxPoints:
               type: integer
-              description: Points for cleaning category, awarded in full only if no day in the month is marked bad
+              description: Points for cleaning category
+              example: 5
+            mode:
+              type: string
+              enum: [flat, perDay]
+              default: flat
+              example: flat
+            pointsPerBadDay:
+              type: integer
+              description: Points deducted per the mode above
               example: 5
         welcomingCustomer:
           type: object
-          description: Welcoming customer scoring rules (binary - full points forfeited for the month on any single bad day)
+          description: Welcoming customer scoring rules (mode "flat" forfeits pointsPerBadDay once for the month; "perDay" deducts it per bad day, recurring)
           properties:
             enabled:
               type: boolean
@@ -9533,7 +14503,63 @@ components:
               example: true
             maxPoints:
               type: integer
-              description: Points for welcoming customer category, awarded in full only if no day in the month is marked bad
+              description: Points for welcoming customer category
+              example: 10
+            mode:
+              type: string
+              enum: [flat, perDay]
+              default: flat
+              example: flat
+            pointsPerBadDay:
+              type: integer
+              description: Points deducted per the mode above
+              example: 10
+        customerDealing:
+          type: object
+          description: Customer dealing scoring rules - Store-department staff are scored from customer feedback (POST /feedback/requests answers), everyone else from the customer_dealing daily check (mode "flat" forfeits pointsPerBadDay once; "perDay" deducts it per bad day, recurring)
+          properties:
+            enabled:
+              type: boolean
+              description: Enable/disable customer dealing scoring
+              example: true
+            maxPoints:
+              type: integer
+              description: Points for customer dealing category
+              example: 15
+            pointsPerBadFeedback:
+              type: integer
+              description: Store staff only - points deducted per completed feedback submission with at least one "no" answer, not deduplicated per customer
+              example: 15
+            mode:
+              type: string
+              enum: [flat, perDay]
+              default: flat
+              description: Non-Store staff only (daily-check based)
+              example: flat
+            pointsPerBadDay:
+              type: integer
+              description: Non-Store staff only - points deducted per the mode above
+              example: 15
+        customerQuotationFollowup:
+          type: object
+          description: Customer & quotation follow-up scoring rules (mode "perDay", the default, deducts pointsPerBadMark per bad day this month and compounds; "flat" forfeits it once)
+          properties:
+            enabled:
+              type: boolean
+              description: Enable/disable customer & quotation followup scoring
+              example: true
+            maxPoints:
+              type: integer
+              description: Points for customer & quotation followup category
+              example: 10
+            mode:
+              type: string
+              enum: [flat, perDay]
+              default: perDay
+              example: perDay
+            pointsPerBadMark:
+              type: integer
+              description: Points deducted per the mode above (perDay compounds - e.g. 2 bad days = -20, floored at 0)
               example: 10
         extraPerformance:
           type: object
@@ -9714,6 +14740,16 @@ tags:
     description: Staff cleaning culture tracking
   - name: Welcoming Customer
     description: Staff welcoming customer behavior tracking
+  - name: Customer Dealing
+    description: |
+      Customer dealing score tracking. Store-department staff are scored automatically from
+      customer feedback (see the Feedback tag); everyone else is marked manually here, daily,
+      the same way as Appearance/Cleaning/Welcoming Customer.
+  - name: Customer & Quotation Followup
+    description: |
+      Customer & quotation follow-up score tracking, marked manually daily like the other
+      daily-check categories - but unlike them, each bad day deducts points (compounds)
+      rather than forfeiting the whole month's points on a single bad mark.
   - name: Extra Performance
     description: Staff extra performance submissions and approval workflow
   - name: Testimonials
@@ -9734,10 +14770,11 @@ tags:
       - Appearance: 5 points (dress code violations)
       - Cleaning Culture: 5 points (forfeited entirely if any day is marked bad)
       - Welcoming Customer: 10 points (forfeited entirely if any day is marked bad)
+      - Customer Dealing: 15 points (Store staff: -15 per completed feedback submission with a "no" answer; everyone else: forfeited entirely if any day is marked bad)
+      - Customer & Quotation Followup: 10 points (-10 per day marked bad this month, compounds - not a one-strike forfeit)
       - Meeting: 5 points (forfeited if missed meetings exceed the configured limit)
       - Extra Performance: 10 points (approved submissions)
       - Testimonial: 20 points (5 points per approved testimonial, max 4)
-      - Future rules: 25 points (reserved for expansion)
 
 security:
   - BearerAuth: []

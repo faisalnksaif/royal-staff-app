@@ -66,6 +66,37 @@ async function getStaffFeedbackRequests(userId: number): Promise<{
   return data as { success: boolean; data: FeedbackRequest[] }
 }
 
+async function getAllFeedbackRequests(params: {
+  page?: number
+  limit?: number
+  status?: "pending" | "completed" | "expired"
+  staffId?: number
+  ledgerId?: number
+} = {}): Promise<{
+  success: boolean
+  pagination: { page: number; limit: number; total: number; pages: number }
+  data: FeedbackRequest[]
+}> {
+  const qs = new URLSearchParams()
+  if (params.page != null) qs.set("page", String(params.page))
+  if (params.limit != null) qs.set("limit", String(params.limit))
+  if (params.status) qs.set("status", params.status)
+  if (params.staffId != null) qs.set("staffId", String(params.staffId))
+  if (params.ledgerId != null) qs.set("ledgerId", String(params.ledgerId))
+  const query = qs.toString()
+  const { data } = await api.http.request({
+    path: `/feedback/requests${query ? `?${query}` : ""}`,
+    method: "GET",
+    secure: true,
+    format: "json",
+  })
+  return data as {
+    success: boolean
+    pagination: { page: number; limit: number; total: number; pages: number }
+    data: FeedbackRequest[]
+  }
+}
+
 async function getFlaggedFeedback(): Promise<{ success: boolean; data: FeedbackRequest[] }> {
   const { data } = await api.http.request({
     path: "/feedback/flagged",
@@ -120,6 +151,7 @@ export const feedbackService = {
   updateQuestion,
   createFeedbackRequest,
   getStaffFeedbackRequests,
+  getAllFeedbackRequests,
   getFlaggedFeedback,
   getFeedbackByToken,
   submitFeedback,

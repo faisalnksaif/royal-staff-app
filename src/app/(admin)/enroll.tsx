@@ -105,11 +105,11 @@ function EnrollFace({
 }) {
   const [capturedUri, setCapturedUri] = useState<string | null>(null)
   const [capturedPoses, setCapturedPoses] = useState<EnrollmentPose[]>([])
-  const [readyForAttendance, setReadyForAttendance] = useState(false)
   const [photoCount, setPhotoCount] = useState(0)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [lastError, setLastError] = useState("")
 
+  const readyForAttendance = capturedPoses.length >= ENROLL_POSES.length
   const nextPose =
     ENROLL_POSES.find((p) => !capturedPoses.includes(p.key)) ?? ENROLL_POSES[0]
 
@@ -119,14 +119,15 @@ function EnrollFace({
     setLastError("")
     try {
       const res = await attendanceService.enrollFace(staff.id, capturedUri, nextPose.key)
-      if (res.readyForAttendance) {
-        onDone(res.photoCount)
-        return
-      }
-      setCapturedPoses(res.posesCaptured)
-      setReadyForAttendance(res.readyForAttendance)
+      const nextCapturedPoses = capturedPoses.includes(nextPose.key)
+        ? capturedPoses
+        : [...capturedPoses, nextPose.key]
+      setCapturedPoses(nextCapturedPoses)
       setPhotoCount(res.photoCount)
       setCapturedUri(null)
+      if (nextCapturedPoses.length >= ENROLL_POSES.length && res.readyForAttendance) {
+        onDone(res.photoCount)
+      }
     } catch (e) {
       setLastError((e as Error).message ?? "Enrollment failed — try again")
     } finally {

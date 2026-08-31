@@ -566,7 +566,13 @@ export interface StaffScoreResponse {
    * - Attendance: 10 points
    * - Leaves: 10 points
    * - Appearance: 5 points
-   * - Future rules: 75 points (reserved)
+   * - Cleaning Culture: 5 points
+   * - Welcoming Customer: 10 points
+   * - Customer Dealing: 15 points
+   * - Customer & Quotation Followup: 10 points
+   * - Meeting: 5 points
+   * - Extra Performance: 10 points
+   * - Testimonial: 20 points
    * @example 25
    */
   maxPossibleScore?: number;
@@ -762,6 +768,42 @@ export interface TestimonialResponse {
   updatedAt?: string;
 }
 
+/** A meeting created by an admin, used as the basis for attendance tracking and Meeting scoring */
+export interface MeetingResponse {
+  /**
+   * MongoDB meeting ID
+   * @example "6a4417ccd5ddf48055605a24"
+   */
+  _id?: string;
+  /** @example "Weekly Sales Review" */
+  title?: string;
+  /** @format date-time */
+  date?: string;
+  notes?: string | null;
+  /** MongoDB user ID of the admin who created the meeting */
+  createdBy?: string;
+  /** @format date-time */
+  createdAt?: string;
+  /** @format date-time */
+  updatedAt?: string;
+}
+
+/** A single staff member's attendance record for a meeting */
+export interface MeetingAttendanceEntry {
+  /** Staff.id (internal id) */
+  staffId?: number;
+  /** @example "ANAS" */
+  staffName?: string;
+  /** @example "present" */
+  status?: "present" | "absent" | "excused";
+  /** Present only when status is excused */
+  reason?: string | null;
+  /** MongoDB user ID of the admin who last updated this status */
+  markedBy?: string | null;
+  /** @format date-time */
+  markedAt?: string | null;
+}
+
 /**
  * Scoring rules configuration for a specific month. Controls point allocation for all scoring categories.
  *
@@ -770,9 +812,12 @@ export interface TestimonialResponse {
  * - Leaves: 10 points
  * - Appearance: 5 points
  * - Cleaning Culture: 5 points
+ * - Welcoming Customer: 10 points
+ * - Customer Dealing: 15 points
+ * - Customer & Quotation Followup: 10 points
+ * - Meeting: 5 points
  * - Extra Performance: 10 points
  * - Testimonial: 20 points
- * - Future rules: 40 points (reserved)
  */
 export interface ScoringConfigResponse {
   /** MongoDB config ID */
@@ -849,12 +894,17 @@ export interface ScoringConfigResponse {
      */
     maxPoints?: number;
     /**
-     * Types of violations to track
-     * @example ["uniform","hair_beard_moustache"]
+     * 'perDay' (default): deducts |pointsPerViolation| for every bad day, recurring. 'flat': forfeits it once, first bad day.
+     * @default "perDay"
      */
-    violations?: ("uniform" | "hair_beard_moustache")[];
+    mode?: "flat" | "perDay";
+    /**
+     * Types of violations to track
+     * @example ["uniform","socks_banyan","hair_beard_moustache"]
+     */
+    violations?: ("uniform" | "socks_banyan" | "hair_beard_moustache")[];
   };
-  /** Cleaning culture scoring rules (binary - full points forfeited for the month on any single bad day) */
+  /** Cleaning culture scoring rules (mode "flat" forfeits pointsPerBadDay once for the month; "perDay" deducts it per bad day, recurring) */
   cleaning?: {
     /**
      * Enable/disable cleaning scoring
@@ -862,10 +912,95 @@ export interface ScoringConfigResponse {
      */
     enabled?: boolean;
     /**
-     * Points for cleaning category, awarded in full only if no day in the month is marked bad
+     * Points for cleaning category
      * @example 5
      */
     maxPoints?: number;
+    /**
+     * @default "flat"
+     * @example "flat"
+     */
+    mode?: "flat" | "perDay";
+    /**
+     * Points deducted per the mode above
+     * @example 5
+     */
+    pointsPerBadDay?: number;
+  };
+  /** Welcoming customer scoring rules (mode "flat" forfeits pointsPerBadDay once for the month; "perDay" deducts it per bad day, recurring) */
+  welcomingCustomer?: {
+    /**
+     * Enable/disable welcoming customer scoring
+     * @example true
+     */
+    enabled?: boolean;
+    /**
+     * Points for welcoming customer category
+     * @example 10
+     */
+    maxPoints?: number;
+    /**
+     * @default "flat"
+     * @example "flat"
+     */
+    mode?: "flat" | "perDay";
+    /**
+     * Points deducted per the mode above
+     * @example 10
+     */
+    pointsPerBadDay?: number;
+  };
+  /** Customer dealing scoring rules - Store-department staff are scored from customer feedback (POST /feedback/requests answers), everyone else from the customer_dealing daily check (mode "flat" forfeits pointsPerBadDay once; "perDay" deducts it per bad day, recurring) */
+  customerDealing?: {
+    /**
+     * Enable/disable customer dealing scoring
+     * @example true
+     */
+    enabled?: boolean;
+    /**
+     * Points for customer dealing category
+     * @example 15
+     */
+    maxPoints?: number;
+    /**
+     * Store staff only - points deducted per completed feedback submission with at least one "no" answer, not deduplicated per customer
+     * @example 15
+     */
+    pointsPerBadFeedback?: number;
+    /**
+     * Non-Store staff only (daily-check based)
+     * @default "flat"
+     * @example "flat"
+     */
+    mode?: "flat" | "perDay";
+    /**
+     * Non-Store staff only - points deducted per the mode above
+     * @example 15
+     */
+    pointsPerBadDay?: number;
+  };
+  /** Customer & quotation follow-up scoring rules (mode "perDay", the default, deducts pointsPerBadMark per bad day this month and compounds; "flat" forfeits it once) */
+  customerQuotationFollowup?: {
+    /**
+     * Enable/disable customer & quotation followup scoring
+     * @example true
+     */
+    enabled?: boolean;
+    /**
+     * Points for customer & quotation followup category
+     * @example 10
+     */
+    maxPoints?: number;
+    /**
+     * @default "perDay"
+     * @example "perDay"
+     */
+    mode?: "flat" | "perDay";
+    /**
+     * Points deducted per the mode above (perDay compounds - e.g. 2 bad days = -20, floored at 0)
+     * @example 10
+     */
+    pointsPerBadMark?: number;
   };
   /** Extra performance scoring rules (Approved submissions) */
   extraPerformance?: {
@@ -907,6 +1042,97 @@ export interface ScoringConfigResponse {
    * When this config was last updated
    * @format date-time
    */
+  updatedAt?: string;
+}
+
+/** A yes/no question in the feedback question bank */
+export interface FeedbackQuestion {
+  /** @example "6a4417ccd5ddf48055605a24" */
+  _id?: string;
+  /** @example "Was the staff member polite and helpful?" */
+  text?: string;
+  /**
+   * Inactive questions are excluded from new feedback links but remain on any FeedbackRequest that already snapshotted them
+   * @example true
+   */
+  isActive?: boolean;
+  /**
+   * Display order, lower first
+   * @example 1
+   */
+  order?: number;
+  /** @format date-time */
+  createdAt?: string;
+  /** @format date-time */
+  updatedAt?: string;
+}
+
+/** A feedback link sent to a customer, its snapshotted questions, and (once completed) the customer's answers and submitting device info */
+export interface FeedbackRequest {
+  /** @example "6a4417ccd5ddf48055605a25" */
+  _id?: string;
+  /**
+   * Opaque token used in the customer-facing link
+   * @example "b6c1a5e2-4f3d-4a1b-9c2e-7d8f6a1b2c3d"
+   */
+  token?: string;
+  /**
+   * Staff.id (internal id) of the staff member who sent the link
+   * @example 2646
+   */
+  staffId?: number;
+  /**
+   * Rowbest numeric user ID of the staff member who sent the link
+   * @example 3027
+   */
+  staffUserId?: number;
+  /**
+   * Rowbest ledger id of the customer
+   * @example 1024
+   */
+  ledgerId?: number;
+  /** @example "Sunrise Traders" */
+  customerName?: string;
+  /** @example "9876543210" */
+  customerMobile?: string;
+  /** @example "completed" */
+  status?: "pending" | "completed" | "expired";
+  /** Snapshot of active questions at the time this link was created - unaffected by later edits to the question bank */
+  questions?: {
+    questionId?: string;
+    text?: string;
+  }[];
+  /** Present once status is "completed" */
+  answers?: {
+    questionId?: string;
+    answer?: boolean;
+  }[];
+  /** Captured at submission time only */
+  device?: {
+    /** Client-supplied opaque device identifier */
+    fingerprint?: string;
+    ipAddress?: string;
+    userAgent?: string;
+  };
+  /**
+   * Set if this submission's device fingerprint/IP also appears on a completed request for a different customer - a manual-review signal, not an automatic block
+   * @example false
+   */
+  flagged?: boolean;
+  /** @example "Device also used for feedback on a different customer (ledger 1031, request 6a4417ccd5ddf48055605a99)" */
+  flagReason?: string;
+  /** @format date-time */
+  sentAt?: string;
+  /** @format date-time */
+  completedAt?: string;
+  /**
+   * Link stops accepting submissions after this time (7 days after sentAt)
+   * @format date-time
+   */
+  expiresAt?: string;
+  /** @format date-time */
+  createdAt?: string;
+  /** @format date-time */
   updatedAt?: string;
 }
 
@@ -1769,6 +1995,29 @@ export class Api<SecurityDataType extends unknown> {
             staffName?: string | null;
             source?: "assigned" | "dynamic" | "unassigned";
           };
+          /** Completed customer feedback submissions for this customer, newest first (see POST /feedback/requests). Pending/expired links (no answers yet) are excluded. */
+          feedback?: {
+            _id?: string;
+            /** Staff.id (internal id) of the staff member who sent the feedback link */
+            staffId?: number;
+            /** Null if the staff record no longer exists */
+            staffName?: string | null;
+            questions?: {
+              questionId?: string;
+              text?: string;
+            }[];
+            answers?: {
+              questionId?: string;
+              answer?: boolean;
+            }[];
+            /** See GET /feedback/flagged - a manual-review signal, not a claim of confirmed fraud */
+            flagged?: boolean;
+            flagReason?: string | null;
+            /** @format date-time */
+            sentAt?: string;
+            /** @format date-time */
+            completedAt?: string;
+          }[];
         },
         void
       >({
@@ -3778,7 +4027,7 @@ export class Api<SecurityDataType extends unknown> {
       }),
 
     /**
-     * @description Removes all enrolled reference photos/descriptors for a staff member. They can re-enroll afterward. Requires owner, manager, or superAdmin role.
+     * @description Removes all enrolled reference photos/descriptors for a staff member. They can re-enroll afterward. Staff can only clear their own enrollment; owner, manager, or superAdmin can clear any staff member's enrollment.
      *
      * @tags Attendance
      * @name EnrollDelete
@@ -5207,11 +5456,17 @@ export class Api<SecurityDataType extends unknown> {
         status?: "ok" | "bad";
         /**
          * Required if status is "bad"
-         * @example ["uniform"]
+         * @example ["uniform","socks_banyan"]
          */
-        violations?: ("uniform" | "hair_beard_moustache")[];
+        violations: ("uniform" | "socks_banyan" | "hair_beard_moustache")[];
         /** @example "Wrinkled uniform, mismatched socks" */
-        remarks?: string | null;
+        remarks: string;
+        /**
+         * Date this check applies to (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
       },
       params: RequestParams = {},
     ) =>
@@ -5232,15 +5487,24 @@ export class Api<SecurityDataType extends unknown> {
       }),
 
     /**
-     * @description Retrieve appearance status for all staff members for today. Defaults to OK for all staff.
+     * @description Retrieve appearance status for all staff members for a given date. Defaults to OK for all staff, and to today if `date` is omitted.
      *
      * @tags Appearance
      * @name TodayList
-     * @summary Get today's appearance for all staff (MANAGERS/SUPER ADMIN)
+     * @summary Get appearance for all staff for a given date (MANAGERS/SUPER ADMIN)
      * @request GET:/appearance/today
      * @secure
      */
-    todayList: (params: RequestParams = {}) =>
+    todayList: (
+      query?: {
+        /**
+         * Date to retrieve (YYYY-MM-DD). Defaults to today.
+         * @format date
+         */
+        date?: string;
+      },
+      params: RequestParams = {},
+    ) =>
       this.http.request<
         {
           success?: boolean;
@@ -5259,7 +5523,11 @@ export class Api<SecurityDataType extends unknown> {
               staffName?: string;
               date?: string;
               status?: "ok" | "bad";
-              violations?: ("uniform" | "hair_beard_moustache")[];
+              violations?: (
+                | "uniform"
+                | "socks_banyan"
+                | "hair_beard_moustache"
+              )[];
               remarks?: string | null;
               /** @format date-time */
               markedAt?: string | null;
@@ -5270,13 +5538,14 @@ export class Api<SecurityDataType extends unknown> {
       >({
         path: `/appearance/today`,
         method: "GET",
+        query: query,
         secure: true,
         format: "json",
         ...params,
       }),
 
     /**
-     * @description Mark specific appearance violations for a staff member for today
+     * @description Mark specific appearance violations for a staff member for a given date (defaults to today)
      *
      * @tags Appearance
      * @name MarkBadCreate
@@ -5291,11 +5560,17 @@ export class Api<SecurityDataType extends unknown> {
         status?: "ok" | "bad";
         /**
          * Appearance violations to mark
-         * @example ["uniform"]
+         * @example ["uniform","socks_banyan"]
          */
-        violations: ("uniform" | "hair_beard_moustache")[];
+        violations: ("uniform" | "socks_banyan" | "hair_beard_moustache")[];
         /** @example "Wrinkled uniform, mismatched socks" */
-        remarks?: string | null;
+        remarks: string;
+        /**
+         * Date this check applies to (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
       },
       params: RequestParams = {},
     ) =>
@@ -5324,7 +5599,7 @@ export class Api<SecurityDataType extends unknown> {
       }),
 
     /**
-     * @description Reset staff appearance status back to OK for today
+     * @description Reset staff appearance status back to OK for a given date (defaults to today)
      *
      * @tags Appearance
      * @name ResetCreate
@@ -5332,7 +5607,18 @@ export class Api<SecurityDataType extends unknown> {
      * @request POST:/appearance/reset/{staffId}
      * @secure
      */
-    resetCreate: (staffId: number, params: RequestParams = {}) =>
+    resetCreate: (
+      staffId: number,
+      data?: {
+        /**
+         * Date to reset (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
       this.http.request<
         {
           success?: boolean;
@@ -5347,7 +5633,9 @@ export class Api<SecurityDataType extends unknown> {
       >({
         path: `/appearance/reset/${staffId}`,
         method: "POST",
+        body: data,
         secure: true,
+        type: ContentType.Json,
         format: "json",
         ...params,
       }),
@@ -5455,9 +5743,15 @@ export class Api<SecurityDataType extends unknown> {
          * Required if status is "bad"
          * @example ["cleanliness"]
          */
-        violations?: "cleanliness"[];
+        violations: "cleanliness"[];
         /** @example "Workstation left uncleaned" */
-        remarks?: string | null;
+        remarks: string;
+        /**
+         * Date this check applies to (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
       },
       params: RequestParams = {},
     ) =>
@@ -5478,15 +5772,24 @@ export class Api<SecurityDataType extends unknown> {
       }),
 
     /**
-     * @description Retrieve cleaning status for all staff members for today. Defaults to OK for all staff.
+     * @description Retrieve cleaning status for all staff members for a given date. Defaults to OK for all staff, and to today if `date` is omitted.
      *
      * @tags Cleaning
      * @name TodayList
-     * @summary Get today's cleaning status for all staff (MANAGERS/SUPER ADMIN)
+     * @summary Get cleaning status for all staff for a given date (MANAGERS/SUPER ADMIN)
      * @request GET:/cleaning/today
      * @secure
      */
-    todayList: (params: RequestParams = {}) =>
+    todayList: (
+      query?: {
+        /**
+         * Date to retrieve (YYYY-MM-DD). Defaults to today.
+         * @format date
+         */
+        date?: string;
+      },
+      params: RequestParams = {},
+    ) =>
       this.http.request<
         {
           success?: boolean;
@@ -5516,13 +5819,14 @@ export class Api<SecurityDataType extends unknown> {
       >({
         path: `/cleaning/today`,
         method: "GET",
+        query: query,
         secure: true,
         format: "json",
         ...params,
       }),
 
     /**
-     * @description Mark cleaning violation for a staff member for today
+     * @description Mark cleaning violation for a staff member for a given date (defaults to today)
      *
      * @tags Cleaning
      * @name MarkBadCreate
@@ -5541,7 +5845,13 @@ export class Api<SecurityDataType extends unknown> {
          */
         violations: "cleanliness"[];
         /** @example "Workstation left uncleaned" */
-        remarks?: string | null;
+        remarks: string;
+        /**
+         * Date this check applies to (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
       },
       params: RequestParams = {},
     ) =>
@@ -5570,7 +5880,7 @@ export class Api<SecurityDataType extends unknown> {
       }),
 
     /**
-     * @description Reset staff cleaning status back to OK for today
+     * @description Reset staff cleaning status back to OK for a given date (defaults to today)
      *
      * @tags Cleaning
      * @name ResetCreate
@@ -5578,7 +5888,18 @@ export class Api<SecurityDataType extends unknown> {
      * @request POST:/cleaning/reset/{staffId}
      * @secure
      */
-    resetCreate: (staffId: number, params: RequestParams = {}) =>
+    resetCreate: (
+      staffId: number,
+      data?: {
+        /**
+         * Date to reset (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
       this.http.request<
         {
           success?: boolean;
@@ -5593,7 +5914,9 @@ export class Api<SecurityDataType extends unknown> {
       >({
         path: `/cleaning/reset/${staffId}`,
         method: "POST",
+        body: data,
         secure: true,
+        type: ContentType.Json,
         format: "json",
         ...params,
       }),
@@ -5682,6 +6005,2547 @@ export class Api<SecurityDataType extends unknown> {
         ...params,
       }),
   };
+  stockMaintenance = {
+    /**
+     * @description Update stock maintenance status for a staff member. Use status "ok" to reset, or "bad" with violations to mark violations.
+     *
+     * @tags StockMaintenance
+     * @name StockMaintenanceUpdate
+     * @summary Update staff stock maintenance culture status (MANAGERS/SUPER ADMIN)
+     * @request PUT:/stock-maintenance/{staffId}
+     * @secure
+     */
+    stockMaintenanceUpdate: (
+      staffId: number,
+      data: {
+        /** @example "bad" */
+        status?: "ok" | "bad";
+        /**
+         * Required if status is "bad"
+         * @example ["dead_stock"]
+         */
+        violations: "dead_stock"[];
+        /** @example "Dead stock found in mica section not reported" */
+        remarks: string;
+        /**
+         * Date this check applies to (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: object;
+        },
+        void
+      >({
+        path: `/stock-maintenance/${staffId}`,
+        method: "PUT",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Retrieve stock maintenance status for all staff members for a given date. Defaults to OK for all staff, and to today if `date` is omitted.
+     *
+     * @tags StockMaintenance
+     * @name TodayList
+     * @summary Get stock maintenance status for all staff for a given date (MANAGERS/SUPER ADMIN)
+     * @request GET:/stock-maintenance/today
+     * @secure
+     */
+    todayList: (
+      query?: {
+        /**
+         * Date to retrieve (YYYY-MM-DD). Defaults to today.
+         * @format date
+         */
+        date?: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            /**
+             * @format date
+             * @example "2026-08-09"
+             */
+            date?: string;
+            /** @example 50 */
+            count?: number;
+            /** @example 3 */
+            badCount?: number;
+            staff?: {
+              staffId?: number;
+              staffName?: string;
+              date?: string;
+              status?: "ok" | "bad";
+              violations?: "dead_stock"[];
+              remarks?: string | null;
+              /** @format date-time */
+              markedAt?: string | null;
+            }[];
+          };
+        },
+        void
+      >({
+        path: `/stock-maintenance/today`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Mark stock maintenance violation for a staff member for a given date (defaults to today)
+     *
+     * @tags StockMaintenance
+     * @name MarkBadCreate
+     * @summary Mark staff stock maintenance as bad (MANAGERS/SUPER ADMIN)
+     * @request POST:/stock-maintenance/mark-bad/{staffId}
+     * @secure
+     */
+    markBadCreate: (
+      staffId: number,
+      data: {
+        /** @default "bad" */
+        status?: "ok" | "bad";
+        /**
+         * Stock Maintenance violations to mark
+         * @example ["dead_stock"]
+         */
+        violations: "dead_stock"[];
+        /** @example "Dead stock found in mica section not reported" */
+        remarks: string;
+        /**
+         * Date this check applies to (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            status?: string;
+            violations?: string[];
+            remarks?: string;
+            /** @format date-time */
+            markedAt?: string;
+          };
+        },
+        void
+      >({
+        path: `/stock-maintenance/mark-bad/${staffId}`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Reset staff stock maintenance status back to OK for a given date (defaults to today)
+     *
+     * @tags StockMaintenance
+     * @name ResetCreate
+     * @summary Reset stock maintenance status to OK (MANAGERS/SUPER ADMIN)
+     * @request POST:/stock-maintenance/reset/{staffId}
+     * @secure
+     */
+    resetCreate: (
+      staffId: number,
+      data?: {
+        /**
+         * Date to reset (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            /** @example "ok" */
+            status?: string;
+          };
+        },
+        void
+      >({
+        path: `/stock-maintenance/reset/${staffId}`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Get stock maintenance history for a specific staff member
+     *
+     * @tags StockMaintenance
+     * @name HistoryDetail
+     * @summary Get stock maintenance history (MANAGERS/SUPER ADMIN)
+     * @request GET:/stock-maintenance/history/{staffId}
+     * @secure
+     */
+    historyDetail: (
+      staffId: number,
+      query?: {
+        /**
+         * Number of days to look back (default 30)
+         * @default 30
+         */
+        days?: number;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            period?: string;
+            stats?: {
+              totalDays?: number;
+              badDays?: number;
+              okDays?: number;
+              badPercentage?: string;
+            };
+            history?: object[];
+          };
+        },
+        void
+      >({
+        path: `/stock-maintenance/history/${staffId}`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Get aggregated stock maintenance statistics across staff
+     *
+     * @tags StockMaintenance
+     * @name StatsOverviewList
+     * @summary Get stock maintenance statistics (MANAGERS/SUPER ADMIN)
+     * @request GET:/stock-maintenance/stats/overview
+     * @secure
+     */
+    statsOverviewList: (
+      query?: {
+        /** @format date */
+        startDate?: string;
+        /** @format date */
+        endDate?: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            period?: object;
+            totalStaff?: number;
+            staffWithBadDays?: number;
+            stats?: object[];
+          };
+        },
+        void
+      >({
+        path: `/stock-maintenance/stats/overview`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+  };
+  salesReturnHandling = {
+    /**
+     * @description Update sales return handling status for a staff member. Use status "ok" to reset, or "bad" with violations to mark violations.
+     *
+     * @tags SalesReturnHandling
+     * @name SalesReturnHandlingUpdate
+     * @summary Update staff sales return handling culture status (MANAGERS/SUPER ADMIN)
+     * @request PUT:/sales-return-handling/{staffId}
+     * @secure
+     */
+    salesReturnHandlingUpdate: (
+      staffId: number,
+      data: {
+        /** @example "bad" */
+        status?: "ok" | "bad";
+        /**
+         * Required if status is "bad"
+         * @example ["late_sales_return"]
+         */
+        violations: "late_sales_return"[];
+        /** @example "Sales return not processed within SLA" */
+        remarks: string;
+        /**
+         * Date this check applies to (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: object;
+        },
+        void
+      >({
+        path: `/sales-return-handling/${staffId}`,
+        method: "PUT",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Retrieve sales return handling status for all staff members for a given date. Defaults to OK for all staff, and to today if `date` is omitted.
+     *
+     * @tags SalesReturnHandling
+     * @name TodayList
+     * @summary Get sales return handling status for all staff for a given date (MANAGERS/SUPER ADMIN)
+     * @request GET:/sales-return-handling/today
+     * @secure
+     */
+    todayList: (
+      query?: {
+        /**
+         * Date to retrieve (YYYY-MM-DD). Defaults to today.
+         * @format date
+         */
+        date?: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            /**
+             * @format date
+             * @example "2026-08-09"
+             */
+            date?: string;
+            /** @example 50 */
+            count?: number;
+            /** @example 3 */
+            badCount?: number;
+            staff?: {
+              staffId?: number;
+              staffName?: string;
+              date?: string;
+              status?: "ok" | "bad";
+              violations?: "late_sales_return"[];
+              remarks?: string | null;
+              /** @format date-time */
+              markedAt?: string | null;
+            }[];
+          };
+        },
+        void
+      >({
+        path: `/sales-return-handling/today`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Mark sales return handling violation for a staff member for a given date (defaults to today)
+     *
+     * @tags SalesReturnHandling
+     * @name MarkBadCreate
+     * @summary Mark staff sales return handling as bad (MANAGERS/SUPER ADMIN)
+     * @request POST:/sales-return-handling/mark-bad/{staffId}
+     * @secure
+     */
+    markBadCreate: (
+      staffId: number,
+      data: {
+        /** @default "bad" */
+        status?: "ok" | "bad";
+        /**
+         * Sales Return Handling violations to mark
+         * @example ["late_sales_return"]
+         */
+        violations: "late_sales_return"[];
+        /** @example "Sales return not processed within SLA" */
+        remarks: string;
+        /**
+         * Date this check applies to (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            status?: string;
+            violations?: string[];
+            remarks?: string;
+            /** @format date-time */
+            markedAt?: string;
+          };
+        },
+        void
+      >({
+        path: `/sales-return-handling/mark-bad/${staffId}`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Reset staff sales return handling status back to OK for a given date (defaults to today)
+     *
+     * @tags SalesReturnHandling
+     * @name ResetCreate
+     * @summary Reset sales return handling status to OK (MANAGERS/SUPER ADMIN)
+     * @request POST:/sales-return-handling/reset/{staffId}
+     * @secure
+     */
+    resetCreate: (
+      staffId: number,
+      data?: {
+        /**
+         * Date to reset (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            /** @example "ok" */
+            status?: string;
+          };
+        },
+        void
+      >({
+        path: `/sales-return-handling/reset/${staffId}`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Get sales return handling history for a specific staff member
+     *
+     * @tags SalesReturnHandling
+     * @name HistoryDetail
+     * @summary Get sales return handling history (MANAGERS/SUPER ADMIN)
+     * @request GET:/sales-return-handling/history/{staffId}
+     * @secure
+     */
+    historyDetail: (
+      staffId: number,
+      query?: {
+        /**
+         * Number of days to look back (default 30)
+         * @default 30
+         */
+        days?: number;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            period?: string;
+            stats?: {
+              totalDays?: number;
+              badDays?: number;
+              okDays?: number;
+              badPercentage?: string;
+            };
+            history?: object[];
+          };
+        },
+        void
+      >({
+        path: `/sales-return-handling/history/${staffId}`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Get aggregated sales return handling statistics across staff
+     *
+     * @tags SalesReturnHandling
+     * @name StatsOverviewList
+     * @summary Get sales return handling statistics (MANAGERS/SUPER ADMIN)
+     * @request GET:/sales-return-handling/stats/overview
+     * @secure
+     */
+    statsOverviewList: (
+      query?: {
+        /** @format date */
+        startDate?: string;
+        /** @format date */
+        endDate?: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            period?: object;
+            totalStaff?: number;
+            staffWithBadDays?: number;
+            stats?: object[];
+          };
+        },
+        void
+      >({
+        path: `/sales-return-handling/stats/overview`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+  };
+  wastage = {
+    /**
+     * @description Update wastage status for a staff member. Use status "ok" to reset, or "bad" with violations to mark violations.
+     *
+     * @tags Wastage
+     * @name WastageUpdate
+     * @summary Update staff wastage culture status (MANAGERS/SUPER ADMIN)
+     * @request PUT:/wastage/{staffId}
+     * @secure
+     */
+    wastageUpdate: (
+      staffId: number,
+      data: {
+        /** @example "bad" */
+        status?: "ok" | "bad";
+        /**
+         * Required if status is "bad"
+         * @example ["wastage"]
+         */
+        violations: "wastage"[];
+        /** @example "Excess mica offcuts not logged as wastage" */
+        remarks: string;
+        /**
+         * Date this check applies to (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: object;
+        },
+        void
+      >({
+        path: `/wastage/${staffId}`,
+        method: "PUT",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Retrieve wastage status for all staff members for a given date. Defaults to OK for all staff, and to today if `date` is omitted.
+     *
+     * @tags Wastage
+     * @name TodayList
+     * @summary Get wastage status for all staff for a given date (MANAGERS/SUPER ADMIN)
+     * @request GET:/wastage/today
+     * @secure
+     */
+    todayList: (
+      query?: {
+        /**
+         * Date to retrieve (YYYY-MM-DD). Defaults to today.
+         * @format date
+         */
+        date?: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            /**
+             * @format date
+             * @example "2026-08-09"
+             */
+            date?: string;
+            /** @example 50 */
+            count?: number;
+            /** @example 3 */
+            badCount?: number;
+            staff?: {
+              staffId?: number;
+              staffName?: string;
+              date?: string;
+              status?: "ok" | "bad";
+              violations?: "wastage"[];
+              remarks?: string | null;
+              /** @format date-time */
+              markedAt?: string | null;
+            }[];
+          };
+        },
+        void
+      >({
+        path: `/wastage/today`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Mark wastage violation for a staff member for a given date (defaults to today)
+     *
+     * @tags Wastage
+     * @name MarkBadCreate
+     * @summary Mark staff wastage as bad (MANAGERS/SUPER ADMIN)
+     * @request POST:/wastage/mark-bad/{staffId}
+     * @secure
+     */
+    markBadCreate: (
+      staffId: number,
+      data: {
+        /** @default "bad" */
+        status?: "ok" | "bad";
+        /**
+         * Avoiding Wastage violations to mark
+         * @example ["wastage"]
+         */
+        violations: "wastage"[];
+        /** @example "Excess mica offcuts not logged as wastage" */
+        remarks: string;
+        /**
+         * Date this check applies to (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            status?: string;
+            violations?: string[];
+            remarks?: string;
+            /** @format date-time */
+            markedAt?: string;
+          };
+        },
+        void
+      >({
+        path: `/wastage/mark-bad/${staffId}`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Reset staff wastage status back to OK for a given date (defaults to today)
+     *
+     * @tags Wastage
+     * @name ResetCreate
+     * @summary Reset wastage status to OK (MANAGERS/SUPER ADMIN)
+     * @request POST:/wastage/reset/{staffId}
+     * @secure
+     */
+    resetCreate: (
+      staffId: number,
+      data?: {
+        /**
+         * Date to reset (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            /** @example "ok" */
+            status?: string;
+          };
+        },
+        void
+      >({
+        path: `/wastage/reset/${staffId}`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Get wastage history for a specific staff member
+     *
+     * @tags Wastage
+     * @name HistoryDetail
+     * @summary Get wastage history (MANAGERS/SUPER ADMIN)
+     * @request GET:/wastage/history/{staffId}
+     * @secure
+     */
+    historyDetail: (
+      staffId: number,
+      query?: {
+        /**
+         * Number of days to look back (default 30)
+         * @default 30
+         */
+        days?: number;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            period?: string;
+            stats?: {
+              totalDays?: number;
+              badDays?: number;
+              okDays?: number;
+              badPercentage?: string;
+            };
+            history?: object[];
+          };
+        },
+        void
+      >({
+        path: `/wastage/history/${staffId}`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Get aggregated wastage statistics across staff
+     *
+     * @tags Wastage
+     * @name StatsOverviewList
+     * @summary Get wastage statistics (MANAGERS/SUPER ADMIN)
+     * @request GET:/wastage/stats/overview
+     * @secure
+     */
+    statsOverviewList: (
+      query?: {
+        /** @format date */
+        startDate?: string;
+        /** @format date */
+        endDate?: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            period?: object;
+            totalStaff?: number;
+            staffWithBadDays?: number;
+            stats?: object[];
+          };
+        },
+        void
+      >({
+        path: `/wastage/stats/overview`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+  };
+  stockTaking = {
+    /**
+     * @description Update stock taking status for a staff member. Use status "ok" to reset, or "bad" with violations to mark violations.
+     *
+     * @tags StockTaking
+     * @name StockTakingUpdate
+     * @summary Update staff stock taking culture status (MANAGERS/SUPER ADMIN)
+     * @request PUT:/stock-taking/{staffId}
+     * @secure
+     */
+    stockTakingUpdate: (
+      staffId: number,
+      data: {
+        /** @example "bad" */
+        status?: "ok" | "bad";
+        /**
+         * Required if status is "bad"
+         * @example ["stock_taking_incomplete"]
+         */
+        violations: "stock_taking_incomplete"[];
+        /** @example "Monthly stock take not completed" */
+        remarks: string;
+        /**
+         * Date this check applies to (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: object;
+        },
+        void
+      >({
+        path: `/stock-taking/${staffId}`,
+        method: "PUT",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Retrieve stock taking status for all staff members for a given date. Defaults to OK for all staff, and to today if `date` is omitted.
+     *
+     * @tags StockTaking
+     * @name TodayList
+     * @summary Get stock taking status for all staff for a given date (MANAGERS/SUPER ADMIN)
+     * @request GET:/stock-taking/today
+     * @secure
+     */
+    todayList: (
+      query?: {
+        /**
+         * Date to retrieve (YYYY-MM-DD). Defaults to today.
+         * @format date
+         */
+        date?: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            /**
+             * @format date
+             * @example "2026-08-09"
+             */
+            date?: string;
+            /** @example 50 */
+            count?: number;
+            /** @example 3 */
+            badCount?: number;
+            staff?: {
+              staffId?: number;
+              staffName?: string;
+              date?: string;
+              status?: "ok" | "bad";
+              violations?: "stock_taking_incomplete"[];
+              remarks?: string | null;
+              /** @format date-time */
+              markedAt?: string | null;
+            }[];
+          };
+        },
+        void
+      >({
+        path: `/stock-taking/today`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Mark stock taking violation for a staff member for a given date (defaults to today)
+     *
+     * @tags StockTaking
+     * @name MarkBadCreate
+     * @summary Mark staff stock taking as bad (MANAGERS/SUPER ADMIN)
+     * @request POST:/stock-taking/mark-bad/{staffId}
+     * @secure
+     */
+    markBadCreate: (
+      staffId: number,
+      data: {
+        /** @default "bad" */
+        status?: "ok" | "bad";
+        /**
+         * Stock Taking violations to mark
+         * @example ["stock_taking_incomplete"]
+         */
+        violations: "stock_taking_incomplete"[];
+        /** @example "Monthly stock take not completed" */
+        remarks: string;
+        /**
+         * Date this check applies to (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            status?: string;
+            violations?: string[];
+            remarks?: string;
+            /** @format date-time */
+            markedAt?: string;
+          };
+        },
+        void
+      >({
+        path: `/stock-taking/mark-bad/${staffId}`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Reset staff stock taking status back to OK for a given date (defaults to today)
+     *
+     * @tags StockTaking
+     * @name ResetCreate
+     * @summary Reset stock taking status to OK (MANAGERS/SUPER ADMIN)
+     * @request POST:/stock-taking/reset/{staffId}
+     * @secure
+     */
+    resetCreate: (
+      staffId: number,
+      data?: {
+        /**
+         * Date to reset (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            /** @example "ok" */
+            status?: string;
+          };
+        },
+        void
+      >({
+        path: `/stock-taking/reset/${staffId}`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Get stock taking history for a specific staff member
+     *
+     * @tags StockTaking
+     * @name HistoryDetail
+     * @summary Get stock taking history (MANAGERS/SUPER ADMIN)
+     * @request GET:/stock-taking/history/{staffId}
+     * @secure
+     */
+    historyDetail: (
+      staffId: number,
+      query?: {
+        /**
+         * Number of days to look back (default 30)
+         * @default 30
+         */
+        days?: number;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            period?: string;
+            stats?: {
+              totalDays?: number;
+              badDays?: number;
+              okDays?: number;
+              badPercentage?: string;
+            };
+            history?: object[];
+          };
+        },
+        void
+      >({
+        path: `/stock-taking/history/${staffId}`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Get aggregated stock taking statistics across staff
+     *
+     * @tags StockTaking
+     * @name StatsOverviewList
+     * @summary Get stock taking statistics (MANAGERS/SUPER ADMIN)
+     * @request GET:/stock-taking/stats/overview
+     * @secure
+     */
+    statsOverviewList: (
+      query?: {
+        /** @format date */
+        startDate?: string;
+        /** @format date */
+        endDate?: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            period?: object;
+            totalStaff?: number;
+            staffWithBadDays?: number;
+            stats?: object[];
+          };
+        },
+        void
+      >({
+        path: `/stock-taking/stats/overview`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+  };
+  workflowStatus = {
+    /**
+     * @description Update workflow status status for a staff member. Use status "ok" to reset, or "bad" with violations to mark violations.
+     *
+     * @tags WorkflowStatus
+     * @name WorkflowStatusUpdate
+     * @summary Update staff workflow status culture status (MANAGERS/SUPER ADMIN)
+     * @request PUT:/workflow-status/{staffId}
+     * @secure
+     */
+    workflowStatusUpdate: (
+      staffId: number,
+      data: {
+        /** @example "bad" */
+        status?: "ok" | "bad";
+        /**
+         * Required if status is "bad"
+         * @example ["workflow_status_not_updated"]
+         */
+        violations: "workflow_status_not_updated"[];
+        /** @example "Workflow status not updated for the day" */
+        remarks: string;
+        /**
+         * Date this check applies to (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: object;
+        },
+        void
+      >({
+        path: `/workflow-status/${staffId}`,
+        method: "PUT",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Retrieve workflow status status for all staff members for a given date. Defaults to OK for all staff, and to today if `date` is omitted.
+     *
+     * @tags WorkflowStatus
+     * @name TodayList
+     * @summary Get workflow status status for all staff for a given date (MANAGERS/SUPER ADMIN)
+     * @request GET:/workflow-status/today
+     * @secure
+     */
+    todayList: (
+      query?: {
+        /**
+         * Date to retrieve (YYYY-MM-DD). Defaults to today.
+         * @format date
+         */
+        date?: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            /**
+             * @format date
+             * @example "2026-08-09"
+             */
+            date?: string;
+            /** @example 50 */
+            count?: number;
+            /** @example 3 */
+            badCount?: number;
+            staff?: {
+              staffId?: number;
+              staffName?: string;
+              date?: string;
+              status?: "ok" | "bad";
+              violations?: "workflow_status_not_updated"[];
+              remarks?: string | null;
+              /** @format date-time */
+              markedAt?: string | null;
+            }[];
+          };
+        },
+        void
+      >({
+        path: `/workflow-status/today`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Mark workflow status violation for a staff member for a given date (defaults to today)
+     *
+     * @tags WorkflowStatus
+     * @name MarkBadCreate
+     * @summary Mark staff workflow status as bad (MANAGERS/SUPER ADMIN)
+     * @request POST:/workflow-status/mark-bad/{staffId}
+     * @secure
+     */
+    markBadCreate: (
+      staffId: number,
+      data: {
+        /** @default "bad" */
+        status?: "ok" | "bad";
+        /**
+         * Workflow Status Updating violations to mark
+         * @example ["workflow_status_not_updated"]
+         */
+        violations: "workflow_status_not_updated"[];
+        /** @example "Workflow status not updated for the day" */
+        remarks: string;
+        /**
+         * Date this check applies to (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            status?: string;
+            violations?: string[];
+            remarks?: string;
+            /** @format date-time */
+            markedAt?: string;
+          };
+        },
+        void
+      >({
+        path: `/workflow-status/mark-bad/${staffId}`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Reset staff workflow status status back to OK for a given date (defaults to today)
+     *
+     * @tags WorkflowStatus
+     * @name ResetCreate
+     * @summary Reset workflow status status to OK (MANAGERS/SUPER ADMIN)
+     * @request POST:/workflow-status/reset/{staffId}
+     * @secure
+     */
+    resetCreate: (
+      staffId: number,
+      data?: {
+        /**
+         * Date to reset (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            /** @example "ok" */
+            status?: string;
+          };
+        },
+        void
+      >({
+        path: `/workflow-status/reset/${staffId}`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Get workflow status history for a specific staff member
+     *
+     * @tags WorkflowStatus
+     * @name HistoryDetail
+     * @summary Get workflow status history (MANAGERS/SUPER ADMIN)
+     * @request GET:/workflow-status/history/{staffId}
+     * @secure
+     */
+    historyDetail: (
+      staffId: number,
+      query?: {
+        /**
+         * Number of days to look back (default 30)
+         * @default 30
+         */
+        days?: number;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            period?: string;
+            stats?: {
+              totalDays?: number;
+              badDays?: number;
+              okDays?: number;
+              badPercentage?: string;
+            };
+            history?: object[];
+          };
+        },
+        void
+      >({
+        path: `/workflow-status/history/${staffId}`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Get aggregated workflow status statistics across staff
+     *
+     * @tags WorkflowStatus
+     * @name StatsOverviewList
+     * @summary Get workflow status statistics (MANAGERS/SUPER ADMIN)
+     * @request GET:/workflow-status/stats/overview
+     * @secure
+     */
+    statsOverviewList: (
+      query?: {
+        /** @format date */
+        startDate?: string;
+        /** @format date */
+        endDate?: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            period?: object;
+            totalStaff?: number;
+            staffWithBadDays?: number;
+            stats?: object[];
+          };
+        },
+        void
+      >({
+        path: `/workflow-status/stats/overview`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+  };
+  majorViolation = {
+    /**
+     * @description Update major violation status for a staff member. Use status "ok" to reset, or "bad" with violations to mark violations. Deduction only - no points earned.
+     *
+     * @tags MajorViolation
+     * @name MajorViolationUpdate
+     * @summary Update staff major violation status (MANAGERS/SUPER ADMIN)
+     * @request PUT:/major-violation/{staffId}
+     * @secure
+     */
+    majorViolationUpdate: (
+      staffId: number,
+      data: {
+        /** @example "bad" */
+        status?: "ok" | "bad";
+        /**
+         * Required if status is "bad"
+         * @example ["loading_mistake"]
+         */
+        violations: (
+          | "direct_delivery_no_billing"
+          | "loading_mistake"
+          | "interfere_md_authority"
+        )[];
+        /** @example "Loaded wrong material onto delivery truck" */
+        remarks: string;
+        /**
+         * Date this check applies to (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: object;
+        },
+        void
+      >({
+        path: `/major-violation/${staffId}`,
+        method: "PUT",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Retrieve major violation status for all staff members for a given date. Defaults to OK for all staff, and to today if `date` is omitted.
+     *
+     * @tags MajorViolation
+     * @name TodayList
+     * @summary Get major violation status for all staff for a given date (MANAGERS/SUPER ADMIN)
+     * @request GET:/major-violation/today
+     * @secure
+     */
+    todayList: (
+      query?: {
+        /**
+         * Date to retrieve (YYYY-MM-DD). Defaults to today.
+         * @format date
+         */
+        date?: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            /**
+             * @format date
+             * @example "2026-08-09"
+             */
+            date?: string;
+            /** @example 50 */
+            count?: number;
+            /** @example 3 */
+            badCount?: number;
+            staff?: {
+              staffId?: number;
+              staffName?: string;
+              date?: string;
+              status?: "ok" | "bad";
+              violations?: (
+                | "direct_delivery_no_billing"
+                | "loading_mistake"
+                | "interfere_md_authority"
+              )[];
+              remarks?: string | null;
+              /** @format date-time */
+              markedAt?: string | null;
+            }[];
+          };
+        },
+        void
+      >({
+        path: `/major-violation/today`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Mark major violation for a staff member for a given date (defaults to today)
+     *
+     * @tags MajorViolation
+     * @name MarkBadCreate
+     * @summary Mark staff major violation as bad (MANAGERS/SUPER ADMIN)
+     * @request POST:/major-violation/mark-bad/{staffId}
+     * @secure
+     */
+    markBadCreate: (
+      staffId: number,
+      data: {
+        /** @default "bad" */
+        status?: "ok" | "bad";
+        /**
+         * Major violations to mark
+         * @example ["loading_mistake"]
+         */
+        violations: (
+          | "direct_delivery_no_billing"
+          | "loading_mistake"
+          | "interfere_md_authority"
+        )[];
+        /** @example "Loaded wrong material onto delivery truck" */
+        remarks: string;
+        /**
+         * Date this check applies to (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            status?: string;
+            violations?: string[];
+            remarks?: string;
+            /** @format date-time */
+            markedAt?: string;
+          };
+        },
+        void
+      >({
+        path: `/major-violation/mark-bad/${staffId}`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Reset staff major violation status back to OK for a given date (defaults to today)
+     *
+     * @tags MajorViolation
+     * @name ResetCreate
+     * @summary Reset major violation status to OK (MANAGERS/SUPER ADMIN)
+     * @request POST:/major-violation/reset/{staffId}
+     * @secure
+     */
+    resetCreate: (
+      staffId: number,
+      data?: {
+        /**
+         * Date to reset (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            /** @example "ok" */
+            status?: string;
+          };
+        },
+        void
+      >({
+        path: `/major-violation/reset/${staffId}`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Get major violation history for a specific staff member
+     *
+     * @tags MajorViolation
+     * @name HistoryDetail
+     * @summary Get major violation history (MANAGERS/SUPER ADMIN)
+     * @request GET:/major-violation/history/{staffId}
+     * @secure
+     */
+    historyDetail: (
+      staffId: number,
+      query?: {
+        /**
+         * Number of days to look back (default 30)
+         * @default 30
+         */
+        days?: number;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            period?: string;
+            stats?: {
+              totalDays?: number;
+              badDays?: number;
+              okDays?: number;
+              badPercentage?: string;
+            };
+            history?: object[];
+          };
+        },
+        void
+      >({
+        path: `/major-violation/history/${staffId}`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Get aggregated major violation statistics across staff
+     *
+     * @tags MajorViolation
+     * @name StatsOverviewList
+     * @summary Get major violation statistics (MANAGERS/SUPER ADMIN)
+     * @request GET:/major-violation/stats/overview
+     * @secure
+     */
+    statsOverviewList: (
+      query?: {
+        /** @format date */
+        startDate?: string;
+        /** @format date */
+        endDate?: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            period?: object;
+            totalStaff?: number;
+            staffWithBadDays?: number;
+            stats?: object[];
+          };
+        },
+        void
+      >({
+        path: `/major-violation/stats/overview`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+  };
+  welcomingCustomer = {
+    /**
+     * @description Update welcoming customer status for a staff member. Use status "ok" to reset, or "bad" with violations to mark violations.
+     *
+     * @tags Welcoming Customer
+     * @name WelcomingCustomerUpdate
+     * @summary Update staff welcoming customer status (MANAGERS/SUPER ADMIN)
+     * @request PUT:/welcoming-customer/{staffId}
+     * @secure
+     */
+    welcomingCustomerUpdate: (
+      staffId: number,
+      data: {
+        /** @example "bad" */
+        status?: "ok" | "bad";
+        /**
+         * Required if status is "bad"
+         * @example ["no_greeting"]
+         */
+        violations: ("no_greeting" | "no_smile" | "ignored_customer")[];
+        /** @example "Did not greet customer at entry" */
+        remarks: string;
+        /**
+         * Date this check applies to (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: object;
+        },
+        void
+      >({
+        path: `/welcoming-customer/${staffId}`,
+        method: "PUT",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Retrieve welcoming customer status for all staff members for a given date. Defaults to OK for all staff, and to today if `date` is omitted.
+     *
+     * @tags Welcoming Customer
+     * @name TodayList
+     * @summary Get welcoming customer status for all staff for a given date (MANAGERS/SUPER ADMIN)
+     * @request GET:/welcoming-customer/today
+     * @secure
+     */
+    todayList: (
+      query?: {
+        /**
+         * Date to retrieve (YYYY-MM-DD). Defaults to today.
+         * @format date
+         */
+        date?: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            /**
+             * @format date
+             * @example "2026-08-09"
+             */
+            date?: string;
+            /** @example 50 */
+            count?: number;
+            /** @example 3 */
+            badCount?: number;
+            staff?: {
+              staffId?: number;
+              staffName?: string;
+              date?: string;
+              status?: "ok" | "bad";
+              violations?: ("no_greeting" | "no_smile" | "ignored_customer")[];
+              remarks?: string | null;
+              /** @format date-time */
+              markedAt?: string | null;
+            }[];
+          };
+        },
+        void
+      >({
+        path: `/welcoming-customer/today`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Mark welcoming customer violation(s) for a staff member for a given date (defaults to today)
+     *
+     * @tags Welcoming Customer
+     * @name MarkBadCreate
+     * @summary Mark staff welcoming customer status as bad (MANAGERS/SUPER ADMIN)
+     * @request POST:/welcoming-customer/mark-bad/{staffId}
+     * @secure
+     */
+    markBadCreate: (
+      staffId: number,
+      data: {
+        /** @default "bad" */
+        status?: "ok" | "bad";
+        /**
+         * Welcoming customer violations to mark
+         * @example ["no_greeting"]
+         */
+        violations: ("no_greeting" | "no_smile" | "ignored_customer")[];
+        /** @example "Did not greet customer at entry" */
+        remarks: string;
+        /**
+         * Date this check applies to (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            status?: string;
+            violations?: string[];
+            remarks?: string;
+            /** @format date-time */
+            markedAt?: string;
+          };
+        },
+        void
+      >({
+        path: `/welcoming-customer/mark-bad/${staffId}`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Reset staff welcoming customer status back to OK for a given date (defaults to today)
+     *
+     * @tags Welcoming Customer
+     * @name ResetCreate
+     * @summary Reset welcoming customer status to OK (MANAGERS/SUPER ADMIN)
+     * @request POST:/welcoming-customer/reset/{staffId}
+     * @secure
+     */
+    resetCreate: (
+      staffId: number,
+      data?: {
+        /**
+         * Date to reset (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            /** @example "ok" */
+            status?: string;
+          };
+        },
+        void
+      >({
+        path: `/welcoming-customer/reset/${staffId}`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Get welcoming customer history for a specific staff member
+     *
+     * @tags Welcoming Customer
+     * @name HistoryDetail
+     * @summary Get welcoming customer history (MANAGERS/SUPER ADMIN)
+     * @request GET:/welcoming-customer/history/{staffId}
+     * @secure
+     */
+    historyDetail: (
+      staffId: number,
+      query?: {
+        /**
+         * Number of days to look back (default 30)
+         * @default 30
+         */
+        days?: number;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            period?: string;
+            stats?: {
+              totalDays?: number;
+              badDays?: number;
+              okDays?: number;
+              badPercentage?: string;
+            };
+            history?: object[];
+          };
+        },
+        void
+      >({
+        path: `/welcoming-customer/history/${staffId}`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Get aggregated welcoming customer statistics across staff
+     *
+     * @tags Welcoming Customer
+     * @name StatsOverviewList
+     * @summary Get welcoming customer statistics (MANAGERS/SUPER ADMIN)
+     * @request GET:/welcoming-customer/stats/overview
+     * @secure
+     */
+    statsOverviewList: (
+      query?: {
+        /** @format date */
+        startDate?: string;
+        /** @format date */
+        endDate?: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            period?: object;
+            totalStaff?: number;
+            staffWithBadDays?: number;
+            stats?: object[];
+          };
+        },
+        void
+      >({
+        path: `/welcoming-customer/stats/overview`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+  };
+  customerDealing = {
+    /**
+     * @description Update customer dealing status for a staff member. Use status "ok" to reset, or "bad" with violations to mark violations. Store-department staff are scored from customer feedback instead (see POST /feedback/requests) - marking one here is rejected with 400, since it would have no effect on their score.
+     *
+     * @tags Customer Dealing
+     * @name CustomerDealingUpdate
+     * @summary Update staff customer dealing status (MANAGERS/SUPER ADMIN)
+     * @request PUT:/customer-dealing/{staffId}
+     * @secure
+     */
+    customerDealingUpdate: (
+      staffId: number,
+      data: {
+        /** @example "bad" */
+        status?: "ok" | "bad";
+        /**
+         * Required if status is "bad"
+         * @example ["poor_customer_dealing"]
+         */
+        violations: "poor_customer_dealing"[];
+        /** @example "Rude to a customer at the counter" */
+        remarks: string;
+        /**
+         * Date this check applies to (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: object;
+        },
+        void
+      >({
+        path: `/customer-dealing/${staffId}`,
+        method: "PUT",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Retrieve customer dealing status for all staff members for a given date. Defaults to OK for all staff, and to today if `date` is omitted. Includes Store-department staff too, though their entries never affect scoring.
+     *
+     * @tags Customer Dealing
+     * @name TodayList
+     * @summary Get customer dealing status for all staff for a given date (MANAGERS/SUPER ADMIN)
+     * @request GET:/customer-dealing/today
+     * @secure
+     */
+    todayList: (
+      query?: {
+        /**
+         * Date to retrieve (YYYY-MM-DD). Defaults to today.
+         * @format date
+         */
+        date?: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            /**
+             * @format date
+             * @example "2026-08-09"
+             */
+            date?: string;
+            /** @example 50 */
+            count?: number;
+            /** @example 2 */
+            badCount?: number;
+            staff?: {
+              staffId?: number;
+              staffName?: string;
+              date?: string;
+              status?: "ok" | "bad";
+              violations?: "poor_customer_dealing"[];
+              remarks?: string | null;
+              /** @format date-time */
+              markedAt?: string | null;
+            }[];
+          };
+        },
+        void
+      >({
+        path: `/customer-dealing/today`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Mark a customer dealing violation for a staff member for a given date (defaults to today). Rejected with 400 for Store-department staff.
+     *
+     * @tags Customer Dealing
+     * @name MarkBadCreate
+     * @summary Mark staff customer dealing status as bad (MANAGERS/SUPER ADMIN)
+     * @request POST:/customer-dealing/mark-bad/{staffId}
+     * @secure
+     */
+    markBadCreate: (
+      staffId: number,
+      data: {
+        /** @default "bad" */
+        status?: "ok" | "bad";
+        /**
+         * Customer dealing violations to mark
+         * @example ["poor_customer_dealing"]
+         */
+        violations: "poor_customer_dealing"[];
+        /** @example "Rude to a customer at the counter" */
+        remarks: string;
+        /**
+         * Date this check applies to (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            status?: string;
+            violations?: string[];
+            remarks?: string;
+            /** @format date-time */
+            markedAt?: string;
+          };
+        },
+        void
+      >({
+        path: `/customer-dealing/mark-bad/${staffId}`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Reset staff customer dealing status back to OK for a given date (defaults to today)
+     *
+     * @tags Customer Dealing
+     * @name ResetCreate
+     * @summary Reset customer dealing status to OK (MANAGERS/SUPER ADMIN)
+     * @request POST:/customer-dealing/reset/{staffId}
+     * @secure
+     */
+    resetCreate: (
+      staffId: number,
+      data?: {
+        /**
+         * Date to reset (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            /** @example "ok" */
+            status?: string;
+          };
+        },
+        void
+      >({
+        path: `/customer-dealing/reset/${staffId}`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Get customer dealing history for a specific staff member
+     *
+     * @tags Customer Dealing
+     * @name HistoryDetail
+     * @summary Get customer dealing history (MANAGERS/SUPER ADMIN)
+     * @request GET:/customer-dealing/history/{staffId}
+     * @secure
+     */
+    historyDetail: (
+      staffId: number,
+      query?: {
+        /**
+         * Number of days to look back (default 30)
+         * @default 30
+         */
+        days?: number;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            period?: string;
+            stats?: {
+              totalDays?: number;
+              badDays?: number;
+              okDays?: number;
+              badPercentage?: string;
+            };
+            history?: object[];
+          };
+        },
+        void
+      >({
+        path: `/customer-dealing/history/${staffId}`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Get aggregated customer dealing statistics across staff (manual daily-check entries only - does not include Store staff's feedback-derived scoring)
+     *
+     * @tags Customer Dealing
+     * @name StatsOverviewList
+     * @summary Get customer dealing statistics (MANAGERS/SUPER ADMIN)
+     * @request GET:/customer-dealing/stats/overview
+     * @secure
+     */
+    statsOverviewList: (
+      query?: {
+        /** @format date */
+        startDate?: string;
+        /** @format date */
+        endDate?: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            period?: object;
+            totalStaff?: number;
+            staffWithBadDays?: number;
+            stats?: object[];
+          };
+        },
+        void
+      >({
+        path: `/customer-dealing/stats/overview`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+  };
+  customerQuotationFollowup = {
+    /**
+     * @description Update customer & quotation followup status for a staff member. Use status "ok" to reset, or "bad" with violations to mark a missed follow-up. Unlike Appearance/Cleaning/Welcoming Customer/Customer Dealing, a bad mark here does NOT forfeit the whole month's points - it deducts pointsPerBadMark and compounds across multiple bad days (see GET /scoring-config).
+     *
+     * @tags Customer & Quotation Followup
+     * @name CustomerQuotationFollowupUpdate
+     * @summary Update staff customer & quotation followup status (MANAGERS/SUPER ADMIN)
+     * @request PUT:/customer-quotation-followup/{staffId}
+     * @secure
+     */
+    customerQuotationFollowupUpdate: (
+      staffId: number,
+      data: {
+        /** @example "bad" */
+        status?: "ok" | "bad";
+        /**
+         * Required if status is "bad"
+         * @example ["missed_followup"]
+         */
+        violations: "missed_followup"[];
+        /** @example "Did not follow up on a pending quotation" */
+        remarks: string;
+        /**
+         * Date this check applies to (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: object;
+        },
+        void
+      >({
+        path: `/customer-quotation-followup/${staffId}`,
+        method: "PUT",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Retrieve customer & quotation followup status for all staff members for a given date. Defaults to OK for all staff, and to today if `date` is omitted.
+     *
+     * @tags Customer & Quotation Followup
+     * @name TodayList
+     * @summary Get customer & quotation followup status for all staff for a given date (MANAGERS/SUPER ADMIN)
+     * @request GET:/customer-quotation-followup/today
+     * @secure
+     */
+    todayList: (
+      query?: {
+        /**
+         * Date to retrieve (YYYY-MM-DD). Defaults to today.
+         * @format date
+         */
+        date?: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            /**
+             * @format date
+             * @example "2026-08-09"
+             */
+            date?: string;
+            /** @example 50 */
+            count?: number;
+            /** @example 4 */
+            badCount?: number;
+            staff?: {
+              staffId?: number;
+              staffName?: string;
+              date?: string;
+              status?: "ok" | "bad";
+              violations?: "missed_followup"[];
+              remarks?: string | null;
+              /** @format date-time */
+              markedAt?: string | null;
+            }[];
+          };
+        },
+        void
+      >({
+        path: `/customer-quotation-followup/today`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Mark a missed follow-up for a staff member for a given date (defaults to today). Deducts pointsPerBadMark for the month rather than forfeiting all points.
+     *
+     * @tags Customer & Quotation Followup
+     * @name MarkBadCreate
+     * @summary Mark staff customer & quotation followup status as bad (MANAGERS/SUPER ADMIN)
+     * @request POST:/customer-quotation-followup/mark-bad/{staffId}
+     * @secure
+     */
+    markBadCreate: (
+      staffId: number,
+      data: {
+        /** @default "bad" */
+        status?: "ok" | "bad";
+        /**
+         * Customer & quotation followup violations to mark
+         * @example ["missed_followup"]
+         */
+        violations: "missed_followup"[];
+        /** @example "Did not follow up on a pending quotation" */
+        remarks: string;
+        /**
+         * Date this check applies to (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            status?: string;
+            violations?: string[];
+            remarks?: string;
+            /** @format date-time */
+            markedAt?: string;
+          };
+        },
+        void
+      >({
+        path: `/customer-quotation-followup/mark-bad/${staffId}`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Reset staff customer & quotation followup status back to OK for a given date (defaults to today)
+     *
+     * @tags Customer & Quotation Followup
+     * @name ResetCreate
+     * @summary Reset customer & quotation followup status to OK (MANAGERS/SUPER ADMIN)
+     * @request POST:/customer-quotation-followup/reset/{staffId}
+     * @secure
+     */
+    resetCreate: (
+      staffId: number,
+      data?: {
+        /**
+         * Date to reset (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            /** @example "ok" */
+            status?: string;
+          };
+        },
+        void
+      >({
+        path: `/customer-quotation-followup/reset/${staffId}`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Get customer & quotation followup history for a specific staff member
+     *
+     * @tags Customer & Quotation Followup
+     * @name HistoryDetail
+     * @summary Get customer & quotation followup history (MANAGERS/SUPER ADMIN)
+     * @request GET:/customer-quotation-followup/history/{staffId}
+     * @secure
+     */
+    historyDetail: (
+      staffId: number,
+      query?: {
+        /**
+         * Number of days to look back (default 30)
+         * @default 30
+         */
+        days?: number;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            period?: string;
+            stats?: {
+              totalDays?: number;
+              badDays?: number;
+              okDays?: number;
+              badPercentage?: string;
+            };
+            history?: object[];
+          };
+        },
+        void
+      >({
+        path: `/customer-quotation-followup/history/${staffId}`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Get aggregated customer & quotation followup statistics across staff
+     *
+     * @tags Customer & Quotation Followup
+     * @name StatsOverviewList
+     * @summary Get customer & quotation followup statistics (MANAGERS/SUPER ADMIN)
+     * @request GET:/customer-quotation-followup/stats/overview
+     * @secure
+     */
+    statsOverviewList: (
+      query?: {
+        /** @format date */
+        startDate?: string;
+        /** @format date */
+        endDate?: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            period?: object;
+            totalStaff?: number;
+            staffWithBadDays?: number;
+            stats?: object[];
+          };
+        },
+        void
+      >({
+        path: `/customer-quotation-followup/stats/overview`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+  };
   scoring = {
     /**
      * @description Retrieve score breakdown for a staff member for a given month. Shows total score, breakdown by category, and detailed metrics.
@@ -5750,7 +8614,7 @@ export class Api<SecurityDataType extends unknown> {
       }),
 
     /**
-     * @description Retrieve all staff scores for a given month with detailed statistics. **Scoring Framework (Total 100 points):** - Attendance: 10 points (late arrivals tracking) - Leaves: 10 points (approved leaves per month) - Appearance: 5 points (dress code violations) - Future rules: 75 points (reserved for expansion) Returns: Staff scores sorted by performance, plus aggregated statistics and performance distribution.
+     * @description Retrieve all staff scores for a given month with detailed statistics. **Scoring Framework (Total 100 points):** - Attendance: 10 points (late arrivals tracking) - Leaves: 10 points (approved leaves per month) - Appearance: 5 points (dress code violations) - Cleaning Culture: 5 points - Welcoming Customer: 10 points - Customer Dealing: 15 points - Customer & Quotation Followup: 10 points - Meeting: 5 points - Extra Performance: 10 points - Testimonial: 20 points Returns: Staff scores sorted by performance, plus aggregated statistics and performance distribution.
      *
      * @tags Scoring
      * @name MonthlyOverviewList
@@ -5845,7 +8709,7 @@ export class Api<SecurityDataType extends unknown> {
       }),
 
     /**
-     * @description Retrieve the scoring rules and parameters for a given month.
+     * @description Retrieve the scoring rules and parameters for a given month and department. Each department has its own rubric (see `GET /scoring-config/departments` for the static rule list per department); the returned config only has the rule keys that apply to the requested department populated.
      *
      * @tags Scoring
      * @name ScoringConfigList
@@ -5862,6 +8726,11 @@ export class Api<SecurityDataType extends unknown> {
          * @example "2026-06"
          */
         month?: string;
+        /**
+         * Department name (default "Store")
+         * @example "Store"
+         */
+        department?: "Store" | "Plywood Godown" | "Glass Godown";
       },
       params: RequestParams = {},
     ) =>
@@ -5876,9 +8745,12 @@ export class Api<SecurityDataType extends unknown> {
            * - Leaves: 10 points
            * - Appearance: 5 points
            * - Cleaning Culture: 5 points
+           * - Welcoming Customer: 10 points
+           * - Customer Dealing: 15 points
+           * - Customer & Quotation Followup: 10 points
+           * - Meeting: 5 points
            * - Extra Performance: 10 points
            * - Testimonial: 20 points
-           * - Future rules: 40 points (reserved)
            */
           data?: ScoringConfigResponse;
         },
@@ -5893,7 +8765,7 @@ export class Api<SecurityDataType extends unknown> {
       }),
 
     /**
-     * @description Update the scoring rules and parameters for a month. SuperAdmin only.
+     * @description Update the scoring rules and parameters for a month and department. SuperAdmin only. Only the rule keys belonging to the target department's rubric are applied - see `GET /scoring-config/departments` for which keys apply to which department.
      *
      * @tags Scoring
      * @name ScoringConfigUpdate
@@ -5909,7 +8781,12 @@ export class Api<SecurityDataType extends unknown> {
          * @pattern ^\d{4}-\d{2}$
          * @example "2026-06"
          */
-        month?: string;
+        month: string;
+        /**
+         * Department whose rubric to update
+         * @example "Store"
+         */
+        department: "Store" | "Plywood Godown" | "Glass Godown";
         attendance?: {
           /** @example 3 */
           maxLateCases?: number;
@@ -5928,6 +8805,66 @@ export class Api<SecurityDataType extends unknown> {
           /** @example -10 */
           penaltyIfExceeds?: number;
         };
+        /** Late arrival/early leaving/break-overage cases combined, counted per case-day */
+        timeKeeping?: {
+          /**
+           * Max case-days allowed before penalty
+           * @example 3
+           */
+          maxLateCases?: number;
+          /** @example 10 */
+          pointsIfWithinLimit?: number;
+          /**
+           * Applied once when mode is "flat" and maxLateCases is exceeded
+           * @example -10
+           */
+          penaltyIfExceeds?: number;
+          /**
+           * 'flat' (default): penaltyIfExceeds applied once, any excess. 'perExcess': pointsPerExtraCase deducted for every case-day beyond maxLateCases.
+           * @default "flat"
+           */
+          mode?: "flat" | "perExcess";
+          /**
+           * Used when mode is "perExcess"
+           * @example 5
+           */
+          pointsPerExtraCase?: number;
+        };
+        /** Casual and medical leave, scored independently each month */
+        attendanceLeave?: {
+          casual?: {
+            /** @example 1 */
+            maxAllowedPerMonth?: number;
+            /** @example 10 */
+            pointsIfWithinLimit?: number;
+            /** @example -10 */
+            penaltyIfExceeds?: number;
+            /**
+             * Used when mode is "perExcess" - deducted per unexempt casual leave beyond maxAllowedPerMonth
+             * @example 5
+             */
+            pointsPerExtraLeave?: number;
+          };
+          medical?: {
+            /**
+             * Beyond this, medicalProofSubmitted is required on the excess leave(s) to avoid the penalty
+             * @example 1
+             */
+            maxAllowedPerMonth?: number;
+            /** @example -10 */
+            penaltyIfExceeds?: number;
+            /**
+             * Used when mode is "perExcess" - deducted per unproven medical leave beyond maxAllowedPerMonth
+             * @example 5
+             */
+            pointsPerExtraLeave?: number;
+          };
+          /**
+           * 'flat' (default): flat penalty if either cap is exceeded without exemption/proof. 'perExcess': pointsPerExtraLeave deducted per unexempt/unproven excess leave, independently for casual and medical.
+           * @default "flat"
+           */
+          mode?: "flat" | "perExcess";
+        };
         appearance?: {
           /** @example true */
           enabled?: boolean;
@@ -5935,17 +8872,101 @@ export class Api<SecurityDataType extends unknown> {
           pointsPerViolation?: number;
           /** @example 5 */
           maxPoints?: number;
-          /** @example ["uniform","hair_beard_moustache"] */
+          /**
+           * 'perDay' (default): deducts |pointsPerViolation| for every bad day, recurring. 'flat': forfeits it once, first bad day.
+           * @default "perDay"
+           */
+          mode?: "flat" | "perDay";
+          /** @example ["uniform","socks_banyan","hair_beard_moustache"] */
           violations?: string[];
         };
         cleaning?: {
           /** @example true */
           enabled?: boolean;
           /**
-           * Full points forfeited for the month if any single day is marked bad
+           * Full points forfeited for the month if any single day is marked bad (when mode is "flat")
            * @example 5
            */
           maxPoints?: number;
+          /**
+           * 'flat' (default): forfeits pointsPerBadDay once, first bad day. 'perDay': deducts pointsPerBadDay for every bad day, recurring.
+           * @default "flat"
+           */
+          mode?: "flat" | "perDay";
+          /**
+           * Points deducted per the mode above
+           * @example 5
+           */
+          pointsPerBadDay?: number;
+        };
+        welcomingCustomer?: {
+          /** @example true */
+          enabled?: boolean;
+          /**
+           * Full points forfeited for the month if any single day is marked bad (when mode is "flat")
+           * @example 10
+           */
+          maxPoints?: number;
+          /**
+           * 'flat' (default): forfeits pointsPerBadDay once, first bad day. 'perDay': deducts pointsPerBadDay for every bad day, recurring.
+           * @default "flat"
+           */
+          mode?: "flat" | "perDay";
+          /**
+           * Points deducted per the mode above
+           * @example 10
+           */
+          pointsPerBadDay?: number;
+        };
+        /** Store-department staff are scored from customer feedback (pointsPerBadFeedback), everyone else from the customer_dealing daily check (mode/pointsPerBadDay) */
+        customerDealing?: {
+          /** @example true */
+          enabled?: boolean;
+          /** @example 15 */
+          maxPoints?: number;
+          /**
+           * Store staff only - deducted per completed feedback submission containing at least one "no" answer (not deduplicated per customer)
+           * @example 15
+           */
+          pointsPerBadFeedback?: number;
+          /**
+           * Non-Store staff only (daily-check based). 'flat' (default): forfeits pointsPerBadDay once, first bad day. 'perDay': deducts pointsPerBadDay for every bad day, recurring.
+           * @default "flat"
+           */
+          mode?: "flat" | "perDay";
+          /**
+           * Non-Store staff only - points deducted per the mode above
+           * @example 15
+           */
+          pointsPerBadDay?: number;
+        };
+        /** Customer & quotation follow-up scoring rules */
+        customerQuotationFollowup?: {
+          /** @example true */
+          enabled?: boolean;
+          /** @example 10 */
+          maxPoints?: number;
+          /**
+           * 'perDay' (default): pointsPerBadMark deducted per bad day, compounds. 'flat': forfeited once, first bad day.
+           * @default "perDay"
+           */
+          mode?: "flat" | "perDay";
+          /**
+           * Points deducted per the mode above (perDay compounds - e.g. 2 bad days = -20, floored at 0)
+           * @example 10
+           */
+          pointsPerBadMark?: number;
+        };
+        meeting?: {
+          /** @example true */
+          enabled?: boolean;
+          /** @example 5 */
+          maxPoints?: number;
+          /**
+           * Full points forfeited for the month once missed meetings exceed this count (excused absences don't count)
+           * @example 0
+           */
+          maxMissedAllowed?: number;
         };
         extraPerformance?: {
           /** @example 10 */
@@ -5958,6 +8979,76 @@ export class Api<SecurityDataType extends unknown> {
           pointsPerTestimonial?: number;
           /** @example 20 */
           maxPointsAllowed?: number;
+        };
+        /** Plywood Godown only - zero dead stock, marked via the stock_maintenance daily check */
+        stockMaintenance?: {
+          /** @example true */
+          enabled?: boolean;
+          /** @example 20 */
+          maxPoints?: number;
+          /**
+           * 'flat' (default): forfeits pointsPerBadDay once, first bad day. 'perDay': deducts pointsPerBadDay for every bad day, recurring.
+           * @default "flat"
+           */
+          mode?: "flat" | "perDay";
+          /** @example 20 */
+          pointsPerBadDay?: number;
+        };
+        /** Plywood Godown only - sales returns handled on time, marked via the sales_return_handling daily check */
+        salesReturnHandling?: {
+          /** @example true */
+          enabled?: boolean;
+          /** @example 5 */
+          maxPoints?: number;
+          /**
+           * 'flat' (default): forfeits pointsPerBadDay once, first bad day. 'perDay': deducts pointsPerBadDay for every bad day, recurring.
+           * @default "flat"
+           */
+          mode?: "flat" | "perDay";
+          /** @example 5 */
+          pointsPerBadDay?: number;
+        };
+        /** Glass Godown only - avoiding wastage, marked via the wastage daily check */
+        wastage?: {
+          /** @example true */
+          enabled?: boolean;
+          /** @example 10 */
+          maxPoints?: number;
+          /**
+           * 'flat' (default): forfeits pointsPerBadDay once, first bad day. 'perDay': deducts pointsPerBadDay for every bad day, recurring.
+           * @default "flat"
+           */
+          mode?: "flat" | "perDay";
+          /** @example 10 */
+          pointsPerBadDay?: number;
+        };
+        /** Glass Godown only - monthly stock taking, marked via the stock_taking daily check */
+        stockTaking?: {
+          /** @example true */
+          enabled?: boolean;
+          /** @example 10 */
+          maxPoints?: number;
+          /**
+           * 'flat' (default): forfeits pointsPerBadDay once, first bad day. 'perDay': deducts pointsPerBadDay for every bad day, recurring.
+           * @default "flat"
+           */
+          mode?: "flat" | "perDay";
+          /** @example 10 */
+          pointsPerBadDay?: number;
+        };
+        /** Glass Godown only - workflow status updating, marked via the workflow_status daily check */
+        workflowStatus?: {
+          /** @example true */
+          enabled?: boolean;
+          /** @example 10 */
+          maxPoints?: number;
+          /**
+           * 'flat' (default): forfeits pointsPerBadDay once, first bad day. 'perDay': deducts pointsPerBadDay for every bad day, recurring.
+           * @default "flat"
+           */
+          mode?: "flat" | "perDay";
+          /** @example 10 */
+          pointsPerBadDay?: number;
         };
       },
       params: RequestParams = {},
@@ -5973,9 +9064,12 @@ export class Api<SecurityDataType extends unknown> {
            * - Leaves: 10 points
            * - Appearance: 5 points
            * - Cleaning Culture: 5 points
+           * - Welcoming Customer: 10 points
+           * - Customer Dealing: 15 points
+           * - Customer & Quotation Followup: 10 points
+           * - Meeting: 5 points
            * - Extra Performance: 10 points
            * - Testimonial: 20 points
-           * - Future rules: 40 points (reserved)
            */
           data?: ScoringConfigResponse;
         },
@@ -5986,6 +9080,74 @@ export class Api<SecurityDataType extends unknown> {
         body: data,
         secure: true,
         type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Returns the static 100-point rule breakdown for each department (Store, Plywood Godown, Glass Godown) - the rule keys, categories, and default max points that make up that department's rubric. Drivers have no scoring rubric. Use this to render "how is this department scored" in an admin UI, and to know which `ScoringConfigResponse` rule keys are meaningful for a given department (config keys outside a department's rubric are always absent from its config document).
+     *
+     * @tags Scoring
+     * @name DepartmentsList
+     * @summary List scoring rubrics per department (MANAGERS/SUPER ADMIN)
+     * @request GET:/scoring-config/departments
+     * @secure
+     */
+    departmentsList: (params: RequestParams = {}) =>
+      this.http.request<
+        {
+          success?: boolean;
+          /** @example {"Store":[{"ruleKey":"timeKeeping","category":"Timing","maxPoints":10},{"ruleKey":"attendanceLeave","category":"Attendance","maxPoints":10},{"ruleKey":"appearance","category":"Appearance","maxPoints":5},{"ruleKey":"welcomingCustomer","category":"Welcoming Customer","maxPoints":10},{"ruleKey":"customerDealing","category":"Customer Dealing","maxPoints":15},{"ruleKey":"customerQuotationFollowup","category":"Customer Follow-up","maxPoints":10},{"ruleKey":"meeting","category":"Attending Meetings","maxPoints":5},{"ruleKey":"cleaning","category":"Cleaning Culture","maxPoints":5},{"ruleKey":"extraPerformance","category":"Extra Performance","maxPoints":10},{"ruleKey":"testimonial","category":"Testimonial","maxPoints":20}],"Plywood Godown":[{"ruleKey":"timeKeeping","category":"Timing","maxPoints":10},{"ruleKey":"attendanceLeave","category":"Attendance","maxPoints":10},{"ruleKey":"appearance","category":"Appearance","maxPoints":5},{"ruleKey":"customerDealing","category":"Customer Dealing","maxPoints":10},{"ruleKey":"stockMaintenance","category":"Stock Maintenance (zero dead stock)","maxPoints":20},{"ruleKey":"salesReturnHandling","category":"Sales Return Handling","maxPoints":5},{"ruleKey":"meeting","category":"Attending Meetings","maxPoints":5},{"ruleKey":"cleaning","category":"Cleanliness","maxPoints":5},{"ruleKey":"extraPerformance","category":"Extra Performance","maxPoints":10},{"ruleKey":"testimonial","category":"Testimonial","maxPoints":20}],"Glass Godown":[{"ruleKey":"timeKeeping","category":"Timing","maxPoints":10},{"ruleKey":"attendanceLeave","category":"Attendance","maxPoints":10},{"ruleKey":"appearance","category":"Appearance","maxPoints":5},{"ruleKey":"wastage","category":"Avoiding Wastage","maxPoints":10},{"ruleKey":"customerDealing","category":"Fair Dealing with Customers/Auto Drivers","maxPoints":15},{"ruleKey":"stockTaking","category":"Stock Taking (monthly)","maxPoints":10},{"ruleKey":"workflowStatus","category":"Work Flow Status Updating","maxPoints":10},{"ruleKey":"meeting","category":"Attending Weekly Meeting","maxPoints":5},{"ruleKey":"cleaning","category":"Cleanliness","maxPoints":5},{"ruleKey":"extraPerformance","category":"Extra Performance","maxPoints":10},{"ruleKey":"testimonial","category":"Testimonials (min 2)","maxPoints":10}]} */
+          data?: Record<
+            string,
+            {
+              /** Key under which this rule's config appears in ScoringConfigResponse */
+              ruleKey?: string;
+              /** Human-readable category name */
+              category?: string;
+              maxPoints?: number;
+            }[]
+          >;
+        },
+        void
+      >({
+        path: `/scoring-config/departments`,
+        method: "GET",
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Returns which `DailyCheck` categories apply to each department, so a unified daily check screen can render the right set of toggles per staff card instead of a fixed list for everyone. Each category entry includes the API base path its mini-router is mounted at (e.g. `/api/appearance`), matching the per-category endpoints documented under the Appearance/Cleaning/Wastage/etc. tags. Not every rubric category is DailyCheck-backed (e.g. Timing, Meeting, Extra Performance, Testimonial come from other data sources), so this list is a subset of the full rubric returned by `GET /scoring-config/departments`.
+     *
+     * @tags Scoring
+     * @name CategoriesByDepartmentList
+     * @summary List DailyCheck categories per department (MANAGERS/SUPER ADMIN)
+     * @request GET:/daily-check/categories-by-department
+     * @secure
+     */
+    categoriesByDepartmentList: (params: RequestParams = {}) =>
+      this.http.request<
+        {
+          success?: boolean;
+          /** @example {"Store":[{"category":"appearance","label":"Appearance","apiBasePath":"/api/appearance","violations":["uniform","hair_beard_moustache"]},{"category":"cleaning","label":"Cleaning","apiBasePath":"/api/cleaning","violations":["cleanliness"]},{"category":"welcoming_customer","label":"Welcoming Customer","apiBasePath":"/api/welcoming-customer","violations":["no_greeting","no_smile","ignored_customer"]},{"category":"customer_dealing","label":"Customer Dealing","apiBasePath":"/api/customer-dealing","violations":["poor_customer_dealing"],"note":"Store staff are instead scored from customer feedback - daily marks are rejected for them"},{"category":"customer_quotation_followup","label":"Customer & Quotation Follow-up","apiBasePath":"/api/customer-quotation-followup","violations":["missed_followup"]}],"Plywood Godown":[{"category":"appearance","label":"Appearance","apiBasePath":"/api/appearance","violations":["uniform","hair_beard_moustache"]},{"category":"cleaning","label":"Cleaning","apiBasePath":"/api/cleaning","violations":["cleanliness"]},{"category":"customer_dealing","label":"Customer Dealing","apiBasePath":"/api/customer-dealing","violations":["poor_customer_dealing"]},{"category":"stock_maintenance","label":"Stock Maintenance","apiBasePath":"/api/stock-maintenance","violations":["dead_stock"]},{"category":"sales_return_handling","label":"Sales Return Handling","apiBasePath":"/api/sales-return-handling","violations":["late_sales_return"]},{"category":"major_violation","label":"Major Violations","apiBasePath":"/api/major-violation","violations":["direct_delivery_no_billing","loading_mistake","interfere_md_authority"]}],"Glass Godown":[{"category":"appearance","label":"Appearance","apiBasePath":"/api/appearance","violations":["uniform","hair_beard_moustache"]},{"category":"cleaning","label":"Cleaning","apiBasePath":"/api/cleaning","violations":["cleanliness"]},{"category":"customer_dealing","label":"Customer Dealing","apiBasePath":"/api/customer-dealing","violations":["poor_customer_dealing"]},{"category":"wastage","label":"Avoiding Wastage","apiBasePath":"/api/wastage","violations":["wastage"]},{"category":"stock_taking","label":"Stock Taking","apiBasePath":"/api/stock-taking","violations":["stock_taking_incomplete"]},{"category":"workflow_status","label":"Workflow Status Updating","apiBasePath":"/api/workflow-status","violations":["workflow_status_not_updated"]}]} */
+          data?: Record<
+            string,
+            {
+              category?: string;
+              label?: string;
+              apiBasePath?: string;
+              violations?: string[];
+              note?: string;
+            }[]
+          >;
+        },
+        void
+      >({
+        path: `/daily-check/categories-by-department`,
+        method: "GET",
+        secure: true,
         format: "json",
         ...params,
       }),
@@ -6486,6 +9648,526 @@ export class Api<SecurityDataType extends unknown> {
       >({
         path: `/testimonials/${testimonialId}/reject`,
         method: "PUT",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+  };
+  meetings = {
+    /**
+     * @description Creates a meeting and defaults every active staff member's attendance to "present". Admins later update individuals to absent/excused.
+     *
+     * @tags Meetings
+     * @name MeetingsCreate
+     * @summary Create a meeting (MANAGERS/HR/SUPER ADMIN)
+     * @request POST:/meetings
+     * @secure
+     */
+    meetingsCreate: (
+      data: {
+        /** @example "Weekly Sales Review" */
+        title: string;
+        /**
+         * Defaults to now if omitted
+         * @format date-time
+         * @example "2026-08-09T10:00:00+05:30"
+         */
+        date?: string;
+        /** @example "Discuss Q3 targets" */
+        notes?: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          /** A meeting created by an admin, used as the basis for attendance tracking and Meeting scoring */
+          data?: MeetingResponse;
+        },
+        void
+      >({
+        path: `/meetings`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Returns meetings sorted by date, most recent first. Optionally filter by date range.
+     *
+     * @tags Meetings
+     * @name MeetingsList
+     * @summary List meetings (MANAGERS/HR/SUPER ADMIN)
+     * @request GET:/meetings
+     * @secure
+     */
+    meetingsList: (
+      query?: {
+        /**
+         * @format date
+         * @example "2026-08-01"
+         */
+        startDate?: string;
+        /**
+         * @format date
+         * @example "2026-08-31"
+         */
+        endDate?: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          data?: MeetingResponse[];
+        },
+        void
+      >({
+        path: `/meetings`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @tags Meetings
+     * @name MeetingsDetail
+     * @summary Get a meeting with its attendance roster (MANAGERS/HR/SUPER ADMIN)
+     * @request GET:/meetings/{id}
+     * @secure
+     */
+    meetingsDetail: (id: string, params: RequestParams = {}) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          data?: {
+            /** A meeting created by an admin, used as the basis for attendance tracking and Meeting scoring */
+            meeting?: MeetingResponse;
+            attendance?: MeetingAttendanceEntry[];
+            absentCount?: number;
+            excusedCount?: number;
+          };
+        },
+        void
+      >({
+        path: `/meetings/${id}`,
+        method: "GET",
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Set a staff member's status to present, absent, or excused. A reason is required when marking excused; excused absences don't count against the Meeting scoring rule.
+     *
+     * @tags Meetings
+     * @name AttendanceUpdate
+     * @summary Update a staff member's attendance for a meeting (MANAGERS/HR/SUPER ADMIN)
+     * @request PUT:/meetings/{id}/attendance/{staffId}
+     * @secure
+     */
+    attendanceUpdate: (
+      id: string,
+      staffId: number,
+      data: {
+        /** @example "excused" */
+        status: "present" | "absent" | "excused";
+        /**
+         * Required when status is excused
+         * @example "Approved sick leave"
+         */
+        reason?: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          /** A single staff member's attendance record for a meeting */
+          data?: MeetingAttendanceEntry;
+        },
+        void
+      >({
+        path: `/meetings/${id}/attendance/${staffId}`,
+        method: "PUT",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @tags Meetings
+     * @name StaffHistoryList
+     * @summary Get a staff member's meeting attendance history (MANAGERS/HR/SUPER ADMIN)
+     * @request GET:/meetings/staff/{staffId}/history
+     * @secure
+     */
+    staffHistoryList: (
+      staffId: number,
+      query?: {
+        /**
+         * Number of months back to include
+         * @default 3
+         */
+        months?: number;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            absentCount?: number;
+            excusedCount?: number;
+            history?: {
+              /** A meeting created by an admin, used as the basis for attendance tracking and Meeting scoring */
+              meeting?: MeetingResponse;
+              status?: "present" | "absent" | "excused";
+              reason?: string | null;
+            }[];
+          };
+        },
+        void
+      >({
+        path: `/meetings/staff/${staffId}/history`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+  };
+  feedback = {
+    /**
+     * @description Returns every question in the bank, active and inactive, ordered by `order`.
+     *
+     * @tags Feedback
+     * @name QuestionsList
+     * @summary List feedback questions (MANAGERS/HR/SUPER ADMIN)
+     * @request GET:/feedback/questions
+     * @secure
+     */
+    questionsList: (params: RequestParams = {}) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          data?: FeedbackQuestion[];
+        },
+        void
+      >({
+        path: `/feedback/questions`,
+        method: "GET",
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @tags Feedback
+     * @name QuestionsCreate
+     * @summary Create a feedback question (MANAGERS/HR/SUPER ADMIN)
+     * @request POST:/feedback/questions
+     * @secure
+     */
+    questionsCreate: (
+      data: {
+        /** @example "Was the staff member polite and helpful?" */
+        text: string;
+        /**
+         * Display order (lower first). Defaults to 0.
+         * @example 1
+         */
+        order?: number;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          /** A yes/no question in the feedback question bank */
+          data?: FeedbackQuestion;
+        },
+        void
+      >({
+        path: `/feedback/questions`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Partial update - only send the fields you want to change. Set `isActive` to false to retire a question without deleting it (questions already sent to customers keep their own text snapshot, so retiring one never changes past submissions).
+     *
+     * @tags Feedback
+     * @name QuestionsPartialUpdate
+     * @summary Update or retire a feedback question (MANAGERS/HR/SUPER ADMIN)
+     * @request PATCH:/feedback/questions/{id}
+     * @secure
+     */
+    questionsPartialUpdate: (
+      id: string,
+      data: {
+        text?: string;
+        isActive?: boolean;
+        order?: number;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          /** A yes/no question in the feedback question bank */
+          data?: FeedbackQuestion;
+        },
+        void
+      >({
+        path: `/feedback/questions/${id}`,
+        method: "PATCH",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Every feedback link sent, across all staff and customers, with the sending staff member's name resolved (staffName). Includes pending/expired links as well as completed ones - filter by status to narrow. This is the full request/response record; for one customer's completed feedback only, see the `feedback` field on GET /ledger/customers/{ledgerId} instead.
+     *
+     * @tags Feedback
+     * @name RequestsList
+     * @summary List all feedback requests, any status (MANAGERS/HR/SUPER ADMIN)
+     * @request GET:/feedback/requests
+     * @secure
+     */
+    requestsList: (
+      query?: {
+        /** @default 1 */
+        page?: number;
+        /** @default 50 */
+        limit?: number;
+        /** Filter to one status */
+        status?: "pending" | "completed" | "expired";
+        /** Filter to one staff member (Staff.id, internal id) */
+        staffId?: number;
+        /** Filter to one customer */
+        ledgerId?: number;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          pagination?: {
+            page?: number;
+            limit?: number;
+            total?: number;
+            pages?: number;
+          };
+          data?: (FeedbackRequest & {
+            /** Null if the staff record no longer exists */
+            staffName?: string | null;
+          })[];
+        },
+        void
+      >({
+        path: `/feedback/requests`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Creates a FeedbackRequest for the given customer, snapshotting every currently-active question so later edits to the question bank never change what a customer already answered or is mid-way through. Returns a `token` - the frontend builds the customer-facing link around it (e.g. `https://.../feedback/{token}`) and shares it (WhatsApp, SMS, etc.). staffId is resolved from the authenticated user, not from the request body. Links expire 7 days after creation.
+     *
+     * @tags Feedback
+     * @name RequestsCreate
+     * @summary Create a feedback link for a customer (staff)
+     * @request POST:/feedback/requests
+     * @secure
+     */
+    requestsCreate: (
+      data: {
+        /**
+         * Rowbest ledger id of the customer to request feedback from
+         * @example 1024
+         */
+        ledgerId: number;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          data?: {
+            /** @example "b6c1a5e2-4f3d-4a1b-9c2e-7d8f6a1b2c3d" */
+            token?: string;
+            /** @format date-time */
+            expiresAt?: string;
+          };
+        },
+        void
+      >({
+        path: `/feedback/requests`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Staff can only view their own. Managers/HR/superAdmin may view any staff member's.
+     *
+     * @tags Feedback
+     * @name StaffDetail
+     * @summary Get a staff member's sent feedback requests
+     * @request GET:/feedback/staff/{userId}
+     * @secure
+     */
+    staffDetail: (userId: number, params: RequestParams = {}) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          data?: FeedbackRequest[];
+        },
+        void
+      >({
+        path: `/feedback/staff/${userId}`,
+        method: "GET",
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Feedback requests whose submitting device (fingerprint or IP) also appears on a completed request for a different customer - a signal the same person, possibly the sending staff member, may have answered on behalf of more than one customer. Not auto-blocked at submission time, surfaced here for manual review only.
+     *
+     * @tags Feedback
+     * @name FlaggedList
+     * @summary List flagged feedback submissions for review (MANAGERS/HR/SUPER ADMIN)
+     * @request GET:/feedback/flagged
+     * @secure
+     */
+    flaggedList: (params: RequestParams = {}) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          data?: FeedbackRequest[];
+        },
+        void
+      >({
+        path: `/feedback/flagged`,
+        method: "GET",
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Hit directly by the customer's browser from the link a staff member shared - not an authenticated app request. Returns an empty `questions` array once the link is no longer pending (completed/expired).
+     *
+     * @tags Feedback
+     * @name FeedbackDetail
+     * @summary Get a feedback link's questions (public, no auth)
+     * @request GET:/feedback/{token}
+     * @secure
+     */
+    feedbackDetail: (token: string, params: RequestParams = {}) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          data?: {
+            status?: "pending" | "completed" | "expired";
+            /** @example "Sunrise Traders" */
+            customerName?: string;
+            questions?: {
+              questionId?: string;
+              text?: string;
+            }[];
+          };
+        },
+        void
+      >({
+        path: `/feedback/${token}`,
+        method: "GET",
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Hit directly by the customer's browser. One-time submission - a link that is already completed or has expired is rejected. The server captures IP address and User-Agent itself (never trusted from the request body); `deviceFingerprint` is an opaque client-generated identifier the frontend is responsible for producing (e.g. a persisted localStorage ID or a fingerprinting library's hash) and is stored as-is, purely as a signal for the flagged-review queue - it is never used to block a submission outright.
+     *
+     * @tags Feedback
+     * @name FeedbackCreate
+     * @summary Submit feedback answers (public, no auth)
+     * @request POST:/feedback/{token}
+     * @secure
+     */
+    feedbackCreate: (
+      token: string,
+      data: {
+        answers: {
+          questionId: string;
+          answer: boolean;
+        }[];
+        /**
+         * Opaque client-generated device identifier, frontend's choice of source
+         * @example "f3a1c9e0b2d4"
+         */
+        deviceFingerprint?: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          data?: {
+            /** @example "completed" */
+            status?: string;
+          };
+        },
+        void
+      >({
+        path: `/feedback/${token}`,
+        method: "POST",
         body: data,
         secure: true,
         type: ContentType.Json,

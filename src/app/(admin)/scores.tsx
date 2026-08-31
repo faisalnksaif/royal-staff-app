@@ -436,17 +436,23 @@ export default function ScoresScreen() {
           <AppText variant="caption" color="tertiary">
             Rules:
           </AppText>
-          <AppText variant="caption" color="secondary">
-            Late ≤{config.attendance.maxLateCases} → +{config.attendance.pointsIfNoLate}pts
-          </AppText>
+          {config.attendance && (
+            <AppText variant="caption" color="secondary">
+              Late ≤{config.attendance.maxLateCases} → +{config.attendance.pointsIfNoLate}pts
+            </AppText>
+          )}
           <View style={styles.configDot} />
-          <AppText variant="caption" color="secondary">
-            Leave ≤{config.leaves.maxAllowedPerMonth} → +{config.leaves.pointsIfWithinLimit}pts
-          </AppText>
+          {config.leaves && (
+            <AppText variant="caption" color="secondary">
+              Leave ≤{config.leaves.maxAllowedPerMonth} → +{config.leaves.pointsIfWithinLimit}pts
+            </AppText>
+          )}
           <View style={styles.configDot} />
-          <AppText variant="caption" color="secondary">
-            Appearance {config.appearance.pointsPerViolation}pts/day
-          </AppText>
+          {config.appearance && (
+            <AppText variant="caption" color="secondary">
+              Appearance {config.appearance.pointsPerViolation}pts/day
+            </AppText>
+          )}
           {config.extraPerformance && (
             <>
               <View style={styles.configDot} />
