@@ -421,13 +421,19 @@ function SheetView({
   const syncingFrom = useRef<"name" | "body" | null>(null)
 
   function handleNameScroll(y: number) {
-    if (syncingFrom.current === "body") return
+    if (syncingFrom.current === "body") {
+      syncingFrom.current = null
+      return
+    }
     syncingFrom.current = "name"
     bodyScrollRef.current?.scrollTo({ y, animated: false })
   }
 
   function handleBodyScroll(y: number) {
-    if (syncingFrom.current === "name") return
+    if (syncingFrom.current === "name") {
+      syncingFrom.current = null
+      return
+    }
     syncingFrom.current = "body"
     nameScrollRef.current?.scrollTo({ y, animated: false })
   }
