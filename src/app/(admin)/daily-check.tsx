@@ -3,6 +3,7 @@ import { View, FlatList, ScrollView, ActivityIndicator, StyleSheet, Pressable, u
 import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query"
 import { Check, X, AlertCircle, Search, XCircle, ChevronLeft, ChevronRight, LayoutGrid, Table, StickyNote } from "lucide-react-native"
 import moment from "moment"
+import Toast from "react-native-toast-message"
 import BackButton from "../../components/shared/BackButton"
 import AppText from "../../components/ui/AppText"
 import AppCard from "../../components/ui/AppCard"
@@ -417,7 +418,7 @@ function SheetCategoryCell({
                 <AppButton
                   label="Save"
                   size="md"
-                  onPress={() => { onRemarksChange(draftRemarks); onRemarksSave(draftRemarks) }}
+                  onPress={() => { onRemarksChange(draftRemarks); onRemarksSave(draftRemarks); onClose() }}
                   disabled={isUpdating || (!isOk && draftRemarks.trim().length === 0)}
                   style={{ marginTop: spacing[3] }}
                 />
@@ -715,6 +716,9 @@ export default function DailyCheckScreen() {
         }
       )
     },
+    onError: () => {
+      Toast.show({ type: "error", text1: "Failed to save" })
+    },
     onSettled: (_, __, { category, staffId }) => {
       setUpdatingKeys((prev) => {
         const next = new Set(prev)
@@ -761,7 +765,10 @@ export default function DailyCheckScreen() {
     const record = records.find((r) => r.staffId === staffId)
     const violations = record?.violationsByCategory[category] ?? []
     setUpdatingKeys((prev) => new Set([...prev, updatingKey]))
-    categoryMutation.mutate({ category, apiBasePath, staffId, violations, remarks })
+    categoryMutation.mutate(
+      { category, apiBasePath, staffId, violations, remarks },
+      { onSuccess: () => Toast.show({ type: "success", text1: "Saved" }) }
+    )
   }
 
   const filteredRecords = useMemo(() => {
