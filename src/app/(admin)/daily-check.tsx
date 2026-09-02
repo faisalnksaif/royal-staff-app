@@ -304,7 +304,15 @@ function SheetCategoryCell({
 }) {
   const { colors } = useTheme()
   const [draftRemarks, setDraftRemarks] = useState(remarks)
+  const [draftKeys, setDraftKeys] = useState(activeKeys)
   useEffect(() => setDraftRemarks(remarks), [remarks])
+  useEffect(() => {
+    if (isOpen) {
+      setDraftRemarks(remarks)
+      setDraftKeys(activeKeys)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen])
 
   if (category.note) {
     return (
