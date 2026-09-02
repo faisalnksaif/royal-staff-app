@@ -297,7 +297,7 @@ function SheetCategoryCell({
   isOpen: boolean
   onOpen: () => void
   onClose: () => void
-  onToggle: (key: string) => void
+  onToggle: (keys: string[]) => void
   remarks: string
   onRemarksChange: (remarks: string) => void
   onRemarksSave: (remarks: string) => void
@@ -366,7 +366,7 @@ function SheetCategoryCell({
                 <AppText variant="heading3">
                   {category.label}
                 </AppText>
-                {isOk ? (
+                {draftKeys.length === 0 ? (
                   <View style={[styles.badge, { backgroundColor: palette.success.default + "18" }]}>
                     <Check size={13} color={palette.success.default} strokeWidth={2.5} />
                     <AppText variant="bodySmall" style={{ color: palette.success.default }}>
@@ -377,19 +377,22 @@ function SheetCategoryCell({
                   <View style={[styles.badge, { backgroundColor: palette.error.default + "18" }]}>
                     <AlertCircle size={13} color={palette.error.default} strokeWidth={2} />
                     <AppText variant="bodySmall" style={{ color: palette.error.default }}>
-                      {activeKeys.length} issue{activeKeys.length > 1 ? "s" : ""}
+                      {draftKeys.length} issue{draftKeys.length > 1 ? "s" : ""}
                     </AppText>
                   </View>
                 )}
               </View>
               <View style={styles.sheetPopoverChips}>
                 {category.violations.map((v) => {
-                  const isBad = activeKeys.includes(v)
+                  const isBad = draftKeys.includes(v)
                   const chipColor = isBad ? palette.error.default : palette.success.default
                   return (
                     <Pressable
                       key={v}
-                      onPress={() => !isUpdating && onToggle(v)}
+                      onPress={() =>
+                        !isUpdating &&
+                        setDraftKeys((prev) => (prev.includes(v) ? prev.filter((k) => k !== v) : [...prev, v]))
+                      }
                       disabled={isUpdating}
                       style={({ pressed, hovered }: any) => [
                         styles.popoverChip,
@@ -415,7 +418,7 @@ function SheetCategoryCell({
               <View style={[styles.sheetPopoverDivider, { backgroundColor: colors.border }]} />
               <View style={styles.sheetPopoverRemarks}>
                 <AppText variant="bodySmall" color="secondary" style={{ marginBottom: spacing[2] }}>
-                  {isOk ? "Remarks" : "Remarks (required)"}
+                  {draftKeys.length === 0 ? "Remarks" : "Remarks (required)"}
                 </AppText>
                 <AppInput
                   placeholder="Add a note..."
@@ -426,8 +429,13 @@ function SheetCategoryCell({
                 <AppButton
                   label="Save"
                   size="md"
-                  onPress={() => { onRemarksChange(draftRemarks); onRemarksSave(draftRemarks); onClose() }}
-                  disabled={isUpdating || (!isOk && draftRemarks.trim().length === 0)}
+                  onPress={() => {
+                    onToggle(draftKeys)
+                    onRemarksChange(draftRemarks)
+                    onRemarksSave(draftRemarks)
+                    onClose()
+                  }}
+                  disabled={isUpdating || (draftKeys.length > 0 && draftRemarks.trim().length === 0)}
                   style={{ marginTop: spacing[3] }}
                 />
               </View>
@@ -450,12 +458,19 @@ function SheetView({
   records: StaffDailyCheck[]
   categories: DailyCheckCategoryDef[]
   isUpdating: (category: string, staffId: number) => boolean
-  onToggle: (staffId: number, category: string, key: string) => void
+  onToggle: (staffId: number, category: string, keys: string[]) => void
   onRemarksChange: (staffId: number, category: string, remarks: string) => void
   onRemarksSave: (staffId: number, category: string, remarks: string) => void
 }) {
   const { colors } = useTheme()
   const [openCell, setOpenCell] = useState<string | null>(null)
+  const [headerHeight, setHeaderHeight] = useState(SHEET_ROW_HEIGHT)
+  const headerCellHeights = useRef<Map<string, number>>(new Map())
+  const handleHeaderCellLayout = (key: string, height: number) => {
+    headerCellHeights.current.set(key, height)
+    const tallest = Math.max(SHEET_ROW_HEIGHT, ...headerCellHeights.current.values())
+    if (tallest !== headerHeight) setHeaderHeight(tallest)
+  }
   // Departments may each define their own category (different key + violation list) under the
   // same label (e.g. "Major Violations" for Store / Plywood Godown / Glass Godown). Collapse
   // those into a single column keyed by label; each staff row resolves its own department's
@@ -497,7 +512,7 @@ function SheetView({
       {/* Fixed name column */}
       <View style={[styles.sheetNameColumn, { borderColor: colors.border }]}>
         <View style={[styles.sheetRow, styles.sheetHeaderRow, { backgroundColor: colors.background.secondary, borderColor: colors.border }]}>
-          <View style={[styles.sheetCell, styles.sheetHeaderCell, styles.sheetNameCell, { width: SHEET_NAME_COL_WIDTH, borderColor: colors.border, borderRightWidth: 0 }]}>
+          <View style={[styles.sheetCell, styles.sheetHeaderCell, styles.sheetNameCell, { height: headerHeight, width: SHEET_NAME_COL_WIDTH, borderColor: colors.border, borderRightWidth: 0 }]}>
             <AppText variant="bodySmall" color="secondary">Staff</AppText>
           </View>
         </View>
@@ -530,7 +545,11 @@ function SheetView({
         <View>
           <View style={[styles.sheetRow, styles.sheetHeaderRow, { backgroundColor: colors.background.secondary, borderColor: colors.border }]}>
             {columnsByLabel.map((c) => (
-              <View key={c.label} style={[styles.sheetCell, styles.sheetHeaderCell, { width: SHEET_CATEGORY_COL_WIDTH, borderColor: colors.border }]}>
+              <View
+                key={c.label}
+                style={[styles.sheetCell, styles.sheetHeaderCell, { height: headerHeight, width: SHEET_CATEGORY_COL_WIDTH, borderColor: colors.border }]}
+                onLayout={(e) => handleHeaderCellLayout(c.label, e.nativeEvent.layout.height)}
+              >
                 <AppText variant="bodySmall" color="secondary" style={styles.sheetHeaderText}>{c.label}</AppText>
               </View>
             ))}
@@ -564,7 +583,7 @@ function SheetView({
                       isOpen={openCell === cellKey}
                       onOpen={() => setOpenCell(cellKey)}
                       onClose={() => setOpenCell(null)}
-                      onToggle={(key) => onToggle(record.staffId, ownDef.category, key)}
+                      onToggle={(keys) => onToggle(record.staffId, ownDef.category, keys)}
                       remarks={record.remarksByCategory[ownDef.category] ?? ""}
                       onRemarksChange={(remarks) => onRemarksChange(record.staffId, ownDef.category, remarks)}
                       onRemarksSave={(remarks) => onRemarksSave(record.staffId, ownDef.category, remarks)}
@@ -591,6 +610,7 @@ export default function DailyCheckScreen() {
   const [issuesOnly, setIssuesOnly] = useState(false)
   const [selectedDate, setSelectedDate] = useState(() => moment().format("YYYY-MM-DD"))
   const [updatingKeys, setUpdatingKeys] = useState<Set<string>>(new Set())
+  const pendingViolationsRef = useRef<Map<string, string[]>>(new Map())
   const queryClient = useQueryClient()
 
   const isToday = selectedDate === moment().format("YYYY-MM-DD")
@@ -767,11 +787,11 @@ export default function DailyCheckScreen() {
     )
   }
 
-  function handleSave(staffId: number, category: string, apiBasePath: string, remarks: string) {
+  function handleSave(staffId: number, category: string, apiBasePath: string, remarks: string, pendingViolations?: string[]) {
     const updatingKey = `${category}:${staffId}`
     if (updatingKeys.has(updatingKey)) return
     const record = records.find((r) => r.staffId === staffId)
-    const violations = record?.violationsByCategory[category] ?? []
+    const violations = pendingViolations ?? record?.violationsByCategory[category] ?? []
     setUpdatingKeys((prev) => new Set([...prev, updatingKey]))
     categoryMutation.mutate(
       { category, apiBasePath, staffId, violations, remarks },
@@ -981,11 +1001,8 @@ export default function DailyCheckScreen() {
             }
             categories={allCategories}
             isUpdating={(category, staffId) => updatingKeys.has(`${category}:${staffId}`)}
-            onToggle={(staffId, category, key) => {
-              const record = records.find((r) => r.staffId === staffId)
-              const def = record?.categories.find((c) => c.category === category)
-              if (!def) return
-              handleToggle(staffId, category, def.apiBasePath, key)
+            onToggle={(staffId, category, keys) => {
+              pendingViolationsRef.current.set(`${category}:${staffId}`, keys)
             }}
             onRemarksChange={(staffId, category, remarks) => {
               const record = records.find((r) => r.staffId === staffId)
@@ -997,7 +1014,10 @@ export default function DailyCheckScreen() {
               const record = records.find((r) => r.staffId === staffId)
               const def = record?.categories.find((c) => c.category === category)
               if (!def) return
-              handleSave(staffId, category, def.apiBasePath, remarks)
+              const pendingKey = `${category}:${staffId}`
+              const pendingViolations = pendingViolationsRef.current.get(pendingKey)
+              pendingViolationsRef.current.delete(pendingKey)
+              handleSave(staffId, category, def.apiBasePath, remarks, pendingViolations)
             }}
           />
         )
