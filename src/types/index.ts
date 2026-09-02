@@ -723,6 +723,11 @@ export interface LeaveRequest {
   delegatedTo?: number | null
   delegatedAt?: string | null
   canApprove: boolean
+  isExemptionEligible?: boolean
+  isExempted?: boolean | null
+  exemptedBy?: string | null
+  exemptedAt?: string | null
+  exemptionReason?: string | null
   createdAt: string
 }
 
@@ -740,7 +745,9 @@ export interface LeaveBalance {
   leaveBalance: number
   leaveUsedThisYear: number
   leaveUsedThisMonth: number
-  monthlyLimit: number
+  totalRequestedThisYear: number
+  totalRequestedThisMonth: number
+  recommendedMonthlyLimit: number
 }
 
 export type MeetingAttendanceStatus = "present" | "absent" | "excused"

@@ -11,7 +11,7 @@ import {
   ScrollView,
 } from "react-native"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { Check, X, Calendar, RefreshCw, Plus, Trash2, Share2, UserCheck, ClipboardList, XCircle, Share } from "lucide-react-native"
+import { Check, X, Calendar, RefreshCw, Plus, Trash2, Share2, UserCheck, ClipboardList, XCircle, Share, ShieldCheck, AlertCircle } from "lucide-react-native"
 import Toast from "react-native-toast-message"
 import BackButton from "../../components/shared/BackButton"
 import StaffAvatar from "../../components/shared/StaffAvatar"
@@ -303,6 +303,20 @@ function buildLeaveEvents(item: LeaveRequest): TimelineEvent[] {
     })
   }
 
+  if (item.isExempted) {
+    events.push({
+      icon: <ShieldCheck size={11} color={palette.success.default} strokeWidth={1.75} />,
+      text: `Exempted from score deduction${item.exemptionReason ? ` · ${item.exemptionReason}` : ""}${item.exemptedBy ? ` by ${item.exemptedBy}` : ""}${item.exemptedAt ? ` · ${moment(item.exemptedAt).format("D MMM, h:mm A")}` : ""}`,
+      color: palette.success.default,
+    })
+  } else if (item.isExemptionEligible) {
+    events.push({
+      icon: <AlertCircle size={11} color={palette.warning.default} strokeWidth={1.75} />,
+      text: "Beyond monthly limit · score deduction applies unless exempted",
+      color: palette.warning.default,
+    })
+  }
+
   return events
 }
 
@@ -314,45 +328,65 @@ function LeaveCard({
   onApprove,
   onReject,
   onDelegate,
+  onToggleExemption,
   isApproving,
   isRejecting,
+  isTogglingExemption,
   canDelegate,
+  canManageExemptions,
 }: {
   item: LeaveRequest
   index?: number
   onApprove: () => void
   onReject: () => void
   onDelegate?: () => void
+  onToggleExemption?: () => void
   isApproving: boolean
   isRejecting: boolean
+  isTogglingExemption?: boolean
   canDelegate?: boolean
+  canManageExemptions?: boolean
 }) {
   const { colors, isDark } = useTheme()
   const status = STATUS_CONFIG[item.status]
   const typeColor = TYPE_CONFIG[item.leaveType]?.color ?? colors.accent
   const avatarColor = isDark ? colors.accent : palette.primary[700]
   const avatarBgColor = isDark ? colors.accentSubtle : palette.primary[100]
-  const isBusy = isApproving || isRejecting
+  const isBusy = isApproving || isRejecting || isTogglingExemption
 
-  const menuItems: ActionMenuItem[] = item.status === "pending"
-    ? [
-        ...(item.canApprove
-          ? [
-              { label: "Approve", icon: <Check size={16} color={palette.success.default} strokeWidth={2.5} />, color: palette.success.default, onPress: onApprove },
-              { label: "Reject", icon: <X size={16} color={palette.error.default} strokeWidth={2} />, color: palette.error.default, onPress: onReject },
-            ]
-          : []),
-        ...(canDelegate && onDelegate
-          ? [{ label: "Delegate", icon: <Share2 size={16} color={colors.accent} strokeWidth={1.75} />, color: colors.accent, onPress: onDelegate }]
-          : []),
-      ]
-    : []
+  const menuItems: ActionMenuItem[] = [
+    ...(item.status === "pending" && item.canApprove
+      ? [
+          { label: "Approve", icon: <Check size={16} color={palette.success.default} strokeWidth={2.5} />, color: palette.success.default, onPress: onApprove },
+          { label: "Reject", icon: <X size={16} color={palette.error.default} strokeWidth={2} />, color: palette.error.default, onPress: onReject },
+        ]
+      : []),
+    ...(item.status === "pending" && canDelegate && onDelegate
+      ? [{ label: "Delegate", icon: <Share2 size={16} color={colors.accent} strokeWidth={1.75} />, color: colors.accent, onPress: onDelegate }]
+      : []),
+    ...(canManageExemptions && item.isExemptionEligible && onToggleExemption
+      ? [{
+          label: item.isExempted ? "Revoke score exemption" : "Grant score exemption",
+          icon: <ShieldCheck size={16} color={colors.accent} strokeWidth={1.75} />,
+          color: colors.accent,
+          onPress: onToggleExemption,
+        }]
+      : []),
+  ]
+
+  const atRisk = item.isExemptionEligible && !item.isExempted
 
   const pills: ListRowPill[] = [
     { key: "type", label: item.leaveType, color: typeColor, bgColor: typeColor + "22" },
     { key: "status", label: status.label, color: status.color, bgColor: status.color + "22" },
     ...(item.delegatedTo != null
       ? [{ key: "delegated", label: "Delegated", color: colors.accent, bgColor: colors.accentSubtle }]
+      : []),
+    ...(item.isExempted
+      ? [{ key: "exempt", label: "Score exempt", color: palette.success.default, bgColor: palette.success.default + "22" }]
+      : []),
+    ...(atRisk
+      ? [{ key: "at-risk", label: "Score at risk", color: palette.warning.default, bgColor: palette.warning.default + "22" }]
       : []),
   ]
 
@@ -406,6 +440,9 @@ function MyBalanceCard({ staffId }: { staffId?: number }) {
   const used = balance?.leaveUsedThisYear ?? 0
   const total = balance?.totalLeavePerYear ?? 12
   const remaining = balance?.leaveBalance ?? 0
+  const usedThisMonth = balance?.leaveUsedThisMonth ?? 0
+  const recommendedMonthlyLimit = balance?.recommendedMonthlyLimit ?? 1
+  const overRecommended = usedThisMonth >= recommendedMonthlyLimit
   const fillRatio = total > 0 ? Math.min(used / total, 1) : 0
   const pct = Math.round(fillRatio * 100)
   const barColor = fillRatio > 0.8 ? palette.error.default : fillRatio > 0.5 ? palette.warning.default : palette.success.default
@@ -426,6 +463,13 @@ function MyBalanceCard({ staffId }: { staffId?: number }) {
               <AppText variant="heading2" color="primary">{used}</AppText>
               <AppText variant="caption" color="tertiary">Used (year)</AppText>
             </View>
+            <View style={[styles.myBalanceStatDivider, { backgroundColor: colors.border }]} />
+            <View style={styles.myBalanceStat}>
+              <AppText variant="heading2" style={{ color: overRecommended ? palette.warning.default : colors.text.primary as string }}>
+                {usedThisMonth}
+              </AppText>
+              <AppText variant="caption" color="tertiary">This month</AppText>
+            </View>
           </View>
           <View style={styles.myBalanceBarWrap}>
             <View style={[styles.myBalanceTrack, { backgroundColor: colors.border }]}>
@@ -433,6 +477,11 @@ function MyBalanceCard({ staffId }: { staffId?: number }) {
             </View>
             <AppText variant="caption" style={{ color: barColor, fontSize: 11 }}>{pct}%</AppText>
           </View>
+          {overRecommended && (
+            <AppText variant="caption" style={{ color: palette.warning.default }}>
+              You've used {usedThisMonth} of the recommended {recommendedMonthlyLimit} leave{recommendedMonthlyLimit !== 1 ? "s" : ""} this month. Further requests may incur a score deduction unless exempted.
+            </AppText>
+          )}
         </>
       )}
     </View>
@@ -451,11 +500,22 @@ function MyRequestModal({
   onSuccess: () => void
 }) {
   const { colors } = useTheme()
+  const user = useAuthStore((s) => s.user)
   const [startDate, setStartDate] = useState<Date | null>(null)
   const [endDate, setEndDate] = useState<Date | null>(null)
   const [leaveType, setLeaveType] = useState<LeaveType>("Personal")
   const [reason, setReason] = useState("")
   const [error, setError] = useState("")
+
+  const { data: balanceData } = useQuery({
+    queryKey: ["leave-balance", user?.user_id],
+    queryFn: () => leaveService.getLeaveBalance(user?.user_id as number),
+    enabled: visible && user?.user_id != null,
+  })
+  const balance = balanceData?.data
+  const usedThisMonth = balance?.leaveUsedThisMonth ?? 0
+  const recommendedMonthlyLimit = balance?.recommendedMonthlyLimit ?? 1
+  const overRecommended = usedThisMonth >= recommendedMonthlyLimit
 
   const mutation = useMutation({
     mutationFn: () => leaveService.requestLeave({
@@ -548,6 +608,14 @@ function MyRequestModal({
           numberOfLines={3}
           textAlignVertical="top"
         />
+
+        {overRecommended && (
+          <View style={[styles.myDayCount, { backgroundColor: palette.warning.default + "18", marginTop: spacing[3] }]}>
+            <AppText variant="caption" style={{ color: palette.warning.default, flex: 1 }}>
+              You've already used {usedThisMonth} of the recommended {recommendedMonthlyLimit} leave{recommendedMonthlyLimit !== 1 ? "s" : ""} this month. This request will still go through approval but may incur a score deduction unless your manager grants an exemption.
+            </AppText>
+          </View>
+        )}
 
         {error ? (
           <AppText variant="caption" style={{ color: palette.error.default, marginBottom: spacing[3] }}>
@@ -772,6 +840,19 @@ function TeamLeavesTab({ delegatedOnly }: { delegatedOnly?: boolean }) {
     },
   })
 
+  const exemptionMutation = useMutation({
+    mutationFn: ({ id, exempted }: { id: string; exempted: boolean }) =>
+      leaveService.setLeaveExemption(id, exempted),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["leaves"] })
+      setActionId(null)
+    },
+    onError: (e) => {
+      Toast.show({ type: "error", text1: leaveErrorMessage(e, "Failed to update score exemption") })
+      setActionId(null)
+    },
+  })
+
   const stats = statsData?.data
   const allLeaves = leavesData?.data?.leaves ?? []
   const leaves = delegatedOnly
@@ -827,9 +908,15 @@ function TeamLeavesTab({ delegatedOnly }: { delegatedOnly?: boolean }) {
                 setRejectTarget(item.id)
               }}
               onDelegate={() => setDelegateTarget(item.id)}
+              onToggleExemption={() => {
+                setActionId(item.id)
+                exemptionMutation.mutate({ id: item.id, exempted: !item.isExempted })
+              }}
               canDelegate={isHr}
+              canManageExemptions={user?.role === "manager" || user?.role === "hr" || user?.role === "superAdmin"}
               isApproving={approveMutation.isPending && actionId === item.id}
               isRejecting={rejectMutation.isPending && actionId === item.id}
+              isTogglingExemption={exemptionMutation.isPending && actionId === item.id}
             />
           </AnimatedListItem>
         )}

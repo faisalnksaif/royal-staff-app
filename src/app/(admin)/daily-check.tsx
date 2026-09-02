@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react"
 import { View, FlatList, ScrollView, ActivityIndicator, StyleSheet, Pressable, useWindowDimensions, Modal } from "react-native"
 import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query"
-import { Check, X, AlertCircle, Search, XCircle, ChevronLeft, ChevronRight, LayoutGrid, Table } from "lucide-react-native"
+import { Check, X, AlertCircle, Search, XCircle, ChevronLeft, ChevronRight, LayoutGrid, Table, StickyNote } from "lucide-react-native"
 import moment from "moment"
 import BackButton from "../../components/shared/BackButton"
 import AppText from "../../components/ui/AppText"
@@ -61,8 +61,10 @@ function ChipsSection({
 }) {
   const { colors } = useTheme()
   const [draftRemarks, setDraftRemarks] = useState(remarks)
+  const [notesOpen, setNotesOpen] = useState(false)
   useEffect(() => setDraftRemarks(remarks), [remarks])
   const isAllOk = activeKeys.length === 0
+  const hasRemarks = remarks.trim().length > 0
 
   if (disabled) {
     return (
@@ -87,21 +89,33 @@ function ChipsSection({
         <AppText variant="bodyMedium" color="secondary">
           {title}
         </AppText>
-        {isAllOk ? (
-          <View style={[styles.badge, { backgroundColor: palette.success.default + "18" }]}>
-            <Check size={13} color={palette.success.default} strokeWidth={2.5} />
-            <AppText variant="bodySmall" style={{ color: palette.success.default }}>
-              OK
-            </AppText>
-          </View>
-        ) : (
-          <View style={[styles.badge, { backgroundColor: palette.error.default + "18" }]}>
-            <AlertCircle size={13} color={palette.error.default} strokeWidth={2} />
-            <AppText variant="bodySmall" style={{ color: palette.error.default }}>
-              {activeKeys.length} issue{activeKeys.length > 1 ? "s" : ""}
-            </AppText>
-          </View>
-        )}
+        <View style={styles.sectionHeaderRight}>
+          {isAllOk ? (
+            <View style={[styles.badge, { backgroundColor: palette.success.default + "18" }]}>
+              <Check size={13} color={palette.success.default} strokeWidth={2.5} />
+              <AppText variant="bodySmall" style={{ color: palette.success.default }}>
+                OK
+              </AppText>
+            </View>
+          ) : (
+            <View style={[styles.badge, { backgroundColor: palette.error.default + "18" }]}>
+              <AlertCircle size={13} color={palette.error.default} strokeWidth={2} />
+              <AppText variant="bodySmall" style={{ color: palette.error.default }}>
+                {activeKeys.length} issue{activeKeys.length > 1 ? "s" : ""}
+              </AppText>
+            </View>
+          )}
+          <Pressable
+            onPress={() => setNotesOpen(true)}
+            hitSlop={8}
+            style={[
+              styles.notesButton,
+              { borderColor: hasRemarks ? colors.accent : colors.border, backgroundColor: hasRemarks ? colors.accent + "14" : "transparent" },
+            ]}
+          >
+            <StickyNote size={13} color={hasRemarks ? colors.accent : colors.text.tertiary} strokeWidth={2} />
+          </Pressable>
+        </View>
       </View>
       <View style={[styles.chipsRow, { borderTopColor: colors.border }]}>
         {items.map((item) => {
@@ -134,21 +148,50 @@ function ChipsSection({
           )
         })}
       </View>
-      <View style={styles.remarksRow}>
-        <AppInput
-          placeholder={isAllOk ? "Remarks" : "Remarks (required)"}
-          value={draftRemarks}
-          onChangeText={setDraftRemarks}
-          editable={!isUpdating}
-        />
-        <AppButton
-          label="Save"
-          size="sm"
-          onPress={() => { onRemarksChange(draftRemarks); onRemarksSave(draftRemarks) }}
-          disabled={isUpdating || (!isAllOk && draftRemarks.trim().length === 0)}
-          style={{ marginTop: spacing[2] }}
-        />
-      </View>
+
+      {notesOpen ? (
+        <Modal transparent animationType="fade" onRequestClose={() => setNotesOpen(false)} visible={notesOpen}>
+          <Pressable style={styles.sheetModalBackdrop} onPress={() => setNotesOpen(false)}>
+            <Pressable
+              style={[styles.sheetPopover, { backgroundColor: colors.background.primary, borderColor: colors.border }]}
+              onPress={(e) => e.stopPropagation()}
+            >
+              <View style={styles.sheetPopoverHeader}>
+                <AppText variant="heading3">{title}</AppText>
+                {isAllOk ? (
+                  <View style={[styles.badge, { backgroundColor: palette.success.default + "18" }]}>
+                    <Check size={13} color={palette.success.default} strokeWidth={2.5} />
+                    <AppText variant="bodySmall" style={{ color: palette.success.default }}>OK</AppText>
+                  </View>
+                ) : (
+                  <View style={[styles.badge, { backgroundColor: palette.error.default + "18" }]}>
+                    <AlertCircle size={13} color={palette.error.default} strokeWidth={2} />
+                    <AppText variant="bodySmall" style={{ color: palette.error.default }}>
+                      {activeKeys.length} issue{activeKeys.length > 1 ? "s" : ""}
+                    </AppText>
+                  </View>
+                )}
+              </View>
+              <AppText variant="bodySmall" color="secondary" style={{ marginBottom: spacing[2] }}>
+                {isAllOk ? "Remarks" : "Remarks (required)"}
+              </AppText>
+              <AppInput
+                placeholder="Add a note..."
+                value={draftRemarks}
+                onChangeText={setDraftRemarks}
+                editable={!isUpdating}
+              />
+              <AppButton
+                label="Save"
+                size="md"
+                onPress={() => { onRemarksChange(draftRemarks); onRemarksSave(draftRemarks); setNotesOpen(false) }}
+                disabled={isUpdating || (!isAllOk && draftRemarks.trim().length === 0)}
+                style={{ marginTop: spacing[3] }}
+              />
+            </Pressable>
+          </Pressable>
+        </Modal>
+      ) : null}
     </View>
   )
 }
@@ -339,11 +382,12 @@ function SheetCategoryCell({
                       key={v}
                       onPress={() => !isUpdating && onToggle(v)}
                       disabled={isUpdating}
-                      style={({ pressed }) => [
-                        styles.chip,
+                      style={({ pressed, hovered }: any) => [
+                        styles.popoverChip,
                         {
                           backgroundColor: chipColor + "14",
-                          borderColor: chipColor + (pressed ? "" : "80"),
+                          borderColor: chipColor + (pressed || hovered ? "" : "80"),
+                          transform: [{ scale: pressed ? 0.98 : 1 }],
                         },
                       ]}
                     >
@@ -352,15 +396,16 @@ function SheetCategoryCell({
                       ) : (
                         <Check size={15} color={chipColor} strokeWidth={2.5} />
                       )}
-                      <AppText variant="bodySmall" style={{ color: chipColor }}>
+                      <AppText variant="bodySmall" style={{ color: chipColor, flexShrink: 1 }} numberOfLines={1}>
                         {humanizeViolationKey(v)}
                       </AppText>
                     </Pressable>
                   )
                 })}
               </View>
+              <View style={[styles.sheetPopoverDivider, { backgroundColor: colors.border }]} />
               <View style={styles.sheetPopoverRemarks}>
-                <AppText variant="bodySmall" color="secondary" style={{ marginBottom: spacing[1] }}>
+                <AppText variant="bodySmall" color="secondary" style={{ marginBottom: spacing[2] }}>
                   {isOk ? "Remarks" : "Remarks (required)"}
                 </AppText>
                 <AppInput
@@ -1097,15 +1142,25 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: spacing[2],
   },
+  sectionHeaderRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[2],
+  },
+  notesButton: {
+    width: 28,
+    height: 28,
+    borderRadius: radii.full,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   chipsRow: {
     flexDirection: "row",
     gap: spacing[3],
     borderTopWidth: StyleSheet.hairlineWidth,
     paddingTop: spacing[3],
     flexWrap: "wrap",
-  },
-  remarksRow: {
-    marginTop: spacing[3],
   },
   chip: {
     flexDirection: "row",
@@ -1172,16 +1227,21 @@ const styles = StyleSheet.create({
   },
   sheetModalBackdrop: {
     flex: 1,
-    backgroundColor: "#00000055",
+    backgroundColor: "#00000070",
     alignItems: "center",
     justifyContent: "center",
   },
   sheetPopover: {
-    minWidth: 320,
-    maxWidth: 420,
+    minWidth: 340,
+    maxWidth: 440,
     padding: spacing[5],
-    borderRadius: radii.lg,
+    borderRadius: radii.xl,
     borderWidth: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.25,
+    shadowRadius: 24,
+    elevation: 12,
   },
   sheetPopoverHeader: {
     flexDirection: "row",
@@ -1193,6 +1253,21 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: spacing[3],
+  },
+  popoverChip: {
+    flexBasis: "47%",
+    flexGrow: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[2],
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[3],
+    borderRadius: radii.md,
+    borderWidth: 1.5,
+  },
+  sheetPopoverDivider: {
+    height: StyleSheet.hairlineWidth,
+    marginTop: spacing[4],
   },
   sheetPopoverRemarks: {
     marginTop: spacing[4],

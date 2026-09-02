@@ -1,6 +1,6 @@
 import { View, FlatList, ActivityIndicator, StyleSheet, Pressable, Animated, Easing, useWindowDimensions } from "react-native"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { ChevronLeft, ChevronRight, ChevronDown, Trophy, Timer, Clock, CalendarX, ShieldCheck, Sparkles, Award, RefreshCw, MessageSquareText, MessageSquareQuote, Search, XCircle, Presentation, Smile } from "lucide-react-native"
+import { ChevronLeft, ChevronRight, ChevronDown, Trophy, Timer, Clock, CalendarX, ShieldCheck, Sparkles, Award, RefreshCw, MessageSquareText, MessageSquareQuote, Search, XCircle, Presentation, Smile, ShieldAlert } from "lucide-react-native"
 import moment from "moment"
 import { useState, useRef, useEffect, useMemo } from "react"
 import BackButton from "../../components/shared/BackButton"
@@ -51,6 +51,7 @@ function categoryIcon(category: string, color: string, size = 13) {
     case "extra performance": return <Award size={size} color={color} strokeWidth={1.75} />
     case "testimonial": return <MessageSquareQuote size={size} color={color} strokeWidth={1.75} />
     case "meeting":      return <Presentation size={size} color={color} strokeWidth={1.75} />
+    case "major violations": return <ShieldAlert size={size} color={color} strokeWidth={1.75} />
     default:             return <Trophy size={size} color={color} strokeWidth={1.75} />
   }
 }
@@ -60,9 +61,14 @@ function categoryIcon(category: string, color: string, size = 13) {
 function BreakdownRow({ item }: { item: ScoreBreakdownItem }) {
   const { colors } = useTheme()
   const [expanded, setExpanded] = useState(false)
+  const isDeductionOnly = item.possible === 0
   const isFull = item.possible > 0 && item.earned >= item.possible
   const isZero = item.earned <= 0
-  const color = isFull
+  const color = isDeductionOnly
+    ? item.earned >= 0
+      ? palette.success.default
+      : palette.error.default
+    : isFull
     ? palette.success.default
     : isZero
     ? palette.error.default
@@ -128,9 +134,18 @@ function BreakdownRow({ item }: { item: ScoreBreakdownItem }) {
 // ─── SummaryPip ───────────────────────────────────────────────────────────────
 
 function SummaryPip({ item }: { item: ScoreBreakdownItem }) {
+  const isDeductionOnly = item.possible === 0
   const isFull = item.possible > 0 && item.earned >= item.possible
   const isZero = item.earned <= 0
-  const color = isFull ? palette.success.default : isZero ? palette.error.default : palette.warning.default
+  const color = isDeductionOnly
+    ? item.earned >= 0
+      ? palette.success.default
+      : palette.error.default
+    : isFull
+    ? palette.success.default
+    : isZero
+    ? palette.error.default
+    : palette.warning.default
 
   return (
     <View style={[styles.summaryPip, { backgroundColor: color + "18" }]}>

@@ -69,7 +69,6 @@ interface RequestLeavePayload {
   endDate: string
   leaveType: "Personal" | "Medical"
   reason: string
-  isException?: boolean
 }
 
 async function getMyLeaves(status?: LeaveStatus): Promise<{ success: boolean; data: { count: number; leaves: LeaveRequest[] } }> {
@@ -104,4 +103,15 @@ async function deleteLeave(leaveId: string): Promise<{ success: boolean; data: {
   return data as { success: boolean; data: { id: string; message: string } }
 }
 
-export const leaveService = { getLeaves, getMyLeaves, approveLeave, rejectLeave, delegateLeave, getLeaveStats, getLeaveBalance, requestLeave, deleteLeave }
+async function setLeaveExemption(leaveId: string, exempted: boolean, reason?: string): Promise<{ success: boolean; data: { id: string; isExempted: boolean; exemptedBy: string; exemptedAt: string; exemptionReason: string } }> {
+  const { data } = await api.http.request({
+    path: `/leaves/${leaveId}/exempt`,
+    method: "PUT",
+    body: { exempted, ...(reason ? { reason } : {}) },
+    secure: true,
+    format: "json",
+  })
+  return data as { success: boolean; data: { id: string; isExempted: boolean; exemptedBy: string; exemptedAt: string; exemptionReason: string } }
+}
+
+export const leaveService = { getLeaves, getMyLeaves, approveLeave, rejectLeave, delegateLeave, getLeaveStats, getLeaveBalance, requestLeave, deleteLeave, setLeaveExemption }

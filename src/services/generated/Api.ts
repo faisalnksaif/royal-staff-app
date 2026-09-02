@@ -861,8 +861,8 @@ export interface ScoringConfigResponse {
   /** Leave scoring rules (Approved leaves per month) */
   leaves?: {
     /**
-     * Maximum approved leaves allowed per month
-     * @example 2
+     * Recommended approved leaves per month before a score penalty applies (default 1)
+     * @example 1
      */
     maxAllowedPerMonth?: number;
     /**
@@ -4860,7 +4860,7 @@ export class Api<SecurityDataType extends unknown> {
   };
   leaves = {
     /**
-     * @description Staff requests a leave. Requires approval from a manager or superAdmin. Maximum 3 leaves per month, 12 per year.
+     * @description Staff requests a leave. Requires approval from a manager or superAdmin. 1 leave per month is recommended; requests beyond that are still allowed but go through approval and may incur a score deduction unless exempted. Maximum 12 leaves per year.
      *
      * @tags Leaves
      * @name RequestCreate
@@ -4886,11 +4886,6 @@ export class Api<SecurityDataType extends unknown> {
         leaveType: "Personal" | "Medical";
         /** @example "Family vacation" */
         reason: string;
-        /**
-         * For medical leaves exceeding monthly limit
-         * @default false
-         */
-        isException?: boolean;
       },
       params: RequestParams = {},
     ) =>
@@ -4953,6 +4948,13 @@ export class Api<SecurityDataType extends unknown> {
               approvedByName?: string | null;
               /** @format date-time */
               approvedAt?: string | null;
+              /** True if this leave is beyond the recommended monthly amount for its type, meaning it needs to be exempted (isExempted) to avoid a score deduction. False for leaves already within the recommended limit - no exemption needed. */
+              isExemptionEligible?: boolean;
+              /** Whether a manager/HR has exempted this leave from the score deduction - see PUT /leaves/{leaveId}/exempt */
+              isExempted?: boolean | null;
+              /** @format date-time */
+              exemptedAt?: string | null;
+              exemptionReason?: string | null;
             }[];
           };
         },
@@ -4986,10 +4988,19 @@ export class Api<SecurityDataType extends unknown> {
             totalLeavePerYear?: number;
             /** Remaining leaves for the year */
             leaveBalance?: number;
+            /** Approved leave days used this year */
             leaveUsedThisYear?: number;
+            /** Approved leave days used this month */
             leaveUsedThisMonth?: number;
-            /** @example 3 */
-            monthlyLimit?: number;
+            /** Pending + approved leave days this year */
+            totalRequestedThisYear?: number;
+            /** Pending + approved leave days this month */
+            totalRequestedThisMonth?: number;
+            /**
+             * Advisory only, not enforced. Requests beyond this are still allowed but require approval and may incur a score deduction unless exempted.
+             * @example 1
+             */
+            recommendedMonthlyLimit?: number;
           };
         },
         any
@@ -5037,6 +5048,13 @@ export class Api<SecurityDataType extends unknown> {
               approvedBy?: string | null;
               /** Name (or email fallback) of the approver/rejecter */
               approvedByName?: string | null;
+              /** True if this leave is beyond the recommended monthly amount for its type, meaning it needs to be exempted (isExempted) to avoid a score deduction. False for leaves already within the recommended limit - no exemption needed. */
+              isExemptionEligible?: boolean;
+              /** Whether a manager/HR has exempted this leave from the score deduction - see PUT /leaves/{leaveId}/exempt */
+              isExempted?: boolean | null;
+              /** @format date-time */
+              exemptedAt?: string | null;
+              exemptionReason?: string | null;
               /** user_id of the manager/superAdmin this request was delegated to, if any */
               delegatedTo?: number;
               /** Whether the requesting user can approve/reject this specific leave (always false for non-pending leaves) */
@@ -5156,6 +5174,48 @@ export class Api<SecurityDataType extends unknown> {
         void
       >({
         path: `/leaves/${leaveId}/delegate`,
+        method: "PUT",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Leaves beyond the recommended 1/month normally incur a score deduction (see AttendanceLeaveRule). This grants or revokes an exemption from that deduction for the given leave, independent of its approve/reject status - used for both Personal (manager judgment call) and Medical (typically following HR-verified proof) leave types.
+     *
+     * @tags Leaves
+     * @name ExemptUpdate
+     * @summary Grant/revoke a score exemption for a leave (HR/SUPER ADMIN/MANAGER)
+     * @request PUT:/leaves/{leaveId}/exempt
+     * @secure
+     */
+    exemptUpdate: (
+      leaveId: string,
+      data: {
+        /** true to grant the exemption, false to revoke it */
+        exempted: boolean;
+        /** @example "Approved family emergency" */
+        reason?: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            id?: string;
+            isExempted?: boolean;
+            exemptedBy?: string;
+            /** @format date-time */
+            exemptedAt?: string;
+            exemptionReason?: string;
+          };
+        },
+        void
+      >({
+        path: `/leaves/${leaveId}/exempt`,
         method: "PUT",
         body: data,
         secure: true,
@@ -6279,6 +6339,287 @@ export class Api<SecurityDataType extends unknown> {
         void
       >({
         path: `/stock-maintenance/stats/overview`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+  };
+  packingBillCrossCheck = {
+    /**
+     * @description Update packing/bill cross-check status for a staff member. Use status "ok" to reset, or "bad" with violations to mark violations.
+     *
+     * @tags PackingBillCrossCheck
+     * @name PackingBillCrossCheckUpdate
+     * @summary Update staff packing/bill cross-check culture status (MANAGERS/SUPER ADMIN)
+     * @request PUT:/packing-bill-cross-check/{staffId}
+     * @secure
+     */
+    packingBillCrossCheckUpdate: (
+      staffId: number,
+      data: {
+        /** @example "bad" */
+        status?: "ok" | "bad";
+        /**
+         * Required if status is "bad"
+         * @example ["packing_not_cross_checked"]
+         */
+        violations: "packing_not_cross_checked"[];
+        /** @example "Packed items did not match the bill" */
+        remarks: string;
+        /**
+         * Date this check applies to (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: object;
+        },
+        void
+      >({
+        path: `/packing-bill-cross-check/${staffId}`,
+        method: "PUT",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Retrieve packing/bill cross-check status for all staff members for a given date. Defaults to OK for all staff, and to today if `date` is omitted.
+     *
+     * @tags PackingBillCrossCheck
+     * @name TodayList
+     * @summary Get packing/bill cross-check status for all staff for a given date (MANAGERS/SUPER ADMIN)
+     * @request GET:/packing-bill-cross-check/today
+     * @secure
+     */
+    todayList: (
+      query?: {
+        /**
+         * Date to retrieve (YYYY-MM-DD). Defaults to today.
+         * @format date
+         */
+        date?: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            /**
+             * @format date
+             * @example "2026-08-09"
+             */
+            date?: string;
+            /** @example 50 */
+            count?: number;
+            /** @example 3 */
+            badCount?: number;
+            staff?: {
+              staffId?: number;
+              staffName?: string;
+              date?: string;
+              status?: "ok" | "bad";
+              violations?: "packing_not_cross_checked"[];
+              remarks?: string | null;
+              /** @format date-time */
+              markedAt?: string | null;
+            }[];
+          };
+        },
+        void
+      >({
+        path: `/packing-bill-cross-check/today`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Mark packing/bill cross-check violation for a staff member for a given date (defaults to today)
+     *
+     * @tags PackingBillCrossCheck
+     * @name MarkBadCreate
+     * @summary Mark staff packing/bill cross-check as bad (MANAGERS/SUPER ADMIN)
+     * @request POST:/packing-bill-cross-check/mark-bad/{staffId}
+     * @secure
+     */
+    markBadCreate: (
+      staffId: number,
+      data: {
+        /** @default "bad" */
+        status?: "ok" | "bad";
+        /**
+         * Packing/Bill Cross-Check violations to mark
+         * @example ["packing_not_cross_checked"]
+         */
+        violations: "packing_not_cross_checked"[];
+        /** @example "Packed items did not match the bill" */
+        remarks: string;
+        /**
+         * Date this check applies to (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            status?: string;
+            violations?: string[];
+            remarks?: string;
+            /** @format date-time */
+            markedAt?: string;
+          };
+        },
+        void
+      >({
+        path: `/packing-bill-cross-check/mark-bad/${staffId}`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Reset staff packing/bill cross-check status back to OK for a given date (defaults to today)
+     *
+     * @tags PackingBillCrossCheck
+     * @name ResetCreate
+     * @summary Reset packing/bill cross-check status to OK (MANAGERS/SUPER ADMIN)
+     * @request POST:/packing-bill-cross-check/reset/{staffId}
+     * @secure
+     */
+    resetCreate: (
+      staffId: number,
+      data?: {
+        /**
+         * Date to reset (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            /** @example "ok" */
+            status?: string;
+          };
+        },
+        void
+      >({
+        path: `/packing-bill-cross-check/reset/${staffId}`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Get packing/bill cross-check history for a specific staff member
+     *
+     * @tags PackingBillCrossCheck
+     * @name HistoryDetail
+     * @summary Get packing/bill cross-check history (MANAGERS/SUPER ADMIN)
+     * @request GET:/packing-bill-cross-check/history/{staffId}
+     * @secure
+     */
+    historyDetail: (
+      staffId: number,
+      query?: {
+        /**
+         * Number of days to look back (default 30)
+         * @default 30
+         */
+        days?: number;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            period?: string;
+            stats?: {
+              totalDays?: number;
+              badDays?: number;
+              okDays?: number;
+              badPercentage?: string;
+            };
+            history?: object[];
+          };
+        },
+        void
+      >({
+        path: `/packing-bill-cross-check/history/${staffId}`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Get aggregated packing/bill cross-check statistics across staff
+     *
+     * @tags PackingBillCrossCheck
+     * @name StatsOverviewList
+     * @summary Get packing/bill cross-check statistics (MANAGERS/SUPER ADMIN)
+     * @request GET:/packing-bill-cross-check/stats/overview
+     * @secure
+     */
+    statsOverviewList: (
+      query?: {
+        /** @format date */
+        startDate?: string;
+        /** @format date */
+        endDate?: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            period?: object;
+            totalStaff?: number;
+            staffWithBadDays?: number;
+            stats?: object[];
+          };
+        },
+        void
+      >({
+        path: `/packing-bill-cross-check/stats/overview`,
         method: "GET",
         query: query,
         secure: true,
@@ -7433,6 +7774,12 @@ export class Api<SecurityDataType extends unknown> {
           | "direct_delivery_no_billing"
           | "loading_mistake"
           | "interfere_md_authority"
+          | "dead_stock_reporting"
+          | "item_change_after_billing_not_edited"
+          | "no_random_stock_updation"
+          | "mobile_usage"
+          | "angry_with_customer"
+          | "conflict_between_staff"
         )[];
         /** @example "Loaded wrong material onto delivery truck" */
         remarks: string;
@@ -7502,6 +7849,12 @@ export class Api<SecurityDataType extends unknown> {
                 | "direct_delivery_no_billing"
                 | "loading_mistake"
                 | "interfere_md_authority"
+                | "dead_stock_reporting"
+                | "item_change_after_billing_not_edited"
+                | "no_random_stock_updation"
+                | "mobile_usage"
+                | "angry_with_customer"
+                | "conflict_between_staff"
               )[];
               remarks?: string | null;
               /** @format date-time */
@@ -7541,6 +7894,12 @@ export class Api<SecurityDataType extends unknown> {
           | "direct_delivery_no_billing"
           | "loading_mistake"
           | "interfere_md_authority"
+          | "dead_stock_reporting"
+          | "item_change_after_billing_not_edited"
+          | "no_random_stock_updation"
+          | "mobile_usage"
+          | "angry_with_customer"
+          | "conflict_between_staff"
         )[];
         /** @example "Loaded wrong material onto delivery truck" */
         remarks: string;
@@ -7696,6 +8055,894 @@ export class Api<SecurityDataType extends unknown> {
         void
       >({
         path: `/major-violation/stats/overview`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+  };
+  majorViolationGlass = {
+    /**
+     * @description Update major violation status for a staff member. Use status "ok" to reset, or "bad" with violations to mark violations. Deduction only - no points earned.
+     *
+     * @tags MajorViolationGlass
+     * @name MajorViolationGlassUpdate
+     * @summary Update staff major violation status (MANAGERS/SUPER ADMIN)
+     * @request PUT:/major-violation-glass/{staffId}
+     * @secure
+     */
+    majorViolationGlassUpdate: (
+      staffId: number,
+      data: {
+        /** @example "bad" */
+        status?: "ok" | "bad";
+        /**
+         * Required if status is "bad"
+         * @example ["cutting_mistake"]
+         */
+        violations: (
+          | "interfere_md_authority"
+          | "cutting_mistake"
+          | "mobile_usage"
+          | "angry_with_customer"
+          | "conflict_between_staff"
+        )[];
+        /** @example "Wrong cutting size for customer order" */
+        remarks: string;
+        /**
+         * Date this check applies to (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: object;
+        },
+        void
+      >({
+        path: `/major-violation-glass/${staffId}`,
+        method: "PUT",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Retrieve major violation status for all staff members for a given date. Defaults to OK for all staff, and to today if `date` is omitted.
+     *
+     * @tags MajorViolationGlass
+     * @name TodayList
+     * @summary Get major violation status for all staff for a given date (MANAGERS/SUPER ADMIN)
+     * @request GET:/major-violation-glass/today
+     * @secure
+     */
+    todayList: (
+      query?: {
+        /**
+         * Date to retrieve (YYYY-MM-DD). Defaults to today.
+         * @format date
+         */
+        date?: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            /**
+             * @format date
+             * @example "2026-08-09"
+             */
+            date?: string;
+            /** @example 50 */
+            count?: number;
+            /** @example 3 */
+            badCount?: number;
+            staff?: {
+              staffId?: number;
+              staffName?: string;
+              date?: string;
+              status?: "ok" | "bad";
+              violations?: (
+                | "interfere_md_authority"
+                | "cutting_mistake"
+                | "mobile_usage"
+                | "angry_with_customer"
+                | "conflict_between_staff"
+              )[];
+              remarks?: string | null;
+              /** @format date-time */
+              markedAt?: string | null;
+            }[];
+          };
+        },
+        void
+      >({
+        path: `/major-violation-glass/today`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Mark major violation for a staff member for a given date (defaults to today)
+     *
+     * @tags MajorViolationGlass
+     * @name MarkBadCreate
+     * @summary Mark staff major violation as bad (MANAGERS/SUPER ADMIN)
+     * @request POST:/major-violation-glass/mark-bad/{staffId}
+     * @secure
+     */
+    markBadCreate: (
+      staffId: number,
+      data: {
+        /** @default "bad" */
+        status?: "ok" | "bad";
+        /**
+         * Major violations to mark
+         * @example ["cutting_mistake"]
+         */
+        violations: (
+          | "interfere_md_authority"
+          | "cutting_mistake"
+          | "mobile_usage"
+          | "angry_with_customer"
+          | "conflict_between_staff"
+        )[];
+        /** @example "Wrong cutting size for customer order" */
+        remarks: string;
+        /**
+         * Date this check applies to (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            status?: string;
+            violations?: string[];
+            remarks?: string;
+            /** @format date-time */
+            markedAt?: string;
+          };
+        },
+        void
+      >({
+        path: `/major-violation-glass/mark-bad/${staffId}`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Reset staff major violation status back to OK for a given date (defaults to today)
+     *
+     * @tags MajorViolationGlass
+     * @name ResetCreate
+     * @summary Reset major violation status to OK (MANAGERS/SUPER ADMIN)
+     * @request POST:/major-violation-glass/reset/{staffId}
+     * @secure
+     */
+    resetCreate: (
+      staffId: number,
+      data?: {
+        /**
+         * Date to reset (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            /** @example "ok" */
+            status?: string;
+          };
+        },
+        void
+      >({
+        path: `/major-violation-glass/reset/${staffId}`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Get major violation history for a specific staff member
+     *
+     * @tags MajorViolationGlass
+     * @name HistoryDetail
+     * @summary Get major violation history (MANAGERS/SUPER ADMIN)
+     * @request GET:/major-violation-glass/history/{staffId}
+     * @secure
+     */
+    historyDetail: (
+      staffId: number,
+      query?: {
+        /**
+         * Number of days to look back (default 30)
+         * @default 30
+         */
+        days?: number;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            period?: string;
+            stats?: {
+              totalDays?: number;
+              badDays?: number;
+              okDays?: number;
+              badPercentage?: string;
+            };
+            history?: object[];
+          };
+        },
+        void
+      >({
+        path: `/major-violation-glass/history/${staffId}`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Get aggregated major violation statistics across staff
+     *
+     * @tags MajorViolationGlass
+     * @name StatsOverviewList
+     * @summary Get major violation statistics (MANAGERS/SUPER ADMIN)
+     * @request GET:/major-violation-glass/stats/overview
+     * @secure
+     */
+    statsOverviewList: (
+      query?: {
+        /** @format date */
+        startDate?: string;
+        /** @format date */
+        endDate?: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            period?: object;
+            totalStaff?: number;
+            staffWithBadDays?: number;
+            stats?: object[];
+          };
+        },
+        void
+      >({
+        path: `/major-violation-glass/stats/overview`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+  };
+  majorViolationStore = {
+    /**
+     * @description Update major violation status for a staff member. Use status "ok" to reset, or "bad" with violations to mark violations. Deduction only - no points earned.
+     *
+     * @tags MajorViolationStore
+     * @name MajorViolationStoreUpdate
+     * @summary Update staff major violation status (MANAGERS/SUPER ADMIN)
+     * @request PUT:/major-violation-store/{staffId}
+     * @secure
+     */
+    majorViolationStoreUpdate: (
+      staffId: number,
+      data: {
+        /** @example "bad" */
+        status?: "ok" | "bad";
+        /**
+         * Required if status is "bad"
+         * @example ["billing_mistake"]
+         */
+        violations: (
+          | "mobile_usage"
+          | "angry_with_customer"
+          | "conflict_between_staff"
+          | "billing_mistake"
+        )[];
+        /** @example "Billed the wrong item/quantity" */
+        remarks: string;
+        /**
+         * Date this check applies to (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: object;
+        },
+        void
+      >({
+        path: `/major-violation-store/${staffId}`,
+        method: "PUT",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Retrieve major violation status for all staff members for a given date. Defaults to OK for all staff, and to today if `date` is omitted.
+     *
+     * @tags MajorViolationStore
+     * @name TodayList
+     * @summary Get major violation status for all staff for a given date (MANAGERS/SUPER ADMIN)
+     * @request GET:/major-violation-store/today
+     * @secure
+     */
+    todayList: (
+      query?: {
+        /**
+         * Date to retrieve (YYYY-MM-DD). Defaults to today.
+         * @format date
+         */
+        date?: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            /**
+             * @format date
+             * @example "2026-08-09"
+             */
+            date?: string;
+            /** @example 50 */
+            count?: number;
+            /** @example 3 */
+            badCount?: number;
+            staff?: {
+              staffId?: number;
+              staffName?: string;
+              date?: string;
+              status?: "ok" | "bad";
+              violations?: (
+                | "mobile_usage"
+                | "angry_with_customer"
+                | "conflict_between_staff"
+                | "billing_mistake"
+              )[];
+              remarks?: string | null;
+              /** @format date-time */
+              markedAt?: string | null;
+            }[];
+          };
+        },
+        void
+      >({
+        path: `/major-violation-store/today`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Mark major violation for a staff member for a given date (defaults to today)
+     *
+     * @tags MajorViolationStore
+     * @name MarkBadCreate
+     * @summary Mark staff major violation as bad (MANAGERS/SUPER ADMIN)
+     * @request POST:/major-violation-store/mark-bad/{staffId}
+     * @secure
+     */
+    markBadCreate: (
+      staffId: number,
+      data: {
+        /** @default "bad" */
+        status?: "ok" | "bad";
+        /**
+         * Major violations to mark
+         * @example ["billing_mistake"]
+         */
+        violations: (
+          | "mobile_usage"
+          | "angry_with_customer"
+          | "conflict_between_staff"
+          | "billing_mistake"
+        )[];
+        /** @example "Billed the wrong item/quantity" */
+        remarks: string;
+        /**
+         * Date this check applies to (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            status?: string;
+            violations?: string[];
+            remarks?: string;
+            /** @format date-time */
+            markedAt?: string;
+          };
+        },
+        void
+      >({
+        path: `/major-violation-store/mark-bad/${staffId}`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Reset staff major violation status back to OK for a given date (defaults to today)
+     *
+     * @tags MajorViolationStore
+     * @name ResetCreate
+     * @summary Reset major violation status to OK (MANAGERS/SUPER ADMIN)
+     * @request POST:/major-violation-store/reset/{staffId}
+     * @secure
+     */
+    resetCreate: (
+      staffId: number,
+      data?: {
+        /**
+         * Date to reset (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            /** @example "ok" */
+            status?: string;
+          };
+        },
+        void
+      >({
+        path: `/major-violation-store/reset/${staffId}`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Get major violation history for a specific staff member
+     *
+     * @tags MajorViolationStore
+     * @name HistoryDetail
+     * @summary Get major violation history (MANAGERS/SUPER ADMIN)
+     * @request GET:/major-violation-store/history/{staffId}
+     * @secure
+     */
+    historyDetail: (
+      staffId: number,
+      query?: {
+        /**
+         * Number of days to look back (default 30)
+         * @default 30
+         */
+        days?: number;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            period?: string;
+            stats?: {
+              totalDays?: number;
+              badDays?: number;
+              okDays?: number;
+              badPercentage?: string;
+            };
+            history?: object[];
+          };
+        },
+        void
+      >({
+        path: `/major-violation-store/history/${staffId}`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Get aggregated major violation statistics across staff
+     *
+     * @tags MajorViolationStore
+     * @name StatsOverviewList
+     * @summary Get major violation statistics (MANAGERS/SUPER ADMIN)
+     * @request GET:/major-violation-store/stats/overview
+     * @secure
+     */
+    statsOverviewList: (
+      query?: {
+        /** @format date */
+        startDate?: string;
+        /** @format date */
+        endDate?: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            period?: object;
+            totalStaff?: number;
+            staffWithBadDays?: number;
+            stats?: object[];
+          };
+        },
+        void
+      >({
+        path: `/major-violation-store/stats/overview`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+  };
+  majorViolationHardware = {
+    /**
+     * @description Update major violation status for a staff member. Use status "ok" to reset, or "bad" with violations to mark violations. Deduction only - no points earned.
+     *
+     * @tags MajorViolationHardware
+     * @name MajorViolationHardwareUpdate
+     * @summary Update staff major violation status (MANAGERS/SUPER ADMIN)
+     * @request PUT:/major-violation-hardware/{staffId}
+     * @secure
+     */
+    majorViolationHardwareUpdate: (
+      staffId: number,
+      data: {
+        /** @example "bad" */
+        status?: "ok" | "bad";
+        /**
+         * Required if status is "bad"
+         * @example ["late_sales_return_handling"]
+         */
+        violations: (
+          | "late_sales_return_handling"
+          | "mobile_usage"
+          | "conflict_between_staff"
+        )[];
+        /** @example "Billed the wrong item/quantity" */
+        remarks: string;
+        /**
+         * Date this check applies to (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: object;
+        },
+        void
+      >({
+        path: `/major-violation-hardware/${staffId}`,
+        method: "PUT",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Retrieve major violation status for all staff members for a given date. Defaults to OK for all staff, and to today if `date` is omitted.
+     *
+     * @tags MajorViolationHardware
+     * @name TodayList
+     * @summary Get major violation status for all staff for a given date (MANAGERS/SUPER ADMIN)
+     * @request GET:/major-violation-hardware/today
+     * @secure
+     */
+    todayList: (
+      query?: {
+        /**
+         * Date to retrieve (YYYY-MM-DD). Defaults to today.
+         * @format date
+         */
+        date?: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            /**
+             * @format date
+             * @example "2026-08-09"
+             */
+            date?: string;
+            /** @example 50 */
+            count?: number;
+            /** @example 3 */
+            badCount?: number;
+            staff?: {
+              staffId?: number;
+              staffName?: string;
+              date?: string;
+              status?: "ok" | "bad";
+              violations?: (
+                | "late_sales_return_handling"
+                | "mobile_usage"
+                | "conflict_between_staff"
+              )[];
+              remarks?: string | null;
+              /** @format date-time */
+              markedAt?: string | null;
+            }[];
+          };
+        },
+        void
+      >({
+        path: `/major-violation-hardware/today`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Mark major violation for a staff member for a given date (defaults to today)
+     *
+     * @tags MajorViolationHardware
+     * @name MarkBadCreate
+     * @summary Mark staff major violation as bad (MANAGERS/SUPER ADMIN)
+     * @request POST:/major-violation-hardware/mark-bad/{staffId}
+     * @secure
+     */
+    markBadCreate: (
+      staffId: number,
+      data: {
+        /** @default "bad" */
+        status?: "ok" | "bad";
+        /**
+         * Major violations to mark
+         * @example ["late_sales_return_handling"]
+         */
+        violations: (
+          | "late_sales_return_handling"
+          | "mobile_usage"
+          | "conflict_between_staff"
+        )[];
+        /** @example "Billed the wrong item/quantity" */
+        remarks: string;
+        /**
+         * Date this check applies to (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            status?: string;
+            violations?: string[];
+            remarks?: string;
+            /** @format date-time */
+            markedAt?: string;
+          };
+        },
+        void
+      >({
+        path: `/major-violation-hardware/mark-bad/${staffId}`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Reset staff major violation status back to OK for a given date (defaults to today)
+     *
+     * @tags MajorViolationHardware
+     * @name ResetCreate
+     * @summary Reset major violation status to OK (MANAGERS/SUPER ADMIN)
+     * @request POST:/major-violation-hardware/reset/{staffId}
+     * @secure
+     */
+    resetCreate: (
+      staffId: number,
+      data?: {
+        /**
+         * Date to reset (YYYY-MM-DD). Defaults to today.
+         * @format date
+         * @example "2026-08-09"
+         */
+        date?: string | null;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            /** @example "ok" */
+            status?: string;
+          };
+        },
+        void
+      >({
+        path: `/major-violation-hardware/reset/${staffId}`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Get major violation history for a specific staff member
+     *
+     * @tags MajorViolationHardware
+     * @name HistoryDetail
+     * @summary Get major violation history (MANAGERS/SUPER ADMIN)
+     * @request GET:/major-violation-hardware/history/{staffId}
+     * @secure
+     */
+    historyDetail: (
+      staffId: number,
+      query?: {
+        /**
+         * Number of days to look back (default 30)
+         * @default 30
+         */
+        days?: number;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            staffName?: string;
+            period?: string;
+            stats?: {
+              totalDays?: number;
+              badDays?: number;
+              okDays?: number;
+              badPercentage?: string;
+            };
+            history?: object[];
+          };
+        },
+        void
+      >({
+        path: `/major-violation-hardware/history/${staffId}`,
+        method: "GET",
+        query: query,
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Get aggregated major violation statistics across staff
+     *
+     * @tags MajorViolationHardware
+     * @name StatsOverviewList
+     * @summary Get major violation statistics (MANAGERS/SUPER ADMIN)
+     * @request GET:/major-violation-hardware/stats/overview
+     * @secure
+     */
+    statsOverviewList: (
+      query?: {
+        /** @format date */
+        startDate?: string;
+        /** @format date */
+        endDate?: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            period?: object;
+            totalStaff?: number;
+            staffWithBadDays?: number;
+            stats?: object[];
+          };
+        },
+        void
+      >({
+        path: `/major-violation-hardware/stats/overview`,
         method: "GET",
         query: query,
         secure: true,
@@ -8730,7 +9977,7 @@ export class Api<SecurityDataType extends unknown> {
          * Department name (default "Store")
          * @example "Store"
          */
-        department?: "Store" | "Plywood Godown" | "Glass Godown";
+        department?: "Store" | "Plywood Godown" | "Glass Godown" | "Hardware";
       },
       params: RequestParams = {},
     ) =>
@@ -8786,7 +10033,7 @@ export class Api<SecurityDataType extends unknown> {
          * Department whose rubric to update
          * @example "Store"
          */
-        department: "Store" | "Plywood Godown" | "Glass Godown";
+        department: "Store" | "Plywood Godown" | "Glass Godown" | "Hardware";
         attendance?: {
           /** @example 3 */
           maxLateCases?: number;
@@ -8847,7 +10094,7 @@ export class Api<SecurityDataType extends unknown> {
           };
           medical?: {
             /**
-             * Beyond this, medicalProofSubmitted is required on the excess leave(s) to avoid the penalty
+             * Beyond this, the excess leave(s) must be exempted (isExempted) to avoid the penalty
              * @example 1
              */
             maxAllowedPerMonth?: number;
@@ -9036,7 +10283,7 @@ export class Api<SecurityDataType extends unknown> {
           /** @example 10 */
           pointsPerBadDay?: number;
         };
-        /** Glass Godown only - workflow status updating, marked via the workflow_status daily check */
+        /** Glass Godown/Hardware only - workflow status updating, marked via the workflow_status daily check */
         workflowStatus?: {
           /** @example true */
           enabled?: boolean;
@@ -9048,6 +10295,20 @@ export class Api<SecurityDataType extends unknown> {
            */
           mode?: "flat" | "perDay";
           /** @example 10 */
+          pointsPerBadDay?: number;
+        };
+        /** Hardware only - cross-checking packed items with the bill, marked via the packing_bill_cross_check daily check */
+        packingBillCrossCheck?: {
+          /** @example true */
+          enabled?: boolean;
+          /** @example 5 */
+          maxPoints?: number;
+          /**
+           * 'flat': forfeits pointsPerBadDay once, first bad day. 'perDay' (default, Hardware): deducts pointsPerBadDay for every bad day, recurring.
+           * @default "perDay"
+           */
+          mode?: "flat" | "perDay";
+          /** @example 5 */
           pointsPerBadDay?: number;
         };
       },
@@ -9097,7 +10358,7 @@ export class Api<SecurityDataType extends unknown> {
       this.http.request<
         {
           success?: boolean;
-          /** @example {"Store":[{"ruleKey":"timeKeeping","category":"Timing","maxPoints":10},{"ruleKey":"attendanceLeave","category":"Attendance","maxPoints":10},{"ruleKey":"appearance","category":"Appearance","maxPoints":5},{"ruleKey":"welcomingCustomer","category":"Welcoming Customer","maxPoints":10},{"ruleKey":"customerDealing","category":"Customer Dealing","maxPoints":15},{"ruleKey":"customerQuotationFollowup","category":"Customer Follow-up","maxPoints":10},{"ruleKey":"meeting","category":"Attending Meetings","maxPoints":5},{"ruleKey":"cleaning","category":"Cleaning Culture","maxPoints":5},{"ruleKey":"extraPerformance","category":"Extra Performance","maxPoints":10},{"ruleKey":"testimonial","category":"Testimonial","maxPoints":20}],"Plywood Godown":[{"ruleKey":"timeKeeping","category":"Timing","maxPoints":10},{"ruleKey":"attendanceLeave","category":"Attendance","maxPoints":10},{"ruleKey":"appearance","category":"Appearance","maxPoints":5},{"ruleKey":"customerDealing","category":"Customer Dealing","maxPoints":10},{"ruleKey":"stockMaintenance","category":"Stock Maintenance (zero dead stock)","maxPoints":20},{"ruleKey":"salesReturnHandling","category":"Sales Return Handling","maxPoints":5},{"ruleKey":"meeting","category":"Attending Meetings","maxPoints":5},{"ruleKey":"cleaning","category":"Cleanliness","maxPoints":5},{"ruleKey":"extraPerformance","category":"Extra Performance","maxPoints":10},{"ruleKey":"testimonial","category":"Testimonial","maxPoints":20}],"Glass Godown":[{"ruleKey":"timeKeeping","category":"Timing","maxPoints":10},{"ruleKey":"attendanceLeave","category":"Attendance","maxPoints":10},{"ruleKey":"appearance","category":"Appearance","maxPoints":5},{"ruleKey":"wastage","category":"Avoiding Wastage","maxPoints":10},{"ruleKey":"customerDealing","category":"Fair Dealing with Customers/Auto Drivers","maxPoints":15},{"ruleKey":"stockTaking","category":"Stock Taking (monthly)","maxPoints":10},{"ruleKey":"workflowStatus","category":"Work Flow Status Updating","maxPoints":10},{"ruleKey":"meeting","category":"Attending Weekly Meeting","maxPoints":5},{"ruleKey":"cleaning","category":"Cleanliness","maxPoints":5},{"ruleKey":"extraPerformance","category":"Extra Performance","maxPoints":10},{"ruleKey":"testimonial","category":"Testimonials (min 2)","maxPoints":10}]} */
+          /** @example {"Store":[{"ruleKey":"timeKeeping","category":"Timing","maxPoints":10},{"ruleKey":"attendanceLeave","category":"Attendance","maxPoints":10},{"ruleKey":"appearance","category":"Appearance","maxPoints":5},{"ruleKey":"welcomingCustomer","category":"Welcoming Customer","maxPoints":10},{"ruleKey":"customerDealing","category":"Customer Dealing","maxPoints":15},{"ruleKey":"customerQuotationFollowup","category":"Customer Follow-up","maxPoints":10},{"ruleKey":"meeting","category":"Attending Meetings","maxPoints":5},{"ruleKey":"cleaning","category":"Cleaning Culture","maxPoints":5},{"ruleKey":"extraPerformance","category":"Extra Performance","maxPoints":10},{"ruleKey":"testimonial","category":"Testimonial","maxPoints":20},{"ruleKey":"majorViolationStore","category":"Major Violations","maxPoints":0}],"Plywood Godown":[{"ruleKey":"timeKeeping","category":"Timing","maxPoints":10},{"ruleKey":"attendanceLeave","category":"Attendance","maxPoints":10},{"ruleKey":"appearance","category":"Appearance","maxPoints":5},{"ruleKey":"customerDealing","category":"Customer Dealing","maxPoints":10},{"ruleKey":"stockMaintenance","category":"Stock Maintenance (zero dead stock)","maxPoints":20},{"ruleKey":"salesReturnHandling","category":"Sales Return Handling","maxPoints":5},{"ruleKey":"meeting","category":"Attending Meetings","maxPoints":5},{"ruleKey":"cleaning","category":"Cleanliness","maxPoints":5},{"ruleKey":"extraPerformance","category":"Extra Performance","maxPoints":10},{"ruleKey":"testimonial","category":"Testimonial","maxPoints":20},{"ruleKey":"majorViolation","category":"Major Violations","maxPoints":0}],"Glass Godown":[{"ruleKey":"timeKeeping","category":"Timing","maxPoints":10},{"ruleKey":"attendanceLeave","category":"Attendance","maxPoints":10},{"ruleKey":"appearance","category":"Appearance","maxPoints":5},{"ruleKey":"wastage","category":"Avoiding Wastage","maxPoints":10},{"ruleKey":"customerDealing","category":"Fair Dealing with Customers/Auto Drivers","maxPoints":15},{"ruleKey":"stockTaking","category":"Stock Taking (monthly)","maxPoints":10},{"ruleKey":"workflowStatus","category":"Work Flow Status Updating","maxPoints":10},{"ruleKey":"meeting","category":"Attending Weekly Meeting","maxPoints":5},{"ruleKey":"cleaning","category":"Cleanliness","maxPoints":5},{"ruleKey":"extraPerformance","category":"Extra Performance","maxPoints":10},{"ruleKey":"testimonial","category":"Testimonials (min 2)","maxPoints":10},{"ruleKey":"majorViolationGlass","category":"Major Violations","maxPoints":0}],"Hardware":[{"ruleKey":"timeKeeping","category":"Timing","maxPoints":10},{"ruleKey":"attendanceLeave","category":"Attendance","maxPoints":10},{"ruleKey":"stockMaintenance","category":"Dead Stock Reporting","maxPoints":5},{"ruleKey":"packingBillCrossCheck","category":"Cross Checking With Bill After Packing","maxPoints":5},{"ruleKey":"stockTaking","category":"Stock Taking (monthly)","maxPoints":20},{"ruleKey":"workflowStatus","category":"Work Flow Status Updating","maxPoints":10},{"ruleKey":"meeting","category":"Attending Meetings","maxPoints":5},{"ruleKey":"cleaning","category":"Cleanliness","maxPoints":5},{"ruleKey":"extraPerformance","category":"Extra Performance","maxPoints":5},{"ruleKey":"salesReturnHandling","category":"Sales Return Handling","maxPoints":5},{"ruleKey":"testimonial","category":"Testimonials (min 4)","maxPoints":20},{"ruleKey":"majorViolationHardware","category":"Major Violations","maxPoints":0}]} */
           data?: Record<
             string,
             {
@@ -9131,7 +10392,7 @@ export class Api<SecurityDataType extends unknown> {
       this.http.request<
         {
           success?: boolean;
-          /** @example {"Store":[{"category":"appearance","label":"Appearance","apiBasePath":"/api/appearance","violations":["uniform","hair_beard_moustache"]},{"category":"cleaning","label":"Cleaning","apiBasePath":"/api/cleaning","violations":["cleanliness"]},{"category":"welcoming_customer","label":"Welcoming Customer","apiBasePath":"/api/welcoming-customer","violations":["no_greeting","no_smile","ignored_customer"]},{"category":"customer_dealing","label":"Customer Dealing","apiBasePath":"/api/customer-dealing","violations":["poor_customer_dealing"],"note":"Store staff are instead scored from customer feedback - daily marks are rejected for them"},{"category":"customer_quotation_followup","label":"Customer & Quotation Follow-up","apiBasePath":"/api/customer-quotation-followup","violations":["missed_followup"]}],"Plywood Godown":[{"category":"appearance","label":"Appearance","apiBasePath":"/api/appearance","violations":["uniform","hair_beard_moustache"]},{"category":"cleaning","label":"Cleaning","apiBasePath":"/api/cleaning","violations":["cleanliness"]},{"category":"customer_dealing","label":"Customer Dealing","apiBasePath":"/api/customer-dealing","violations":["poor_customer_dealing"]},{"category":"stock_maintenance","label":"Stock Maintenance","apiBasePath":"/api/stock-maintenance","violations":["dead_stock"]},{"category":"sales_return_handling","label":"Sales Return Handling","apiBasePath":"/api/sales-return-handling","violations":["late_sales_return"]},{"category":"major_violation","label":"Major Violations","apiBasePath":"/api/major-violation","violations":["direct_delivery_no_billing","loading_mistake","interfere_md_authority"]}],"Glass Godown":[{"category":"appearance","label":"Appearance","apiBasePath":"/api/appearance","violations":["uniform","hair_beard_moustache"]},{"category":"cleaning","label":"Cleaning","apiBasePath":"/api/cleaning","violations":["cleanliness"]},{"category":"customer_dealing","label":"Customer Dealing","apiBasePath":"/api/customer-dealing","violations":["poor_customer_dealing"]},{"category":"wastage","label":"Avoiding Wastage","apiBasePath":"/api/wastage","violations":["wastage"]},{"category":"stock_taking","label":"Stock Taking","apiBasePath":"/api/stock-taking","violations":["stock_taking_incomplete"]},{"category":"workflow_status","label":"Workflow Status Updating","apiBasePath":"/api/workflow-status","violations":["workflow_status_not_updated"]}]} */
+          /** @example {"Store":[{"category":"appearance","label":"Appearance","apiBasePath":"/api/appearance","violations":["uniform","hair_beard_moustache"]},{"category":"cleaning","label":"Cleaning","apiBasePath":"/api/cleaning","violations":["cleanliness"]},{"category":"welcoming_customer","label":"Welcoming Customer","apiBasePath":"/api/welcoming-customer","violations":["no_greeting","no_smile","ignored_customer"]},{"category":"customer_dealing","label":"Customer Dealing","apiBasePath":"/api/customer-dealing","violations":["poor_customer_dealing"]},{"category":"customer_quotation_followup","label":"Customer & Quotation Follow-up","apiBasePath":"/api/customer-quotation-followup","violations":["missed_followup"]},{"category":"major_violation_store","label":"Major Violations","apiBasePath":"/api/major-violation-store","violations":["mobile_usage","angry_with_customer","conflict_between_staff","billing_mistake"]}],"Plywood Godown":[{"category":"appearance","label":"Appearance","apiBasePath":"/api/appearance","violations":["uniform","hair_beard_moustache"]},{"category":"cleaning","label":"Cleaning","apiBasePath":"/api/cleaning","violations":["cleanliness"]},{"category":"customer_dealing","label":"Customer Dealing","apiBasePath":"/api/customer-dealing","violations":["poor_customer_dealing"]},{"category":"stock_maintenance","label":"Stock Maintenance","apiBasePath":"/api/stock-maintenance","violations":["dead_stock"]},{"category":"sales_return_handling","label":"Sales Return Handling","apiBasePath":"/api/sales-return-handling","violations":["late_sales_return"]},{"category":"major_violation","label":"Major Violations","apiBasePath":"/api/major-violation","violations":["direct_delivery_no_billing","loading_mistake","interfere_md_authority","dead_stock_reporting","item_change_after_billing_not_edited","no_random_stock_updation","mobile_usage","angry_with_customer","conflict_between_staff"]}],"Glass Godown":[{"category":"appearance","label":"Appearance","apiBasePath":"/api/appearance","violations":["uniform","hair_beard_moustache"]},{"category":"cleaning","label":"Cleaning","apiBasePath":"/api/cleaning","violations":["cleanliness"]},{"category":"customer_dealing","label":"Customer Dealing","apiBasePath":"/api/customer-dealing","violations":["poor_customer_dealing"]},{"category":"wastage","label":"Avoiding Wastage","apiBasePath":"/api/wastage","violations":["wastage"]},{"category":"stock_taking","label":"Stock Taking","apiBasePath":"/api/stock-taking","violations":["stock_taking_incomplete"]},{"category":"workflow_status","label":"Workflow Status Updating","apiBasePath":"/api/workflow-status","violations":["workflow_status_not_updated"]},{"category":"major_violation_glass","label":"Major Violations","apiBasePath":"/api/major-violation-glass","violations":["interfere_md_authority","cutting_mistake","mobile_usage","angry_with_customer","conflict_between_staff"]}],"Hardware":[{"category":"cleaning","label":"Cleaning","apiBasePath":"/api/cleaning","violations":["cleanliness"]},{"category":"stock_maintenance","label":"Stock Maintenance","apiBasePath":"/api/stock-maintenance","violations":["dead_stock"]},{"category":"sales_return_handling","label":"Sales Return Handling","apiBasePath":"/api/sales-return-handling","violations":["late_sales_return"]},{"category":"stock_taking","label":"Stock Taking","apiBasePath":"/api/stock-taking","violations":["stock_taking_incomplete"]},{"category":"workflow_status","label":"Workflow Status Updating","apiBasePath":"/api/workflow-status","violations":["workflow_status_not_updated"]},{"category":"packing_bill_cross_check","label":"Cross Checking With Bill After Packing","apiBasePath":"/api/packing-bill-cross-check","violations":["packing_not_cross_checked"]},{"category":"major_violation_hardware","label":"Major Violations","apiBasePath":"/api/major-violation-hardware","violations":["late_sales_return_handling","mobile_usage","conflict_between_staff"]}]} */
           data?: Record<
             string,
             {
@@ -9139,7 +10400,6 @@ export class Api<SecurityDataType extends unknown> {
               label?: string;
               apiBasePath?: string;
               violations?: string[];
-              note?: string;
             }[]
           >;
         },

@@ -5039,7 +5039,7 @@ paths:
       tags:
         - Leaves
       summary: Request a leave
-      description: Staff requests a leave. Requires approval from a manager or superAdmin. Maximum 3 leaves per month, 12 per year.
+      description: Staff requests a leave. Requires approval from a manager or superAdmin. 1 leave per month is recommended; requests beyond that are still allowed but go through approval and may incur a score deduction unless exempted. Maximum 12 leaves per year.
       security:
         - BearerAuth: []
       requestBody:
@@ -5071,10 +5071,6 @@ paths:
                 reason:
                   type: string
                   example: Family vacation
-                isException:
-                  type: boolean
-                  default: false
-                  description: For medical leaves exceeding monthly limit
       responses:
         '201':
           description: Leave request created (pending approval)
@@ -5163,6 +5159,20 @@ paths:
                               type: string
                               format: date-time
                               nullable: true
+                            isExemptionEligible:
+                              type: boolean
+                              description: True if this leave is beyond the recommended monthly amount for its type, meaning it needs to be exempted (isExempted) to avoid a score deduction. False for leaves already within the recommended limit - no exemption needed.
+                            isExempted:
+                              type: boolean
+                              nullable: true
+                              description: Whether a manager/HR has exempted this leave from the score deduction - see PUT /leaves/{leaveId}/exempt
+                            exemptedAt:
+                              type: string
+                              format: date-time
+                              nullable: true
+                            exemptionReason:
+                              type: string
+                              nullable: true
 
   /leaves/balance/{staffId}:
     get:
@@ -5203,11 +5213,20 @@ paths:
                         description: Remaining leaves for the year
                       leaveUsedThisYear:
                         type: integer
+                        description: Approved leave days used this year
                       leaveUsedThisMonth:
                         type: integer
-                      monthlyLimit:
+                        description: Approved leave days used this month
+                      totalRequestedThisYear:
                         type: integer
-                        example: 3
+                        description: Pending + approved leave days this year
+                      totalRequestedThisMonth:
+                        type: integer
+                        description: Pending + approved leave days this month
+                      recommendedMonthlyLimit:
+                        type: integer
+                        example: 1
+                        description: Advisory only, not enforced. Requests beyond this are still allowed but require approval and may incur a score deduction unless exempted.
 
   /todos:
     post:
@@ -5537,6 +5556,20 @@ paths:
                               type: string
                               nullable: true
                               description: Name (or email fallback) of the approver/rejecter
+                            isExemptionEligible:
+                              type: boolean
+                              description: True if this leave is beyond the recommended monthly amount for its type, meaning it needs to be exempted (isExempted) to avoid a score deduction. False for leaves already within the recommended limit - no exemption needed.
+                            isExempted:
+                              type: boolean
+                              nullable: true
+                              description: Whether a manager/HR has exempted this leave from the score deduction - see PUT /leaves/{leaveId}/exempt
+                            exemptedAt:
+                              type: string
+                              format: date-time
+                              nullable: true
+                            exemptionReason:
+                              type: string
+                              nullable: true
                             delegatedTo:
                               type: integer
                               description: user_id of the manager/superAdmin this request was delegated to, if any
@@ -5700,6 +5733,70 @@ paths:
           description: Forbidden - HR/superadmin only
         '400':
           description: Bad request - invalid status, or delegate is not an active manager/superAdmin
+
+  /leaves/{leaveId}/exempt:
+    put:
+      tags:
+        - Leaves
+      summary: Grant/revoke a score exemption for a leave (HR/SUPER ADMIN/MANAGER)
+      description: >
+        Leaves beyond the recommended 1/month normally incur a score
+        deduction (see AttendanceLeaveRule). This grants or revokes an
+        exemption from that deduction for the given leave, independent of
+        its approve/reject status - used for both Personal (manager
+        judgment call) and Medical (typically following HR-verified proof)
+        leave types.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: leaveId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - exempted
+              properties:
+                exempted:
+                  type: boolean
+                  description: true to grant the exemption, false to revoke it
+                reason:
+                  type: string
+                  example: Approved family emergency
+      responses:
+        '200':
+          description: Exemption updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      isExempted:
+                        type: boolean
+                      exemptedBy:
+                        type: string
+                      exemptedAt:
+                        type: string
+                        format: date-time
+                      exemptionReason:
+                        type: string
+        '400':
+          description: Bad request - missing 'exempted' field or invalid leave
+        '403':
+          description: Forbidden - manager/HR/superadmin only
 
   /leaves/{leaveId}:
     delete:
@@ -12487,7 +12584,7 @@ paths:
                         maxAllowedPerMonth:
                           type: integer
                           example: 1
-                          description: Beyond this, medicalProofSubmitted is required on the excess leave(s) to avoid the penalty
+                          description: Beyond this, the excess leave(s) must be exempted (isExempted) to avoid the penalty
                         penaltyIfExceeds:
                           type: integer
                           example: -10
@@ -14434,8 +14531,8 @@ components:
           properties:
             maxAllowedPerMonth:
               type: integer
-              description: Maximum approved leaves allowed per month
-              example: 2
+              description: Recommended approved leaves per month before a score penalty applies (default 1)
+              example: 1
             pointsIfWithinLimit:
               type: integer
               description: Points awarded if leaves within limit
