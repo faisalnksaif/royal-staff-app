@@ -231,7 +231,7 @@ function StaffDailyCheckCard({
             {initials}
           </AppText>
         </View>
-        <AppText variant="bodyMedium" style={styles.staffName} numberOfLines={1}>
+        <AppText variant="bodyMedium" style={styles.staffName}>
           {record.staffName}
         </AppText>
         {anyUpdating ? (
@@ -488,7 +488,7 @@ function SheetView({
       {/* Fixed name column */}
       <View style={[styles.sheetNameColumn, { borderColor: colors.border }]}>
         <View style={[styles.sheetRow, styles.sheetHeaderRow, { backgroundColor: colors.background.secondary, borderColor: colors.border }]}>
-          <View style={[styles.sheetCell, styles.sheetNameCell, { width: SHEET_NAME_COL_WIDTH, borderColor: colors.border, borderRightWidth: 0 }]}>
+          <View style={[styles.sheetCell, styles.sheetHeaderCell, styles.sheetNameCell, { width: SHEET_NAME_COL_WIDTH, borderColor: colors.border, borderRightWidth: 0 }]}>
             <AppText variant="bodySmall" color="secondary">Staff</AppText>
           </View>
         </View>
@@ -521,8 +521,8 @@ function SheetView({
         <View>
           <View style={[styles.sheetRow, styles.sheetHeaderRow, { backgroundColor: colors.background.secondary, borderColor: colors.border }]}>
             {columnsByLabel.map((c) => (
-              <View key={c.label} style={[styles.sheetCell, { width: SHEET_CATEGORY_COL_WIDTH, borderColor: colors.border }]}>
-                <AppText variant="bodySmall" color="secondary" numberOfLines={1}>{c.label}</AppText>
+              <View key={c.label} style={[styles.sheetCell, styles.sheetHeaderCell, { width: SHEET_CATEGORY_COL_WIDTH, borderColor: colors.border }]}>
+                <AppText variant="bodySmall" color="secondary" style={styles.sheetHeaderText}>{c.label}</AppText>
               </View>
             ))}
           </View>
@@ -1115,7 +1115,7 @@ const styles = StyleSheet.create({
   staffCard: { padding: spacing[4] },
   nameRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: spacing[3],
     marginBottom: spacing[3],
   },
@@ -1202,6 +1202,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: spacing[2],
     borderRightWidth: StyleSheet.hairlineWidth,
+  },
+  sheetHeaderCell: {
+    height: "auto",
+    minHeight: SHEET_ROW_HEIGHT,
+    paddingVertical: spacing[2],
+  },
+  sheetHeaderText: {
+    textAlign: "center",
   },
   sheetNameCell: {
     flexDirection: "row",
