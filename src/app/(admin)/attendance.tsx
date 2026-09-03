@@ -439,20 +439,22 @@ interface EditableSession {
 }
 
 function SessionTimeInput({
-  label, value, onChange, onClear,
+  label, value, onChange, onClear, date,
 }: {
   label: string
   value: Date | null
   onChange: (d: Date) => void
   onClear?: () => void
+  date: string
 }) {
   const { colors, isDark } = useTheme()
   const webInputRef = useRef<HTMLInputElement | null>(null)
+  const defaultDate = () => moment(date, "YYYY-MM-DD").hour(9).minute(0).second(0).toDate()
 
   function open() {
     if (Platform.OS === "android") {
       DateTimePickerAndroid.open({
-        value: value ?? new Date(),
+        value: value ?? defaultDate(),
         mode: "time",
         is24Hour: false,
         onChange: (_, d) => { if (d) onChange(d) },
@@ -473,7 +475,7 @@ function SessionTimeInput({
         <View style={[styles.editTimeField, { borderColor: colors.border as string, paddingHorizontal: spacing[2] }]}>
           <DateTimePicker
             mode="time"
-            value={value ?? new Date()}
+            value={value ?? defaultDate()}
             display="compact"
             onChange={(_, d) => { if (d) onChange(d) }}
           />
@@ -491,7 +493,7 @@ function SessionTimeInput({
           onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
             if (!e.target.value) return
             const [h, m] = e.target.value.split(":").map(Number)
-            const base = value ? new Date(value) : new Date()
+            const base = value ? new Date(value) : defaultDate()
             base.setHours(h, m, 0, 0)
             onChange(base)
           },
@@ -612,12 +614,14 @@ function EditSessionsModal({
                   label="Check-in"
                   value={s.checkIn}
                   onChange={(d) => updateSession(s.key, { checkIn: d })}
+                  date={date}
                 />
                 <SessionTimeInput
                   label="Check-out"
                   value={s.checkOut}
                   onChange={(d) => updateSession(s.key, { checkOut: d })}
                   onClear={() => updateSession(s.key, { checkOut: null })}
+                  date={date}
                 />
               </View>
             </View>
