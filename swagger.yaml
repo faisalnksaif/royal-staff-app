@@ -3570,6 +3570,11 @@ paths:
                               type: number
                             totalPaidAmount:
                               type: number
+                              description: >-
+                                Amount actually recovered via this staff member's own follow-ups
+                                (sum of FollowUp.amountRecovered on their resolved follow-ups) -
+                                independent of who currently owns the paying customer, so unlike
+                                total_outstanding this does not shift when a customer is reassigned.
         '400':
           description: Invalid dateField, period, outcome, or resolutionStatus value
         '403':
@@ -5849,6 +5854,76 @@ paths:
         '404':
           description: Leave request not found
 
+  /leaves/{leaveId}/half-day:
+    delete:
+      tags:
+        - Leaves
+      summary: Delete an auto-generated half-day leave (ADMIN/HR/SUPER ADMIN)
+      description: >
+        Deletes a half-day leave that was auto-created by the attendance
+        lateness policy (4th+ occurrence in a month of arriving >= 31 min
+        late) and reverts the linked Attendance record's status back to
+        'late'. Use when the staff member has a valid reason for the
+        lateness. Only leaves auto-generated for this purpose can be deleted
+        via this endpoint, regardless of their approve/reject status.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: leaveId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - reason
+              properties:
+                reason:
+                  type: string
+                  description: Reason for deleting the auto-generated half-day leave (audit trail)
+                  example: Staff had a valid medical reason for being late
+      responses:
+        '200':
+          description: Half-day leave deleted and attendance reverted to late
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      message:
+                        type: string
+                        example: Half-day leave deleted and attendance reverted to late
+        '400':
+          description: Bad request - missing reason, or leave was not auto-generated for a half-day attendance rule
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                    example: This leave was not auto-generated for a half-day attendance rule and cannot be deleted via this endpoint.
+        '403':
+          description: Forbidden - admin/HR/superadmin only
+        '404':
+          description: Leave request not found
+
   /leaves/stats/overview:
     get:
       tags:
@@ -5892,6 +5967,502 @@ paths:
                         type: integer
         '403':
           description: Forbidden - managers/superadmin only
+
+  /salary/structure/propose:
+    post:
+      tags:
+        - Salary
+      summary: Propose a salary structure (HR)
+      description: HR proposes basic pay and incentives for a staff member. Takes effect only once approved by a superAdmin.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - staffId
+                - basicPay
+                - effectiveFrom
+              properties:
+                staffId:
+                  type: integer
+                  description: Users.user_id of the staff member
+                basicPay:
+                  type: number
+                  example: 25000
+                incentives:
+                  type: number
+                  example: 0
+                  description: Manually set for now; phase 2 will drive this from follow-up/ledger scoring
+                effectiveFrom:
+                  type: string
+                  format: date
+                  example: 2026-08-01
+      responses:
+        '201':
+          description: Salary structure proposed (pending approval)
+        '400':
+          description: Bad request
+
+  /salary/structure/{structureId}/approve:
+    put:
+      tags:
+        - Salary
+      summary: Approve a proposed salary structure (SUPER ADMIN)
+      description: Approves a pending salary structure. Any previously active structure for the same staff member is superseded.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: structureId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Salary structure approved
+        '400':
+          description: Bad request
+        '403':
+          description: Forbidden - superAdmin only
+
+  /salary/structure/{structureId}/reject:
+    put:
+      tags:
+        - Salary
+      summary: Reject a proposed salary structure (SUPER ADMIN)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: structureId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - rejectionReason
+              properties:
+                rejectionReason:
+                  type: string
+      responses:
+        '200':
+          description: Salary structure rejected
+        '400':
+          description: Bad request
+        '403':
+          description: Forbidden - superAdmin only
+
+  /salary/structure:
+    get:
+      tags:
+        - Salary
+      summary: Get every staff member's active salary structure (MANAGERS/HR/SUPER ADMIN)
+      description: Returns one row per staff member with an active salary structure, enriched with their name.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Active salary structures list
+        '403':
+          description: Forbidden - managers/HR/superadmin only
+
+  /salary/structure/{staffId}:
+    get:
+      tags:
+        - Salary
+      summary: Get a staff member's salary structure
+      description: Returns the active structure plus any pending proposals. Staff can view own, HR/managers/superAdmin can view any.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Salary structure
+        '403':
+          description: Forbidden - staff can only view their own
+
+  /salary/structure/{staffId}/history:
+    get:
+      tags:
+        - Salary
+      summary: Get a staff member's salary structure history (MANAGERS/HR/SUPER ADMIN)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Salary structure history
+        '403':
+          description: Forbidden - managers/HR/superadmin only
+
+  /salary/payroll/generate:
+    post:
+      tags:
+        - Salary
+      summary: Generate monthly payroll for a staff member (MANAGERS/HR/SUPER ADMIN)
+      description: Computes net pay from the active salary structure, deducting per-day amounts for unpaid absences and half-days, and any approved advances for the month. Fails if payroll for that staff/month/year was already generated, or if no active salary structure exists.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - staffId
+                - month
+                - year
+              properties:
+                staffId:
+                  type: integer
+                month:
+                  type: integer
+                  minimum: 1
+                  maximum: 12
+                year:
+                  type: integer
+      responses:
+        '201':
+          description: Payroll record generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      staffId:
+                        type: integer
+                      month:
+                        type: integer
+                      year:
+                        type: integer
+                      basicPay:
+                        type: number
+                      incentives:
+                        type: number
+                      daysInMonth:
+                        type: integer
+                      perDayPay:
+                        type: number
+                      unpaidAbsenceDays:
+                        type: integer
+                      halfDays:
+                        type: number
+                      deductionDetails:
+                        type: array
+                        description: One entry per deducted date, explaining the deduction
+                        items:
+                          type: object
+                          properties:
+                            date:
+                              type: string
+                              format: date
+                            type:
+                              type: string
+                              enum: [absent, half-day]
+                            reason:
+                              type: string
+                              example: Unapproved absence
+                            days:
+                              type: number
+                              example: 1
+                            amount:
+                              type: number
+                      deductionAmount:
+                        type: number
+                        description: Total deducted for unpaid absences and half-days (sum of deductionDetails.amount)
+                      advanceDeducted:
+                        type: number
+                        description: Total approved SalaryAdvance amount for the month, subtracted from net pay
+                      grossPay:
+                        type: number
+                        description: basicPay + incentives
+                      netPay:
+                        type: number
+                        description: grossPay - deductionAmount - advanceDeducted
+                      status:
+                        type: string
+                        example: generated
+        '400':
+          description: Bad request - duplicate payroll, or no active salary structure
+        '403':
+          description: Forbidden - managers/HR/superadmin only
+
+  /salary/payroll/generate-all:
+    post:
+      tags:
+        - Salary
+      summary: Generate monthly payroll for every staff member (MANAGERS/HR/SUPER ADMIN)
+      description: Runs payroll generation for every staff member with an active salary structure, for the given month/year. Each staff member is processed independently - one failure (duplicate payroll, no active structure as of that month, etc.) does not stop the rest. Returns a per-staff outcome list.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - month
+                - year
+              properties:
+                month:
+                  type: integer
+                  minimum: 1
+                  maximum: 12
+                year:
+                  type: integer
+      responses:
+        '201':
+          description: Bulk payroll generation summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      totalStaff:
+                        type: integer
+                      generated:
+                        type: integer
+                      failed:
+                        type: integer
+                      results:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            staffId:
+                              type: integer
+                            success:
+                              type: boolean
+                            error:
+                              type: string
+                              nullable: true
+                            payslip:
+                              type: object
+                              nullable: true
+                              description: Full PayrollRecord on success (see POST /salary/payroll/generate response), including deductionDetails
+        '400':
+          description: Bad request
+        '403':
+          description: Forbidden - managers/HR/superadmin only
+
+  /salary/payslips/my:
+    get:
+      tags:
+        - Salary
+      summary: Get my payslips
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Payslips list
+
+  /salary/payslips:
+    get:
+      tags:
+        - Salary
+      summary: Get all payslips (MANAGERS/HR/SUPER ADMIN)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: month
+          in: query
+          schema:
+            type: integer
+        - name: year
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Payslips list
+        '403':
+          description: Forbidden - managers/HR/superadmin only
+
+  /salary/payslips/{staffId}:
+    get:
+      tags:
+        - Salary
+      summary: Get a staff member's payslips
+      description: Staff can view own, HR/managers/superAdmin can view any.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Payslips list
+        '403':
+          description: Forbidden - staff can only view their own
+
+  /salary/advance/request:
+    post:
+      tags:
+        - Salary
+      summary: Request a mid-month prorated salary advance
+      description: Staff requests an advance against days worked so far this month, or HR requests on a staff member's behalf. Prorated as (basicPay / daysInMonth) * daysWorkedAtRequest from the active salary structure. Requires HR/admin approval before it reduces month-end payroll.
+      security:
+        - BearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                staffId:
+                  type: integer
+                  description: Required only when a manager/HR/superAdmin requests on behalf of a staff member; ignored for staff requesting their own
+      responses:
+        '201':
+          description: Advance requested (pending approval)
+        '400':
+          description: Bad request - no active salary structure, or payroll already generated this month
+
+  /salary/advance/{advanceId}/approve:
+    put:
+      tags:
+        - Salary
+      summary: Approve a salary advance request (MANAGERS/HR/SUPER ADMIN)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: advanceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Advance approved
+        '400':
+          description: Bad request
+        '403':
+          description: Forbidden - managers/HR/superadmin only
+
+  /salary/advance/{advanceId}/reject:
+    put:
+      tags:
+        - Salary
+      summary: Reject a salary advance request (MANAGERS/HR/SUPER ADMIN)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: advanceId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - rejectionReason
+              properties:
+                rejectionReason:
+                  type: string
+      responses:
+        '200':
+          description: Advance rejected
+        '400':
+          description: Bad request
+        '403':
+          description: Forbidden - managers/HR/superadmin only
+
+  /salary/advance:
+    get:
+      tags:
+        - Salary
+      summary: Get all salary advances (MANAGERS/HR/SUPER ADMIN)
+      description: Returns all advance requests across staff, enriched with staff name. Optionally filter by status/month/year.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, approved, rejected, paid]
+        - name: month
+          in: query
+          schema:
+            type: integer
+        - name: year
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Salary advances list
+        '403':
+          description: Forbidden - managers/HR/superadmin only
+
+  /salary/advance/my:
+    get:
+      tags:
+        - Salary
+      summary: Get my salary advances
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Salary advances list
+
+  /salary/advance/{staffId}:
+    get:
+      tags:
+        - Salary
+      summary: Get a staff member's salary advances
+      description: Staff can view own, HR/managers/superAdmin can view any.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Salary advances list
+        '403':
+          description: Forbidden - staff can only view their own
 
   /appearance/{staffId}:
     put:
@@ -12711,7 +13282,16 @@ paths:
                     maxMissedAllowed:
                       type: integer
                       example: 0
-                      description: Full points forfeited for the month once missed meetings exceed this count (excused absences don't count)
+                      description: Once missed meetings (excused absences don't count) exceed this count, points are deducted per the mode below
+                    mode:
+                      type: string
+                      enum: [flat, perDay]
+                      default: flat
+                      description: "'flat' (default): pointsPerBadDay forfeited once, first excess missed meeting. 'perDay': pointsPerBadDay deducted per excess missed meeting, compounds."
+                    pointsPerBadDay:
+                      type: integer
+                      example: 5
+                      description: Points deducted per the mode above (perDay compounds - e.g. 2 excess missed meetings = -10, floored at 0)
                 extraPerformance:
                   type: object
                   properties:
@@ -14831,6 +15411,8 @@ tags:
     description: Staff attendance tracking and management
   - name: Leaves
     description: Leave request and approval tracking
+  - name: Salary
+    description: Salary structure management, monthly payroll generation, payslips, and mid-month advances
   - name: Appearance
     description: Staff appearance and dress code tracking
   - name: Cleaning

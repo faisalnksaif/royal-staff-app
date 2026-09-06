@@ -103,6 +103,17 @@ async function deleteLeave(leaveId: string): Promise<{ success: boolean; data: {
   return data as { success: boolean; data: { id: string; message: string } }
 }
 
+async function deleteHalfDayLeave(leaveId: string, reason: string): Promise<{ success: boolean; data: { id: string; message: string } }> {
+  const { data } = await api.http.request({
+    path: `/leaves/${leaveId}/half-day`,
+    method: "DELETE",
+    body: { reason },
+    secure: true,
+    format: "json",
+  })
+  return data as { success: boolean; data: { id: string; message: string } }
+}
+
 async function setLeaveExemption(leaveId: string, exempted: boolean, reason?: string): Promise<{ success: boolean; data: { id: string; isExempted: boolean; exemptedBy: string; exemptedAt: string; exemptionReason: string } }> {
   const { data } = await api.http.request({
     path: `/leaves/${leaveId}/exempt`,
@@ -114,4 +125,4 @@ async function setLeaveExemption(leaveId: string, exempted: boolean, reason?: st
   return data as { success: boolean; data: { id: string; isExempted: boolean; exemptedBy: string; exemptedAt: string; exemptionReason: string } }
 }
 
-export const leaveService = { getLeaves, getMyLeaves, approveLeave, rejectLeave, delegateLeave, getLeaveStats, getLeaveBalance, requestLeave, deleteLeave, setLeaveExemption }
+export const leaveService = { getLeaves, getMyLeaves, approveLeave, rejectLeave, delegateLeave, getLeaveStats, getLeaveBalance, requestLeave, deleteLeave, deleteHalfDayLeave, setLeaveExemption }

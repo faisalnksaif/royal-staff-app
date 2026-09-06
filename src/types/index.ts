@@ -1294,3 +1294,71 @@ export interface CreateFollowupPayload {
   freeTextRemark?: string | null
   disputeDetails?: string | null
 }
+
+export type SalaryStructureStatus = "pending" | "active" | "approved" | "rejected"
+
+export interface SalaryStructure {
+  id: string
+  staffId: number
+  staffName?: string
+  basicPay: number
+  incentives: number
+  effectiveFrom: string
+  status: SalaryStructureStatus
+  proposedBy?: string | null
+  proposedByName?: string | null
+  approvedBy?: string | null
+  approvedByName?: string | null
+  approvedAt?: string | null
+  rejectionReason?: string | null
+  createdAt: string
+}
+
+export interface SalaryStructureResponse {
+  active: SalaryStructure | null
+  pending: SalaryStructure[]
+}
+
+export interface Payslip {
+  id: string
+  staffId: number
+  staffName?: string
+  month: number
+  year: number
+  basicPay: number
+  incentives: number
+  deductions: number
+  advancesDeducted: number
+  netPay: number
+  generatedAt: string
+}
+
+export type SalaryAdvanceStatus = "pending" | "approved" | "rejected" | "paid"
+
+export interface GenerateAllPayrollResultItem {
+  staffId: number
+  success: boolean
+  error?: string | null
+  payslip?: Payslip | null
+}
+
+export interface GenerateAllPayrollResult {
+  totalStaff: number
+  generated: number
+  failed: number
+  results: GenerateAllPayrollResultItem[]
+}
+
+export interface SalaryAdvance {
+  id: string
+  staffId: number
+  staffName?: string
+  amount: number
+  daysWorkedAtRequest: number
+  status: SalaryAdvanceStatus
+  requestedAt: string
+  approvedBy?: string | null
+  approvedByName?: string | null
+  approvedAt?: string | null
+  rejectionReason?: string | null
+}

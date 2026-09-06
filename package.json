@@ -65,6 +65,7 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
+    "build:web": "expo export --platform web",
     "build": "eas build --profile production --platform android",
     "build:local": "./scripts/build-local-android.sh",
     "build:local:bundle": "./scripts/build-local-android.sh --bundle",

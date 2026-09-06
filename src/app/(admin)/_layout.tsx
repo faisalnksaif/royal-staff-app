@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react"
 import { View, Pressable, ScrollView, StyleSheet, Platform, StatusBar, Modal, Animated, TouchableWithoutFeedback } from "react-native"
 import { Stack, useRouter, usePathname } from "expo-router"
-import { MessageCircleMore, CalendarCheck, CalendarClock, ClipboardCheck, Trophy, Award, Users, Settings, Settings2, LogOut, UsersRound, Bell, ChevronLeft, ChevronRight, IdCard, Radar, ListChecks, MessageSquareQuote, Presentation, ThumbsUp, Star } from "lucide-react-native"
+import { MessageCircleMore, CalendarCheck, CalendarClock, ClipboardCheck, Trophy, Award, Users, Settings, Settings2, LogOut, UsersRound, Bell, ChevronLeft, ChevronRight, IdCard, Radar, ListChecks, MessageSquareQuote, Presentation, ThumbsUp, Star, Wallet } from "lucide-react-native"
 import { AdminDrawerContext } from "../../contexts/adminDrawer"
 import { useQuery } from "@tanstack/react-query"
 import AppText from "../../components/ui/AppText"
@@ -32,6 +32,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Attendance",          href: "/(admin)/attendance",        icon: CalendarCheck,     matchExact: false, section: "team" },
   { label: "Leaves",              href: "/(admin)/team-leaves",       icon: CalendarClock,     matchExact: false, section: "team" },
   { label: "Meetings",            href: "/(admin)/team-meetings",     icon: Presentation,      matchExact: false, roles: ["superAdmin", "manager", "hr"], section: "team" },
+  { label: "Salary",              href: "/(admin)/team-salary",       icon: Wallet,            matchExact: false, roles: ["superAdmin", "manager", "hr"], section: "team" },
 
   { label: "Daily Check",         href: "/(admin)/daily-check",       icon: ClipboardCheck,    matchExact: false, roles: ["superAdmin", "manager", "hr"], section: "scoring" },
   { label: "Testimonials",        href: "/(admin)/team-testimonials", icon: MessageSquareQuote, matchExact: false, roles: ["superAdmin", "manager", "hr"], section: "scoring" },

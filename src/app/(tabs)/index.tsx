@@ -3,7 +3,7 @@ import { View, ScrollView, StyleSheet, Pressable, TouchableOpacity, ActivityIndi
 import { useRouter } from "expo-router"
 import { useTablet } from "../../hooks/useTablet"
 import { useQuery } from "@tanstack/react-query"
-import { Users, CalendarClock, ChevronRight, Award, Bell, ClipboardList } from "lucide-react-native"
+import { Users, CalendarClock, ChevronRight, Award, Bell, ClipboardList, Wallet } from "lucide-react-native"
 import moment from "moment"
 import AppText from "../../components/ui/AppText"
 import AppCard from "../../components/ui/AppCard"
@@ -12,6 +12,7 @@ import { spacing, colors as palette, radii } from "../../constants/theme"
 import useAuthStore from "../../stores/useAuthStore"
 import { useStaffBillsSummary } from "../../hooks/useStaffBillsSummary"
 import { leaveService } from "../../services/leaveService"
+import { salaryService } from "../../services/salaryService"
 import { extraPerformanceService } from "../../services/extraPerformanceService"
 import { notificationService } from "../../services/notificationService"
 
@@ -113,11 +114,17 @@ export default function HomeScreen() {
     queryFn: () => extraPerformanceService.getStaffPerformances(),
     enabled: user?.user_id != null,
   })
+  const { data: structureData, isLoading: structureLoading } = useQuery({
+    queryKey: ["salary-structure", user?.user_id],
+    queryFn: () => salaryService.getStructure(user!.user_id!),
+    enabled: user?.user_id != null,
+  })
 
   const totalCustomers = summary.data?.total_customers ?? 0
   const totalOutstanding = summary.data?.total_outstanding ?? 0
   const leaveBalance = balanceData?.data?.leaveBalance
   const pendingPerformances = performanceData?.data?.stats?.pending ?? 0
+  const activeStructure = structureData?.data?.active
 
   return (
     <ScrollView
@@ -204,6 +211,25 @@ export default function HomeScreen() {
             isLoading={balanceLoading}
             onPress={() => router.push("/(tabs)/leaves")}
           />
+        </View>
+
+        {/* Row 3 */}
+        <View style={styles.gridRow}>
+          <FeatureCard
+            icon={<Wallet size={24} color={palette.info.default} strokeWidth={1.6} />}
+            label="My Salary"
+            subtitle={
+              structureLoading
+                ? ""
+                : activeStructure != null
+                ? `${formatAmount(activeStructure.basicPay)} basic pay`
+                : "View payslips & advances"
+            }
+            accent={palette.info.default}
+            isLoading={structureLoading}
+            onPress={() => router.push("/(tabs)/salary")}
+          />
+          <View style={{ flex: 1 }} />
         </View>
       </View>
       </View>

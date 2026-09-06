@@ -143,6 +143,44 @@ function RejectModal({
   onConfirm: (reason: string) => void
   isLoading: boolean
 }) {
+  return (
+    <ReasonModal
+      visible={visible}
+      onClose={onClose}
+      onConfirm={onConfirm}
+      isLoading={isLoading}
+      title="Reject Leave"
+      description="Provide a reason for rejection (required)"
+      placeholder="e.g. Insufficient notice period"
+      confirmLabel="Reject"
+      confirmLabelLoading="Rejecting…"
+    />
+  )
+}
+
+// ─── ReasonModal ──────────────────────────────────────────────────────────────
+
+function ReasonModal({
+  visible,
+  onClose,
+  onConfirm,
+  isLoading,
+  title,
+  description,
+  placeholder,
+  confirmLabel,
+  confirmLabelLoading,
+}: {
+  visible: boolean
+  onClose: () => void
+  onConfirm: (reason: string) => void
+  isLoading: boolean
+  title: string
+  description: string
+  placeholder: string
+  confirmLabel: string
+  confirmLabelLoading: string
+}) {
   const { colors } = useTheme()
   const [reason, setReason] = useState("")
 
@@ -155,9 +193,9 @@ function RejectModal({
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.modalBackdrop} onPress={onClose}>
         <Pressable style={[styles.modalBox, { backgroundColor: colors.background.primary }]}>
-          <AppText variant="heading3" style={{ marginBottom: spacing[2] }}>Reject Leave</AppText>
+          <AppText variant="heading3" style={{ marginBottom: spacing[2] }}>{title}</AppText>
           <AppText variant="body" color="secondary" style={{ marginBottom: spacing[4] }}>
-            Provide a reason for rejection (required)
+            {description}
           </AppText>
           <TextInput
             style={[styles.reasonInput, {
@@ -165,7 +203,7 @@ function RejectModal({
               color: colors.text.primary,
               backgroundColor: colors.background.secondary,
             }]}
-            placeholder="e.g. Insufficient notice period"
+            placeholder={placeholder}
             placeholderTextColor={colors.text.tertiary}
             value={reason}
             onChangeText={setReason}
@@ -176,7 +214,7 @@ function RejectModal({
           <View style={styles.modalActions}>
             <AppButton label="Cancel" variant="ghost" onPress={onClose} />
             <AppButton
-              label={isLoading ? "Rejecting…" : "Reject"}
+              label={isLoading ? confirmLabelLoading : confirmLabel}
               onPress={handleConfirm}
               disabled={!reason.trim() || isLoading}
             />
@@ -329,11 +367,14 @@ function LeaveCard({
   onReject,
   onDelegate,
   onToggleExemption,
+  onDeleteHalfDay,
   isApproving,
   isRejecting,
   isTogglingExemption,
+  isDeletingHalfDay,
   canDelegate,
   canManageExemptions,
+  canDeleteHalfDay,
 }: {
   item: LeaveRequest
   index?: number
@@ -341,18 +382,21 @@ function LeaveCard({
   onReject: () => void
   onDelegate?: () => void
   onToggleExemption?: () => void
+  onDeleteHalfDay?: () => void
   isApproving: boolean
   isRejecting: boolean
   isTogglingExemption?: boolean
+  isDeletingHalfDay?: boolean
   canDelegate?: boolean
   canManageExemptions?: boolean
+  canDeleteHalfDay?: boolean
 }) {
   const { colors, isDark } = useTheme()
   const status = STATUS_CONFIG[item.status]
   const typeColor = TYPE_CONFIG[item.leaveType]?.color ?? colors.accent
   const avatarColor = isDark ? colors.accent : palette.primary[700]
   const avatarBgColor = isDark ? colors.accentSubtle : palette.primary[100]
-  const isBusy = isApproving || isRejecting || isTogglingExemption
+  const isBusy = isApproving || isRejecting || isTogglingExemption || isDeletingHalfDay
 
   const menuItems: ActionMenuItem[] = [
     ...(item.status === "pending" && item.canApprove
@@ -370,6 +414,14 @@ function LeaveCard({
           icon: <ShieldCheck size={16} color={colors.accent} strokeWidth={1.75} />,
           color: colors.accent,
           onPress: onToggleExemption,
+        }]
+      : []),
+    ...(canDeleteHalfDay && onDeleteHalfDay
+      ? [{
+          label: "Delete half-day leave",
+          icon: <Trash2 size={16} color={palette.error.default} strokeWidth={1.75} />,
+          color: palette.error.default,
+          onPress: onDeleteHalfDay,
         }]
       : []),
   ]
@@ -788,7 +840,9 @@ function TeamLeavesTab({ delegatedOnly }: { delegatedOnly?: boolean }) {
   const [filter, setFilter] = useState<LeaveStatus | "all">("all")
   const [rejectTarget, setRejectTarget] = useState<string | null>(null)
   const [delegateTarget, setDelegateTarget] = useState<string | null>(null)
+  const [deleteHalfDayTarget, setDeleteHalfDayTarget] = useState<string | null>(null)
   const [actionId, setActionId] = useState<string | null>(null)
+  const canDeleteHalfDay = user?.role === "hr" || user?.role === "superAdmin"
 
   const { data: leavesData, isLoading: leavesLoading, refetch, isRefetching } = useQuery({
     queryKey: ["leaves", filter],
@@ -853,6 +907,22 @@ function TeamLeavesTab({ delegatedOnly }: { delegatedOnly?: boolean }) {
     },
   })
 
+  const deleteHalfDayMutation = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      leaveService.deleteHalfDayLeave(id, reason),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["leaves"] })
+      queryClient.invalidateQueries({ queryKey: ["leave-stats"] })
+      Toast.show({ type: "success", text1: "Half-day leave deleted" })
+      setDeleteHalfDayTarget(null)
+      setActionId(null)
+    },
+    onError: (e) => {
+      Toast.show({ type: "error", text1: leaveErrorMessage(e, "Failed to delete half-day leave") })
+      setActionId(null)
+    },
+  })
+
   const stats = statsData?.data
   const allLeaves = leavesData?.data?.leaves ?? []
   const leaves = delegatedOnly
@@ -912,11 +982,17 @@ function TeamLeavesTab({ delegatedOnly }: { delegatedOnly?: boolean }) {
                 setActionId(item.id)
                 exemptionMutation.mutate({ id: item.id, exempted: !item.isExempted })
               }}
+              onDeleteHalfDay={() => {
+                setActionId(item.id)
+                setDeleteHalfDayTarget(item.id)
+              }}
               canDelegate={isHr}
               canManageExemptions={user?.role === "manager" || user?.role === "hr" || user?.role === "superAdmin"}
+              canDeleteHalfDay={canDeleteHalfDay}
               isApproving={approveMutation.isPending && actionId === item.id}
               isRejecting={rejectMutation.isPending && actionId === item.id}
               isTogglingExemption={exemptionMutation.isPending && actionId === item.id}
+              isDeletingHalfDay={deleteHalfDayMutation.isPending && actionId === item.id}
             />
           </AnimatedListItem>
         )}
@@ -944,6 +1020,21 @@ function TeamLeavesTab({ delegatedOnly }: { delegatedOnly?: boolean }) {
           if (rejectTarget) rejectMutation.mutate({ id: rejectTarget, reason })
         }}
         isLoading={rejectMutation.isPending}
+      />
+
+      {/* Delete half-day leave modal */}
+      <ReasonModal
+        visible={deleteHalfDayTarget != null}
+        onClose={() => { setDeleteHalfDayTarget(null); setActionId(null) }}
+        onConfirm={(reason) => {
+          if (deleteHalfDayTarget) deleteHalfDayMutation.mutate({ id: deleteHalfDayTarget, reason })
+        }}
+        isLoading={deleteHalfDayMutation.isPending}
+        title="Delete Half-Day Leave"
+        description="This reverts the linked attendance record back to 'late'. Provide a reason (required)."
+        placeholder="e.g. Staff had a valid medical reason for being late"
+        confirmLabel="Delete"
+        confirmLabelLoading="Deleting…"
       />
 
       {/* Delegate modal */}
