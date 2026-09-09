@@ -515,9 +515,7 @@ export interface FaceEnrollResponse {
   readyForAttendance: boolean
 }
 
-export interface BreakWindow {
-  startTime: string | null
-  endTime: string | null
+export interface BreakSummary {
   minutes: number | null
   allowanceMinutes: number
   excessMinutes: number
@@ -534,8 +532,7 @@ export interface AttendanceRecord {
   approvedOvertimeMinutes?: number
   overtimeApprovalStatus?: 'none' | 'pending' | 'approved' | 'rejected'
   lateMinutes?: number
-  teaBreak?: BreakWindow
-  lunchBreak?: BreakWindow
+  break?: BreakSummary
   status: AttendanceStatus
 }
 
@@ -594,8 +591,7 @@ export interface AttendanceDashboardResponse {
       totalWorkHours: number;
       totalApprovedOvertimeMinutes: number;
       totalPendingOvertimeMinutes: number;
-      totalTeaBreakExcessMinutes: number;
-      totalLunchBreakExcessMinutes: number;
+      totalBreakExcessMinutes: number;
       missedCheckoutDays: number;
       attendanceRate: number;
     }>;

@@ -36,7 +36,7 @@ import { useRole } from "../../hooks/useRole"
 import { useCurrentStaff, useStaff } from "../../hooks/useStaff"
 import { useDepartments } from "../../hooks/useDepartments"
 import { attendanceService } from "../../services/attendanceService"
-import type { AttendanceRecord, AttendanceSession, BreakWindow } from "../../types"
+import type { AttendanceRecord, AttendanceSession, BreakSummary } from "../../types"
 
 const UNASSIGNED_DEPARTMENT = "Other"
 
@@ -49,6 +49,24 @@ function formatWorkHours(hours: number): string {
   if (h === 0) return `${m}m`
   if (m === 0) return `${h}h`
   return `${h}h ${m}m`
+}
+
+// Derives break windows from gaps between consecutive sessions' checkOut and
+// the next session's checkIn. The API only reports a single summed daily
+// break allowance/excess now, with no per-gap start/end, so the timeline UI
+// reconstructs the actual gaps itself from session check-in/out times.
+function computeSessionGaps(sessions: AttendanceSession[]): SessionGap[] {
+  const ordered = [...sessions].sort((a, b) => moment(a.checkIn).valueOf() - moment(b.checkIn).valueOf())
+  const gaps: SessionGap[] = []
+  for (let i = 0; i < ordered.length - 1; i++) {
+    const current = ordered[i]
+    const next = ordered[i + 1]
+    if (!current.checkOut || !next.checkIn) continue
+    const minutes = moment(next.checkIn).diff(moment(current.checkOut), "minutes")
+    if (minutes <= 0) continue
+    gaps.push({ startTime: current.checkOut, endTime: next.checkIn, minutes })
+  }
+  return gaps
 }
 
 function statusColor(status: AttendanceRecord["status"]): string {
@@ -64,7 +82,7 @@ const STATUS_LABEL = { present: "Present", late: "Late", "half-day": "Half-day",
 const STATUS_ORDER: Record<AttendanceRecord["status"], number> = { present: 0, late: 1, "half-day": 2, absent: 3 }
 
 function needsAttention(record: AttendanceRecord): boolean {
-  const breakExcessMinutes = (record.teaBreak?.excessMinutes ?? 0) + (record.lunchBreak?.excessMinutes ?? 0)
+  const breakExcessMinutes = record.break?.excessMinutes ?? 0
   const hasAutoClosed = record.sessions?.some((s) => s.autoClosed)
   return record.status === "late" || breakExcessMinutes > 0 || !!hasAutoClosed || record.overtimeApprovalStatus === "pending"
 }
@@ -256,9 +274,14 @@ function SummaryBar({
 
 // ─── AttendanceRow ────────────────────────────────────────────────────────────
 
-function BreakRow({ label, breakWindow }: { label: string; breakWindow: BreakWindow }) {
+interface SessionGap {
+  startTime: string
+  endTime: string
+  minutes: number
+}
+
+function BreakRow({ gap, isOver }: { gap: SessionGap; isOver: boolean }) {
   const { colors } = useTheme()
-  const isOver = breakWindow.excessMinutes > 0
   const color = isOver ? palette.warning.default : palette.success.default
 
   return (
@@ -266,7 +289,7 @@ function BreakRow({ label, breakWindow }: { label: string; breakWindow: BreakWin
       <View style={styles.timelineLeft}>
         <View style={[styles.sessionDot, { backgroundColor: color }]} />
         <AppText variant="caption" color="tertiary" numberOfLines={1}>
-          {label}
+          Break
         </AppText>
       </View>
 
@@ -274,7 +297,7 @@ function BreakRow({ label, breakWindow }: { label: string; breakWindow: BreakWin
         <View style={styles.timeChip}>
           <LogOut size={13} color={color} strokeWidth={2} />
           <AppText variant="caption" style={{ color: colors.text.primary }}>
-            {moment(breakWindow.startTime).format("h:mm A")}
+            {moment(gap.startTime).format("h:mm A")}
           </AppText>
         </View>
 
@@ -283,7 +306,7 @@ function BreakRow({ label, breakWindow }: { label: string; breakWindow: BreakWin
         <View style={styles.timeChip}>
           <LogIn size={13} color={color} strokeWidth={2} />
           <AppText variant="caption" style={{ color: colors.text.primary }}>
-            {moment(breakWindow.endTime).format("h:mm A")}
+            {moment(gap.endTime).format("h:mm A")}
           </AppText>
         </View>
 
@@ -293,17 +316,9 @@ function BreakRow({ label, breakWindow }: { label: string; breakWindow: BreakWin
           numberOfLines={1}
           style={{ marginLeft: spacing[2], flexShrink: 0 }}
         >
-          {formatWorkHours((breakWindow.minutes ?? 0) / 60)}
+          {formatWorkHours(gap.minutes / 60)}
         </AppText>
       </View>
-
-      {isOver && (
-        <View style={[styles.liveBadge, { backgroundColor: palette.warning.default + "22" }]}>
-          <AppText variant="caption" style={{ color: palette.warning.default, fontSize: 10 }}>
-            {breakWindow.excessMinutes}m over
-          </AppText>
-        </View>
-      )}
     </View>
   )
 }
@@ -326,19 +341,20 @@ function SessionTimeline({
 
   const orderedSessions = [...record.sessions].sort((a, b) => b.sessionNumber - a.sessionNumber)
 
+  // Breaks are derived client-side from the gap between one session's checkOut
+  // and the next session's checkIn — the API no longer identifies individual
+  // tea/lunch windows, only a single summed daily break allowance/excess.
+  const gaps = computeSessionGaps(record.sessions)
+  const isOverAll = (record.break?.excessMinutes ?? 0) > 0
+
   // Sessions render newest-first, so a break must attach to the session that
-  // comes right AFTER it chronologically (whose checkIn == the break's
+  // comes right AFTER it chronologically (whose checkIn == the gap's
   // endTime) — that session renders first, putting the break row directly
   // beneath it and above the earlier session it followed.
-  function breaksAfter(session: AttendanceSession): { key: string; label: string; breakWindow: BreakWindow }[] {
-    const matches: { key: string; label: string; breakWindow: BreakWindow }[] = []
-    if (record.teaBreak?.endTime && moment(record.teaBreak.endTime).isSame(session.checkIn)) {
-      matches.push({ key: "tea", label: "Tea break", breakWindow: record.teaBreak })
-    }
-    if (record.lunchBreak?.endTime && moment(record.lunchBreak.endTime).isSame(session.checkIn)) {
-      matches.push({ key: "lunch", label: "Lunch break", breakWindow: record.lunchBreak })
-    }
-    return matches
+  function breaksAfter(session: AttendanceSession): { key: string; gap: SessionGap }[] {
+    return gaps
+      .filter((g) => moment(g.endTime).isSame(session.checkIn))
+      .map((g, i) => ({ key: `${session.sessionNumber}-${i}`, gap: g }))
   }
 
   return (
@@ -421,7 +437,7 @@ function SessionTimeline({
             </View>
 
             {breaks.map((b) => (
-              <BreakRow key={b.key} label={b.label} breakWindow={b.breakWindow} />
+              <BreakRow key={b.key} gap={b.gap} isOver={isOverAll} />
             ))}
           </View>
         )
@@ -687,7 +703,7 @@ function AttendanceRow({
   const hasAutoClosed = record.sessions?.some((s) => s.autoClosed)
   const hasSessions = record.sessions?.length > 0
   const hasOpenSession = record.sessions?.some((s) => !s.checkOut && !s.autoClosed)
-  const breakExcessMinutes = (record.teaBreak?.excessMinutes ?? 0) + (record.lunchBreak?.excessMinutes ?? 0)
+  const breakExcessMinutes = record.break?.excessMinutes ?? 0
 
   return (
     <View
@@ -789,7 +805,7 @@ function AttendanceRow({
 
 interface ProgressSegment {
   key: string
-  kind: "session" | "tea" | "lunch"
+  kind: "session" | "break"
   start: number
   end: number
   isLive: boolean
@@ -813,26 +829,17 @@ function buildProgressSegments(record: AttendanceRecord): ProgressSegment[] {
     })
   })
 
-  if (record.teaBreak?.startTime && record.teaBreak?.endTime) {
+  const gaps = computeSessionGaps(record.sessions)
+  gaps.forEach((gap, i) => {
     segments.push({
-      key: "tea",
-      kind: "tea",
-      start: moment(record.teaBreak.startTime).valueOf(),
-      end: moment(record.teaBreak.endTime).valueOf(),
+      key: `break-${i}`,
+      kind: "break",
+      start: moment(gap.startTime).valueOf(),
+      end: moment(gap.endTime).valueOf(),
       isLive: false,
-      label: `Tea break: ${moment(record.teaBreak.startTime).format("h:mm A")} – ${moment(record.teaBreak.endTime).format("h:mm A")}`,
+      label: `Break: ${moment(gap.startTime).format("h:mm A")} – ${moment(gap.endTime).format("h:mm A")}`,
     })
-  }
-  if (record.lunchBreak?.startTime && record.lunchBreak?.endTime) {
-    segments.push({
-      key: "lunch",
-      kind: "lunch",
-      start: moment(record.lunchBreak.startTime).valueOf(),
-      end: moment(record.lunchBreak.endTime).valueOf(),
-      isLive: false,
-      label: `Lunch break: ${moment(record.lunchBreak.startTime).format("h:mm A")} – ${moment(record.lunchBreak.endTime).format("h:mm A")}`,
-    })
-  }
+  })
 
   return segments.sort((a, b) => a.start - b.start)
 }
@@ -922,7 +929,7 @@ function StaffCardDesktop({
   const hasAutoClosed = record.sessions?.some((s) => s.autoClosed)
   const hasSessions = record.sessions?.length > 0
   const hasOpenSession = record.sessions?.some((s) => !s.checkOut && !s.autoClosed)
-  const breakExcessMinutes = (record.teaBreak?.excessMinutes ?? 0) + (record.lunchBreak?.excessMinutes ?? 0)
+  const breakExcessMinutes = record.break?.excessMinutes ?? 0
 
   return (
     <View

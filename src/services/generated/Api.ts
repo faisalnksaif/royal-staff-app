@@ -4116,49 +4116,16 @@ export class Api<SecurityDataType extends unknown> {
              * @example 0
              */
             lateMinutes?: number;
-            /** The session gap (if any) starting within the 10:00-11:30 window */
-            teaBreak?: {
+            /** Combined daily break allowance, summed across all session gaps that day. Allowance is 40 minutes on normal days, 140 minutes on Friday. */
+            break?: {
               /**
-               * Checkout time of the session before the break; null if no gap fell in the tea-break window that day
-               * @format date-time
-               * @example "2026-06-22T03:30:00.000Z"
-               */
-              startTime?: string | null;
-              /**
-               * Check-in time of the session after the break; null if no gap fell in the tea-break window that day
-               * @format date-time
-               * @example "2026-06-22T03:45:00.000Z"
-               */
-              endTime?: string | null;
-              /**
-               * Measured gap length; null if no gap fell in the tea-break window that day
+               * Summed gap minutes across all breaks that day; null if there were no gaps
                * @example 15
                */
               minutes?: number | null;
-              /** @example 10 */
+              /** @example 40 */
               allowanceMinutes?: number;
-              /** @example 5 */
-              excessMinutes?: number;
-            };
-            /** The session gap (if any) starting at/after 11:30. Allowance is 120 minutes on Friday, 30 minutes other days. */
-            lunchBreak?: {
-              /**
-               * Checkout time of the session before the break; null if no gap fell in the lunch-break window that day
-               * @format date-time
-               * @example "2026-06-22T08:31:00.000Z"
-               */
-              startTime?: string | null;
-              /**
-               * Check-in time of the session after the break; null if no gap fell in the lunch-break window that day
-               * @format date-time
-               * @example "2026-06-22T08:56:00.000Z"
-               */
-              endTime?: string | null;
-              /** @example 45 */
-              minutes?: number | null;
-              /** @example 30 */
-              allowanceMinutes?: number;
-              /** @example 15 */
+              /** @example 0 */
               excessMinutes?: number;
             };
             status?: "present" | "absent" | "late" | "half-day";
@@ -4438,9 +4405,7 @@ export class Api<SecurityDataType extends unknown> {
                */
               totalPendingOvertimeMinutes?: number;
               /** @example 30 */
-              totalTeaBreakExcessMinutes?: number;
-              /** @example 90 */
-              totalLunchBreakExcessMinutes?: number;
+              totalBreakExcessMinutes?: number;
               /**
                * Days where a session was auto-closed by the stale-session cleanup job due to a missing checkout
                * @example 1
@@ -4566,8 +4531,7 @@ export class Api<SecurityDataType extends unknown> {
               totalApprovedOvertimeMinutes?: number;
               /** Sum of pendingOvertimeMinutes for days still awaiting an approval decision */
               totalPendingOvertimeMinutes?: number;
-              totalTeaBreakExcessMinutes?: number;
-              totalLunchBreakExcessMinutes?: number;
+              totalBreakExcessMinutes?: number;
             };
             records?: {
               date?: string;
@@ -4585,10 +4549,8 @@ export class Api<SecurityDataType extends unknown> {
                 | "pending"
                 | "approved"
                 | "rejected";
-              teaBreakMinutes?: number | null;
-              teaBreakExcessMinutes?: number;
-              lunchBreakMinutes?: number | null;
-              lunchBreakExcessMinutes?: number;
+              breakMinutes?: number | null;
+              breakExcessMinutes?: number;
               status?: "present" | "absent" | "late" | "half-day";
             }[];
           };

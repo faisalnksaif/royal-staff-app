@@ -3977,59 +3977,21 @@ paths:
                           type: integer
                           description: Minutes late vs the staff's assigned shift start time (0 if on-time or early)
                           example: 0
-                        teaBreak:
+                        break:
                           type: object
-                          description: The session gap (if any) starting within the 10:00-11:30 window
+                          description: Total break time across all session gaps in the day, measured against a single daily allowance (40 minutes, 140 minutes on Friday). Staff may take their break time whenever they like during the day.
                           properties:
-                            startTime:
-                              type: string
-                              format: date-time
-                              nullable: true
-                              description: Checkout time of the session before the break; null if no gap fell in the tea-break window that day
-                              example: 2026-06-22T03:30:00.000Z
-                            endTime:
-                              type: string
-                              format: date-time
-                              nullable: true
-                              description: Check-in time of the session after the break; null if no gap fell in the tea-break window that day
-                              example: 2026-06-22T03:45:00.000Z
                             minutes:
                               type: integer
                               nullable: true
-                              description: Measured gap length; null if no gap fell in the tea-break window that day
-                              example: 15
-                            allowanceMinutes:
-                              type: integer
-                              example: 10
-                            excessMinutes:
-                              type: integer
-                              example: 5
-                        lunchBreak:
-                          type: object
-                          description: The session gap (if any) starting at/after 11:30. Allowance is 120 minutes on Friday, 30 minutes other days.
-                          properties:
-                            startTime:
-                              type: string
-                              format: date-time
-                              nullable: true
-                              description: Checkout time of the session before the break; null if no gap fell in the lunch-break window that day
-                              example: 2026-06-22T08:31:00.000Z
-                            endTime:
-                              type: string
-                              format: date-time
-                              nullable: true
-                              description: Check-in time of the session after the break; null if no gap fell in the lunch-break window that day
-                              example: 2026-06-22T08:56:00.000Z
-                            minutes:
-                              type: integer
-                              nullable: true
+                              description: Total minutes across all break gaps that day; null if there were no gaps
                               example: 45
                             allowanceMinutes:
                               type: integer
-                              example: 30
+                              example: 40
                             excessMinutes:
                               type: integer
-                              example: 15
+                              example: 5
                         status:
                           type: string
                           enum: [present, absent, late, half-day]
@@ -4440,12 +4402,9 @@ paths:
                               type: integer
                               description: Sum of pendingOvertimeMinutes for days still awaiting an approval decision (approved/rejected days are excluded)
                               example: 45
-                            totalTeaBreakExcessMinutes:
+                            totalBreakExcessMinutes:
                               type: integer
                               example: 30
-                            totalLunchBreakExcessMinutes:
-                              type: integer
-                              example: 90
                             missedCheckoutDays:
                               type: integer
                               description: Days where a session was auto-closed by the stale-session cleanup job due to a missing checkout
@@ -4623,9 +4582,7 @@ paths:
                           totalPendingOvertimeMinutes:
                             type: integer
                             description: Sum of pendingOvertimeMinutes for days still awaiting an approval decision
-                          totalTeaBreakExcessMinutes:
-                            type: integer
-                          totalLunchBreakExcessMinutes:
+                          totalBreakExcessMinutes:
                             type: integer
                       records:
                         type: array
@@ -4655,15 +4612,10 @@ paths:
                             overtimeApprovalStatus:
                               type: string
                               enum: [none, pending, approved, rejected]
-                            teaBreakMinutes:
+                            breakMinutes:
                               type: integer
                               nullable: true
-                            teaBreakExcessMinutes:
-                              type: integer
-                            lunchBreakMinutes:
-                              type: integer
-                              nullable: true
-                            lunchBreakExcessMinutes:
+                            breakExcessMinutes:
                               type: integer
                             status:
                               type: string
@@ -6119,7 +6071,14 @@ paths:
       tags:
         - Salary
       summary: Generate monthly payroll for a staff member (MANAGERS/HR/SUPER ADMIN)
-      description: Computes net pay from the active salary structure, deducting per-day amounts for unpaid absences and half-days, and any approved advances for the month. Fails if payroll for that staff/month/year was already generated, or if no active salary structure exists.
+      description: >
+        Computes net pay from the active salary structure, deducting per-day amounts for unpaid
+        absences and half-days, and any approved advances for the month. Fails if a final
+        (non-partial) payroll for that staff/month/year was already generated, or if no active
+        salary structure exists. If called for the current, still-in-progress month, the result
+        is marked isPartial - only days up to today are counted (future days are never silently
+        treated as paid) - and calling this again later for the same month replaces that partial
+        record instead of erroring as a duplicate.
       security:
         - BearerAuth: []
       requestBody:
@@ -6204,6 +6163,13 @@ paths:
                       netPay:
                         type: number
                         description: grossPay - deductionAmount - advanceDeducted
+                      isPartial:
+                        type: boolean
+                        description: True if this was generated before the target month ended - deductions/netPay only reflect days up to periodEnd, not the full month. A partial record can be regenerated later once the month actually ends (does not error as a duplicate); a non-partial one cannot.
+                      periodEnd:
+                        type: string
+                        format: date
+                        description: Last day actually counted for this payroll - the last day of the month, unless isPartial is true (in which case it's today, the date it was generated)
                       status:
                         type: string
                         example: generated

@@ -97,9 +97,9 @@ function StaffRow({ entry }: { entry: AttendanceDashboardResponse["data"]["staff
             {entry.missedCheckoutDays} missed checkout{entry.missedCheckoutDays > 1 ? "s" : ""}
           </AppText>
         )}
-        {(entry.totalTeaBreakExcessMinutes + entry.totalLunchBreakExcessMinutes) > 0 && (
+        {entry.totalBreakExcessMinutes > 0 && (
           <AppText variant="caption" style={{ color: palette.warning.default }}>
-            {entry.totalTeaBreakExcessMinutes + entry.totalLunchBreakExcessMinutes}m over break
+            {entry.totalBreakExcessMinutes}m over break
           </AppText>
         )}
       </View>
