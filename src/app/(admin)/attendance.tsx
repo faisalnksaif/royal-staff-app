@@ -1,1016 +1,49 @@
 import { toTitleCase } from "../../utils/helpers"
-import React, { useState, useRef } from "react"
+import React, { useState, useRef, useMemo, useCallback } from "react"
 import {
   View,
   FlatList,
-  ActivityIndicator,
   StyleSheet,
   Pressable,
   Modal,
-  ScrollView,
   Platform,
   useWindowDimensions,
 } from "react-native"
 import DateTimePicker, { DateTimePickerAndroid } from "@react-native-community/datetimepicker"
 import { useRouter } from "expo-router"
-import { CheckCircle, XCircle, UserPlus, BarChart3, ChevronDown, ChevronLeft, ChevronRight, ChevronsUpDown, LogIn, LogOut, AlertTriangle, Clock, Pencil, Trash2, Plus, MoreVertical } from "lucide-react-native"
-import ActionMenu, { ActionMenuItem, ActionMenuAnchor } from "../../components/shared/ActionMenu"
+import { UserPlus, BarChart3, ChevronLeft, ChevronRight, ChevronsUpDown, Pencil } from "lucide-react-native"
 import BackButton from "../../components/shared/BackButton"
 import DrawerMenuButton from "../../components/shared/DrawerMenuButton"
 import RefreshButton from "../../components/shared/RefreshButton"
 import AnimatedListItem from "../../components/shared/AnimatedListItem"
 import AttendanceListSkeleton from "../../components/shared/AttendanceListSkeleton"
-import StaffAvatar from "../../components/shared/StaffAvatar"
 import Popup from "../../components/shared/Popup"
-import ConfirmModal from "../../components/shared/ConfirmModal"
-import Collapsible from "../../components/shared/Collapsible"
 import moment from "moment"
 import AppText from "../../components/ui/AppText"
 import AppButton from "../../components/ui/AppButton"
 import AppInput from "../../components/ui/AppInput"
 import { useTheme } from "../../providers/ThemeProvider"
 import { useTablet } from "../../hooks/useTablet"
-import { spacing, colors as palette, radii } from "../../constants/theme"
+import { spacing, radii } from "../../constants/theme"
 import { useAttendance } from "../../hooks/useAttendance"
 import { useRole } from "../../hooks/useRole"
 import { useCurrentStaff, useStaff } from "../../hooks/useStaff"
 import { useDepartments } from "../../hooks/useDepartments"
 import { attendanceService } from "../../services/attendanceService"
-import type { AttendanceRecord, AttendanceSession, BreakSummary } from "../../types"
+import SummaryBar from "../../components/attendance/SummaryBar"
+import AttendanceRow from "../../components/attendance/AttendanceRow"
+import StaffCardDesktop from "../../components/attendance/StaffCardDesktop"
+import EditSessionsModal from "../../components/attendance/EditSessionsModal"
+import OvertimeApprovalModal from "../../components/attendance/OvertimeApprovalModal"
+import { STATUS_ORDER, needsAttention } from "../../components/attendance/helpers"
+import type { AttendanceRecord } from "../../types"
 
 const UNASSIGNED_DEPARTMENT = "Other"
-
-// ─── helpers ─────────────────────────────────────────────────────────────
-
-function formatWorkHours(hours: number): string {
-  const totalMinutes = Math.round(hours * 60)
-  const h = Math.floor(totalMinutes / 60)
-  const m = totalMinutes % 60
-  if (h === 0) return `${m}m`
-  if (m === 0) return `${h}h`
-  return `${h}h ${m}m`
-}
-
-// Derives break windows from gaps between consecutive sessions' checkOut and
-// the next session's checkIn. The API only reports a single summed daily
-// break allowance/excess now, with no per-gap start/end, so the timeline UI
-// reconstructs the actual gaps itself from session check-in/out times.
-function computeSessionGaps(sessions: AttendanceSession[]): SessionGap[] {
-  const ordered = [...sessions].sort((a, b) => moment(a.checkIn).valueOf() - moment(b.checkIn).valueOf())
-  const gaps: SessionGap[] = []
-  for (let i = 0; i < ordered.length - 1; i++) {
-    const current = ordered[i]
-    const next = ordered[i + 1]
-    if (!current.checkOut || !next.checkIn) continue
-    const minutes = moment(next.checkIn).diff(moment(current.checkOut), "minutes")
-    if (minutes <= 0) continue
-    gaps.push({ startTime: current.checkOut, endTime: next.checkIn, minutes })
-  }
-  return gaps
-}
-
-function statusColor(status: AttendanceRecord["status"]): string {
-  switch (status) {
-    case "present":  return palette.success.default
-    case "late":     return palette.warning.default
-    case "half-day": return palette.info.default
-    case "absent":   return palette.neutral[500]
-  }
-}
-
-const STATUS_LABEL = { present: "Present", late: "Late", "half-day": "Half-day", absent: "Absent" }
-const STATUS_ORDER: Record<AttendanceRecord["status"], number> = { present: 0, late: 1, "half-day": 2, absent: 3 }
-
-function needsAttention(record: AttendanceRecord): boolean {
-  const breakExcessMinutes = record.break?.excessMinutes ?? 0
-  const hasAutoClosed = record.sessions?.some((s) => s.autoClosed)
-  return record.status === "late" || breakExcessMinutes > 0 || !!hasAutoClosed || record.overtimeApprovalStatus === "pending"
-}
-
-function OvertimeBadge({ record, hidePending }: { record: AttendanceRecord; hidePending?: boolean }) {
-  const approved = record.approvedOvertimeMinutes ?? 0
-  const pending = record.pendingOvertimeMinutes ?? 0
-  const status = record.overtimeApprovalStatus
-
-  if (approved > 0) {
-    return (
-      <AppText variant="caption" style={{ color: palette.success.default }}>
-        {"  ·  "}+{formatWorkHours(approved / 60)} OT
-      </AppText>
-    )
-  }
-  if (status === "pending" && pending > 0 && !hidePending) {
-    return (
-      <AppText variant="caption" style={{ color: palette.warning.default }}>
-        {"  ·  "}{formatWorkHours(pending / 60)} OT pending
-      </AppText>
-    )
-  }
-  if (status === "rejected") {
-    return (
-      <AppText variant="caption" color="tertiary">
-        {"  ·  "}OT rejected
-      </AppText>
-    )
-  }
-  return null
-}
-
-function OvertimeDecisionChip({
-  record, onApprove, onReject,
-}: {
-  record: AttendanceRecord
-  onApprove: (record: AttendanceRecord) => void
-  onReject: (record: AttendanceRecord) => void
-}) {
-  const [menuOpen, setMenuOpen] = useState(false)
-  const [menuAnchor, setMenuAnchor] = useState<ActionMenuAnchor | null>(null)
-  const btnRef = useRef<View>(null)
-  const pending = record.pendingOvertimeMinutes ?? 0
-
-  function openMenu() {
-    btnRef.current?.measureInWindow((x, y, width, height) => {
-      setMenuAnchor({ x, y, width, height })
-      setMenuOpen(true)
-    })
-  }
-
-  const items: ActionMenuItem[] = [
-    {
-      label: "Approve overtime",
-      icon: <CheckCircle size={18} color={palette.success.default} strokeWidth={2} />,
-      onPress: () => onApprove(record),
-    },
-    {
-      label: "Reject overtime",
-      icon: <XCircle size={18} color={palette.error.default} strokeWidth={2} />,
-      color: palette.error.default,
-      onPress: () => onReject(record),
-    },
-  ]
-
-  return (
-    <View ref={btnRef} collapsable={false}>
-      <Pressable
-        onPress={openMenu}
-        hitSlop={4}
-        style={[styles.otChip, { backgroundColor: palette.warning.default + "1a" }]}
-      >
-        <AppText variant="caption" style={{ color: palette.warning.default, fontSize: 11 }}>
-          {formatWorkHours(pending / 60)} OT pending
-        </AppText>
-        <MoreVertical size={13} color={palette.warning.default} strokeWidth={2} />
-      </Pressable>
-      <ActionMenu visible={menuOpen} onClose={() => setMenuOpen(false)} items={items} anchor={menuAnchor} />
-    </View>
-  )
-}
-
-function OvertimeApprovalModal({
-  record, date, onClose, onSaved,
-}: {
-  record: AttendanceRecord
-  date: string
-  onClose: () => void
-  onSaved: () => void
-}) {
-  const pending = record.pendingOvertimeMinutes ?? 0
-  const [minutesText, setMinutesText] = useState(String(pending))
-  const [reason, setReason] = useState("")
-  const [isSaving, setIsSaving] = useState(false)
-  const [error, setError] = useState("")
-
-  async function handleConfirm() {
-    const parsed = Number(minutesText)
-    if (!Number.isFinite(parsed) || parsed < 0 || parsed > pending) {
-      setError(`Enter a value between 0 and ${pending}`)
-      return
-    }
-    setIsSaving(true)
-    setError("")
-    try {
-      await attendanceService.decideOvertime(record.staffId, date, true, parsed, reason.trim() || undefined)
-      onSaved()
-      onClose()
-    } catch (e) {
-      setError((e as Error).message ?? "Failed to approve overtime")
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
-  return (
-    <Popup title={`Approve overtime · ${toTitleCase(record.staffName)}`} onClose={onClose}>
-      <AppText variant="caption" color="tertiary" style={{ marginBottom: spacing[3] }}>
-        Computed: {formatWorkHours(pending / 60)} pending. Adjust the minutes to credit, or leave as-is to approve the full amount.
-      </AppText>
-      <AppInput
-        label="Minutes to credit"
-        value={minutesText}
-        onChangeText={setMinutesText}
-        keyboardType="numeric"
-        style={{ marginBottom: spacing[3] }}
-      />
-      <AppInput
-        label="Reason (optional)"
-        value={reason}
-        onChangeText={setReason}
-        placeholder="e.g. Discounted late checkout - unconfirmed"
-        style={{ marginBottom: spacing[3] }}
-      />
-      {!!error && (
-        <AppText variant="caption" style={{ color: palette.error.default, marginBottom: spacing[3] }}>{error}</AppText>
-      )}
-      <View style={{ flexDirection: "row", gap: spacing[3] }}>
-        <AppButton label="Cancel" variant="secondary" onPress={onClose} style={{ flex: 1 }} />
-        <AppButton label="Approve" onPress={handleConfirm} isLoading={isSaving} style={{ flex: 1 }} />
-      </View>
-    </Popup>
-  )
-}
-
-// ─── SummaryBar ───────────────────────────────────────────────────────────────
-
-function StatCard({
-  label, count, color, icon: Icon,
-}: {
-  label: string; count: number; color: string; icon: React.ComponentType<{ size: number; color: string; strokeWidth: number }>
-}) {
-  const { colors } = useTheme()
-  return (
-    <View style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.border as string }]}>
-      <View style={[styles.statCardIcon, { backgroundColor: color + "1a" }]}>
-        <Icon size={18} color={color} strokeWidth={2} />
-      </View>
-      <View>
-        <AppText variant="heading3" style={{ color }}>{count}</AppText>
-        <AppText variant="caption" color="tertiary">{label}</AppText>
-      </View>
-    </View>
-  )
-}
-
-function SummaryBar({
-  present, late, absent, isLoading,
-}: {
-  present: number; late: number; absent: number; isLoading: boolean
-}) {
-  const { colors } = useTheme()
-  if (isLoading) {
-    return (
-      <View style={styles.summaryBar}>
-        <ActivityIndicator color={colors.accent} />
-      </View>
-    )
-  }
-  return (
-    <View style={styles.summaryBar}>
-      <StatCard label="Present" count={present} color={palette.success.default} icon={CheckCircle} />
-      <StatCard label="Late" count={late} color={palette.warning.default} icon={Clock} />
-      <StatCard label="Absent" count={absent} color={palette.neutral[500]} icon={XCircle} />
-    </View>
-  )
-}
-
-// ─── AttendanceRow ────────────────────────────────────────────────────────────
-
-interface SessionGap {
-  startTime: string
-  endTime: string
-  minutes: number
-}
-
-function BreakRow({ gap, isOver }: { gap: SessionGap; isOver: boolean }) {
-  const { colors } = useTheme()
-  const color = isOver ? palette.warning.default : palette.success.default
-
-  return (
-    <View style={styles.timelineRow}>
-      <View style={styles.timelineLeft}>
-        <View style={[styles.sessionDot, { backgroundColor: color }]} />
-        <AppText variant="caption" color="tertiary" numberOfLines={1}>
-          Break
-        </AppText>
-      </View>
-
-      <View style={styles.timelineTimes}>
-        <View style={styles.timeChip}>
-          <LogOut size={13} color={color} strokeWidth={2} />
-          <AppText variant="caption" style={{ color: colors.text.primary }}>
-            {moment(gap.startTime).format("h:mm A")}
-          </AppText>
-        </View>
-
-        <View style={[styles.timeDash, { backgroundColor: colors.border as string }]} />
-
-        <View style={styles.timeChip}>
-          <LogIn size={13} color={color} strokeWidth={2} />
-          <AppText variant="caption" style={{ color: colors.text.primary }}>
-            {moment(gap.endTime).format("h:mm A")}
-          </AppText>
-        </View>
-
-        <AppText
-          variant="caption"
-          color="tertiary"
-          numberOfLines={1}
-          style={{ marginLeft: spacing[2], flexShrink: 0 }}
-        >
-          {formatWorkHours(gap.minutes / 60)}
-        </AppText>
-      </View>
-    </View>
-  )
-}
-
-function SessionTimeline({
-  record, color, scrollable,
-}: {
-  record: AttendanceRecord; color: string; scrollable?: boolean
-}) {
-  const { colors } = useTheme()
-  const now = Date.now()
-  const Container = scrollable ? ScrollView : View
-  const containerProps = scrollable
-    ? {
-        style: styles.timelineScrollable,
-        contentContainerStyle: styles.timeline,
-        showsVerticalScrollIndicator: false,
-      }
-    : { style: styles.timeline }
-
-  const orderedSessions = [...record.sessions].sort((a, b) => b.sessionNumber - a.sessionNumber)
-
-  // Breaks are derived client-side from the gap between one session's checkOut
-  // and the next session's checkIn — the API no longer identifies individual
-  // tea/lunch windows, only a single summed daily break allowance/excess.
-  const gaps = computeSessionGaps(record.sessions)
-  const isOverAll = (record.break?.excessMinutes ?? 0) > 0
-
-  // Sessions render newest-first, so a break must attach to the session that
-  // comes right AFTER it chronologically (whose checkIn == the gap's
-  // endTime) — that session renders first, putting the break row directly
-  // beneath it and above the earlier session it followed.
-  function breaksAfter(session: AttendanceSession): { key: string; gap: SessionGap }[] {
-    return gaps
-      .filter((g) => moment(g.endTime).isSame(session.checkIn))
-      .map((g, i) => ({ key: `${session.sessionNumber}-${i}`, gap: g }))
-  }
-
-  return (
-    <Container {...containerProps}>
-      {orderedSessions.map((session) => {
-        const isOpen = !session.checkOut && !session.autoClosed
-        const breaks = breaksAfter(session)
-
-        return (
-          <View key={session.sessionNumber} style={styles.timelineGroup}>
-            <View style={styles.timelineRow}>
-              <View style={styles.timelineLeft}>
-                <View style={[styles.sessionDot, { backgroundColor: color }]} />
-                <AppText variant="caption" color="tertiary">
-                  Session {session.sessionNumber}
-                </AppText>
-              </View>
-
-              <View style={styles.timelineTimes}>
-                <View style={styles.timeChip}>
-                  <LogIn size={13} color={palette.success.default} strokeWidth={2} />
-                  <AppText variant="caption" style={{ color: colors.text.primary }}>
-                    {moment(session.checkIn).format("h:mm A")}
-                  </AppText>
-                </View>
-
-                <View style={[styles.timeDash, { backgroundColor: colors.border as string }]} />
-
-                {session.checkOut ? (
-                  <View style={styles.timeChip}>
-                    <LogOut size={13} color={palette.error.default} strokeWidth={2} />
-                    <AppText variant="caption" style={{ color: colors.text.primary }}>
-                      {moment(session.checkOut).format("h:mm A")}
-                    </AppText>
-                  </View>
-                ) : session.autoClosed ? (
-                  <View style={styles.timeChip}>
-                    <AlertTriangle size={13} color={palette.warning.default} strokeWidth={2} />
-                    <AppText variant="caption" style={{ color: palette.warning.default }}>
-                      Auto-closed
-                    </AppText>
-                  </View>
-                ) : (
-                  <View style={styles.timeChip}>
-                    <AppText variant="caption" style={{ color: palette.success.default }}>
-                      Still in
-                    </AppText>
-                  </View>
-                )}
-
-                {isOpen ? (
-                  <AppText
-                    variant="caption"
-                    color="tertiary"
-                    numberOfLines={1}
-                    style={{ marginLeft: spacing[2], flexShrink: 0 }}
-                  >
-                    {formatWorkHours((now - moment(session.checkIn).valueOf()) / 3600000)}
-                  </AppText>
-                ) : session.workHours != null && (
-                  <AppText
-                    variant="caption"
-                    color="tertiary"
-                    numberOfLines={1}
-                    style={{ marginLeft: spacing[2], flexShrink: 0 }}
-                  >
-                    {formatWorkHours(session.workHours)}
-                  </AppText>
-                )}
-              </View>
-
-              {isOpen && (
-                <View style={[styles.liveBadge, { backgroundColor: palette.success.default + "22" }]}>
-                  <View style={styles.liveBadgeDot} />
-                  <AppText variant="caption" style={{ color: palette.success.default, fontSize: 10 }}>
-                    Live
-                  </AppText>
-                </View>
-              )}
-            </View>
-
-            {breaks.map((b) => (
-              <BreakRow key={b.key} gap={b.gap} isOver={isOverAll} />
-            ))}
-          </View>
-        )
-      })}
-    </Container>
-  )
-}
-
-// ─── EditSessionsModal ──────────────────────────────────────────────────────
-
-interface EditableSession {
-  key: string
-  checkIn: Date
-  checkOut: Date | null
-}
-
-function SessionTimeInput({
-  label, value, onChange, onClear, date,
-}: {
-  label: string
-  value: Date | null
-  onChange: (d: Date) => void
-  onClear?: () => void
-  date: string
-}) {
-  const { colors, isDark } = useTheme()
-  const webInputRef = useRef<HTMLInputElement | null>(null)
-  const defaultDate = () => moment(date, "YYYY-MM-DD").hour(9).minute(0).second(0).toDate()
-
-  function open() {
-    if (Platform.OS === "android") {
-      DateTimePickerAndroid.open({
-        value: value ?? defaultDate(),
-        mode: "time",
-        is24Hour: false,
-        onChange: (_, d) => { if (d) onChange(d) },
-      })
-    } else if (Platform.OS === "web") {
-      try {
-        (webInputRef.current as any)?.showPicker?.()
-      } catch {
-        webInputRef.current?.click()
-      }
-    }
-  }
-
-  return (
-    <View style={{ flex: 1, position: "relative" }}>
-      <AppText variant="caption" color="tertiary" style={{ marginBottom: spacing[1] }}>{label}</AppText>
-      {Platform.OS === "ios" ? (
-        <View style={[styles.editTimeField, { borderColor: colors.border as string, paddingHorizontal: spacing[2] }]}>
-          <DateTimePicker
-            mode="time"
-            value={value ?? defaultDate()}
-            display="compact"
-            onChange={(_, d) => { if (d) onChange(d) }}
-          />
-        </View>
-      ) : (
-        <Pressable onPress={open} style={[styles.editTimeField, { borderColor: colors.border as string }]}>
-          <AppText variant="body">{value ? moment(value).format("h:mm A") : "Not set"}</AppText>
-        </Pressable>
-      )}
-      {Platform.OS === "web" &&
-        React.createElement("input", {
-          ref: webInputRef,
-          type: "time",
-          value: value ? moment(value).format("HH:mm") : "",
-          onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
-            if (!e.target.value) return
-            const [h, m] = e.target.value.split(":").map(Number)
-            const base = value ? new Date(value) : defaultDate()
-            base.setHours(h, m, 0, 0)
-            onChange(base)
-          },
-          style: {
-            position: "absolute",
-            top: 0,
-            left: 0,
-            width: 1,
-            height: 1,
-            opacity: 0,
-            colorScheme: isDark ? "dark" : "light",
-          },
-        })}
-      {onClear && value && (
-        <Pressable onPress={onClear} hitSlop={8} style={{ marginTop: spacing[1] }}>
-          <AppText variant="caption" style={{ color: palette.error.default }}>Clear</AppText>
-        </Pressable>
-      )}
-    </View>
-  )
-}
-
-function EditSessionsModal({
-  record,
-  date,
-  onClose,
-  onSaved,
-}: {
-  record: AttendanceRecord
-  date: string
-  onClose: () => void
-  onSaved: () => void
-}) {
-  const { colors } = useTheme()
-  const [sessions, setSessions] = useState<EditableSession[]>(() =>
-    (record.sessions.length > 0 ? record.sessions : []).map((s) => ({
-      key: String(s.sessionNumber),
-      checkIn: new Date(s.checkIn),
-      checkOut: s.checkOut ? new Date(s.checkOut) : null,
-    }))
-  )
-  const [reason, setReason] = useState("")
-  const [isSaving, setIsSaving] = useState(false)
-  const [error, setError] = useState("")
-  const [pendingDeleteKey, setPendingDeleteKey] = useState<string | null>(null)
-
-  function updateSession(key: string, patch: Partial<EditableSession>) {
-    setSessions((prev) => prev.map((s) => (s.key === key ? { ...s, ...patch } : s)))
-  }
-
-  function removeSession(key: string) {
-    setSessions((prev) => prev.filter((s) => s.key !== key))
-    setPendingDeleteKey(null)
-  }
-
-  function addSession() {
-    const base = moment(date, "YYYY-MM-DD").hour(9).minute(0).toDate()
-    setSessions((prev) => [...prev, { key: `new-${Date.now()}`, checkIn: base, checkOut: null }])
-  }
-
-  async function handleSave() {
-    if (sessions.length === 0) {
-      setError("Add at least one session")
-      return
-    }
-    for (const s of sessions) {
-      if (s.checkOut && s.checkOut.getTime() <= s.checkIn.getTime()) {
-        setError("Check-out must be after check-in for every session")
-        return
-      }
-    }
-    if (!reason.trim()) {
-      setError("Reason is required")
-      return
-    }
-    setIsSaving(true)
-    setError("")
-    try {
-      await attendanceService.editSessions(
-        record.staffId,
-        date,
-        sessions
-          .slice()
-          .sort((a, b) => a.checkIn.getTime() - b.checkIn.getTime())
-          .map((s) => ({
-            checkIn: s.checkIn.toISOString(),
-            checkOut: s.checkOut ? s.checkOut.toISOString() : null,
-          })),
-        reason.trim()
-      )
-      onSaved()
-      onClose()
-    } catch (e) {
-      setError((e as Error).message ?? "Failed to save sessions")
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
-  return (
-    <>
-      <Popup title={toTitleCase(record.staffName)} onClose={onClose}>
-        <AppText variant="caption" color="tertiary" style={{ marginBottom: spacing[4] }}>
-          {moment(date, "YYYY-MM-DD").format("D MMM YYYY")}
-        </AppText>
-
-        <ScrollView style={{ maxHeight: 380 }} showsVerticalScrollIndicator={false}>
-          {sessions.map((s, i) => (
-            <View key={s.key} style={[styles.editSessionRow, { borderColor: colors.border as string }]}>
-              <View style={styles.editSessionRowHeader}>
-                <AppText variant="caption" color="tertiary">Session {i + 1}</AppText>
-                <Pressable onPress={() => setPendingDeleteKey(s.key)} hitSlop={8}>
-                  <Trash2 size={16} color={palette.error.default} strokeWidth={2} />
-                </Pressable>
-              </View>
-              <View style={{ flexDirection: "row", gap: spacing[3] }}>
-                <SessionTimeInput
-                  label="Check-in"
-                  value={s.checkIn}
-                  onChange={(d) => updateSession(s.key, { checkIn: d })}
-                  date={date}
-                />
-                <SessionTimeInput
-                  label="Check-out"
-                  value={s.checkOut}
-                  onChange={(d) => updateSession(s.key, { checkOut: d })}
-                  onClear={() => updateSession(s.key, { checkOut: null })}
-                  date={date}
-                />
-              </View>
-            </View>
-          ))}
-
-          <Pressable onPress={addSession} style={styles.editAddBtn}>
-            <Plus size={16} color={colors.accent} strokeWidth={2} />
-            <AppText variant="bodyMedium" style={{ color: colors.accent }}>Add session</AppText>
-          </Pressable>
-
-          <AppInput
-            placeholder="Reason for edit"
-            value={reason}
-            onChangeText={setReason}
-            style={{ marginTop: spacing[3] }}
-          />
-        </ScrollView>
-
-        {error ? (
-          <AppText variant="caption" style={{ color: palette.error.default, marginTop: spacing[3] }}>
-            {error}
-          </AppText>
-        ) : null}
-
-        <View style={{ marginTop: spacing[4] }}>
-          <AppButton label={isSaving ? "Saving…" : "Save Changes"} onPress={handleSave} disabled={isSaving} />
-        </View>
-      </Popup>
-
-      <ConfirmModal
-        visible={!!pendingDeleteKey}
-        title="Delete session?"
-        message="This removes the session from this day's record. You'll still need to save to confirm the change."
-        confirmLabel="Delete"
-        onConfirm={() => pendingDeleteKey && removeSession(pendingDeleteKey)}
-        onCancel={() => setPendingDeleteKey(null)}
-      />
-    </>
-  )
-}
-
-function AttendanceRow({
-  record, canEdit, onEdit, expandAllSignal, canDecideOvertime, onApproveOvertime, onRejectOvertime,
-}: {
-  record: AttendanceRecord
-  canEdit: boolean
-  onEdit: (record: AttendanceRecord) => void
-  expandAllSignal: { value: boolean; token: number }
-  canDecideOvertime: boolean
-  onApproveOvertime: (record: AttendanceRecord) => void
-  onRejectOvertime: (record: AttendanceRecord) => void
-}) {
-  const { colors } = useTheme()
-  const [expanded, setExpanded] = useState(false)
-  const [pressed, setPressed] = useState(false)
-  const lastToken = useRef(expandAllSignal.token)
-  if (lastToken.current !== expandAllSignal.token) {
-    lastToken.current = expandAllSignal.token
-    if (expanded !== expandAllSignal.value) setExpanded(expandAllSignal.value)
-  }
-  const color = statusColor(record.status)
-  const firstSession = record.sessions?.[0]
-  const hasAutoClosed = record.sessions?.some((s) => s.autoClosed)
-  const hasSessions = record.sessions?.length > 0
-  const hasOpenSession = record.sessions?.some((s) => !s.checkOut && !s.autoClosed)
-  const breakExcessMinutes = record.break?.excessMinutes ?? 0
-
-  return (
-    <View
-      style={[
-        styles.row,
-        { backgroundColor: colors.surface, borderBottomColor: colors.border as string },
-      ]}
-    >
-      <Pressable
-        onPress={() => hasSessions && setExpanded((v) => !v)}
-        onPressIn={() => setPressed(true)}
-        onPressOut={() => setPressed(false)}
-        style={[styles.rowContent, { opacity: pressed && hasSessions ? 0.7 : 1 }]}
-      >
-        <View>
-          <StaffAvatar name={record.staffName} color={color} bgColor={color + "22"} />
-          {hasOpenSession && (
-            <View style={[styles.onlineDot, { borderColor: colors.surface as string }]} />
-          )}
-        </View>
-
-        <View style={styles.rowInfo}>
-          <AppText variant="bodyMedium">{toTitleCase(record.staffName)}</AppText>
-          <View style={styles.rowMeta}>
-            {firstSession?.checkIn ? (
-              <AppText variant="caption" color="secondary">
-                In: {moment(firstSession.checkIn).format("h:mm A")}
-              </AppText>
-            ) : (
-              <AppText variant="caption" color="tertiary">Not checked in</AppText>
-            )}
-            {record.totalWorkHours != null && (
-              <AppText variant="caption" color="tertiary">
-                {"  ·  "}{formatWorkHours(record.totalWorkHours)}
-              </AppText>
-            )}
-            {record.sessionCount > 1 && (
-              <AppText variant="caption" color="tertiary">
-                {"  ·  "}{record.sessionCount} sessions
-              </AppText>
-            )}
-            {record.status === "late" && !!record.lateMinutes && (
-              <AppText variant="caption" style={{ color: palette.warning.default }}>
-                {"  ·  "}{record.lateMinutes}m late
-              </AppText>
-            )}
-            <OvertimeBadge record={record} hidePending={canDecideOvertime} />
-            {canDecideOvertime && record.overtimeApprovalStatus === "pending" && (
-              <OvertimeDecisionChip record={record} onApprove={onApproveOvertime} onReject={onRejectOvertime} />
-            )}
-            {breakExcessMinutes > 0 && (
-              <AppText variant="caption" style={{ color: palette.warning.default }}>
-                {"  ·  "}{breakExcessMinutes}m over break
-              </AppText>
-            )}
-            {hasAutoClosed && (
-              <AppText variant="caption" style={{ color: palette.error.default }}>
-                {"  ·  "}Missed checkout
-              </AppText>
-            )}
-          </View>
-        </View>
-
-        <View style={[styles.statusBadge, { backgroundColor: color + "22" }]}>
-          <AppText variant="caption" style={{ color, fontSize: 11 }}>
-            {STATUS_LABEL[record.status]}
-          </AppText>
-        </View>
-
-        {canEdit && (
-          <Pressable onPress={() => onEdit(record)} hitSlop={8} style={{ marginLeft: spacing[1] }}>
-            <Pencil size={16} color={colors.text.tertiary} strokeWidth={2} />
-          </Pressable>
-        )}
-
-        {hasSessions && (
-          <View style={{ transform: [{ rotate: expanded ? "180deg" : "0deg" }], marginLeft: spacing[1] }}>
-            <ChevronDown size={18} color={colors.text.tertiary} strokeWidth={2} />
-          </View>
-        )}
-      </Pressable>
-
-      {hasSessions && (
-        <View style={styles.rowProgressBar}>
-          <SessionProgressBar record={record} color={color} />
-        </View>
-      )}
-
-      {hasSessions && (
-        <Collapsible expanded={expanded}>
-          <SessionTimeline record={record} color={color} />
-        </Collapsible>
-      )}
-    </View>
-  )
-}
-
-// ─── SessionProgressBar ───────────────────────────────────────────────────────
-
-interface ProgressSegment {
-  key: string
-  kind: "session" | "break"
-  start: number
-  end: number
-  isLive: boolean
-  label: string
-}
-
-function buildProgressSegments(record: AttendanceRecord): ProgressSegment[] {
-  const segments: ProgressSegment[] = []
-
-  record.sessions.forEach((s) => {
-    const start = moment(s.checkIn).valueOf()
-    const isLive = !s.checkOut && !s.autoClosed
-    const end = s.checkOut ? moment(s.checkOut).valueOf() : Date.now()
-    segments.push({
-      key: `session-${s.sessionNumber}`,
-      kind: "session",
-      start,
-      end,
-      isLive,
-      label: `Session ${s.sessionNumber}: ${moment(start).format("h:mm A")} – ${s.checkOut ? moment(end).format("h:mm A") : "now"}`,
-    })
-  })
-
-  const gaps = computeSessionGaps(record.sessions)
-  gaps.forEach((gap, i) => {
-    segments.push({
-      key: `break-${i}`,
-      kind: "break",
-      start: moment(gap.startTime).valueOf(),
-      end: moment(gap.endTime).valueOf(),
-      isLive: false,
-      label: `Break: ${moment(gap.startTime).format("h:mm A")} – ${moment(gap.endTime).format("h:mm A")}`,
-    })
-  })
-
-  return segments.sort((a, b) => a.start - b.start)
-}
-
-function SessionProgressBar({ record, color }: { record: AttendanceRecord; color: string }) {
-  const { colors } = useTheme()
-  const [hovered, setHovered] = useState<ProgressSegment | null>(null)
-
-  const segments = buildProgressSegments(record)
-  if (segments.length === 0) return null
-
-  function segmentColor(seg: ProgressSegment): string {
-    if (seg.kind === "session") return color
-    return palette.warning.default
-  }
-
-  return (
-    <View style={{ marginTop: spacing[2], position: "relative" }}>
-      <View style={styles.progressBarTrack}>
-        {segments.map((seg, i) => {
-          const durationMs = Math.max(seg.end - seg.start, 1)
-          const segColor = segmentColor(seg)
-
-          const hoverProps = Platform.OS === "web"
-            ? {
-                onMouseEnter: () => setHovered(seg),
-                onMouseLeave: () => setHovered(null),
-              }
-            : {}
-
-          return (
-            <View
-              key={seg.key}
-              {...hoverProps}
-              style={[
-                styles.progressBarSegment,
-                {
-                  flex: durationMs,
-                  backgroundColor: segColor,
-                  opacity: seg.isLive ? 0.85 : 1,
-                  marginLeft: i > 0 ? 2 : 0,
-                },
-              ]}
-            >
-              {seg.isLive && <View style={[styles.progressBarLiveDot, { backgroundColor: "#fff" }]} />}
-            </View>
-          )
-        })}
-      </View>
-
-      {hovered && (
-        <View
-          pointerEvents="none"
-          style={[
-            styles.progressTooltip,
-            { backgroundColor: colors.background.primary, borderColor: colors.border as string },
-          ]}
-        >
-          <AppText variant="caption" numberOfLines={1}>{hovered.label}</AppText>
-        </View>
-      )}
-    </View>
-  )
-}
-
-// ─── StaffCardDesktop ─────────────────────────────────────────────────────────
-
-function StaffCardDesktop({
-  record, canEdit, onEdit, expandAllSignal, canDecideOvertime, onApproveOvertime, onRejectOvertime,
-}: {
-  record: AttendanceRecord
-  canEdit: boolean
-  onEdit: (record: AttendanceRecord) => void
-  expandAllSignal: { value: boolean; token: number }
-  canDecideOvertime: boolean
-  onApproveOvertime: (record: AttendanceRecord) => void
-  onRejectOvertime: (record: AttendanceRecord) => void
-}) {
-  const { colors } = useTheme()
-  const [expanded, setExpanded] = useState(false)
-  const lastToken = useRef(expandAllSignal.token)
-  if (lastToken.current !== expandAllSignal.token) {
-    lastToken.current = expandAllSignal.token
-    if (expanded !== expandAllSignal.value) setExpanded(expandAllSignal.value)
-  }
-  const color = statusColor(record.status)
-  const hasAutoClosed = record.sessions?.some((s) => s.autoClosed)
-  const hasSessions = record.sessions?.length > 0
-  const hasOpenSession = record.sessions?.some((s) => !s.checkOut && !s.autoClosed)
-  const breakExcessMinutes = record.break?.excessMinutes ?? 0
-
-  return (
-    <View
-      style={[
-        styles.deskCard,
-        { backgroundColor: colors.surface, borderColor: colors.border as string },
-      ]}
-    >
-      <View style={styles.deskCardHeader}>
-        <View>
-          <StaffAvatar name={record.staffName} color={color} bgColor={color + "22"} />
-          {hasOpenSession && (
-            <View style={[styles.onlineDot, { borderColor: colors.surface as string }]} />
-          )}
-        </View>
-        <View style={{ flex: 1 }}>
-          <AppText variant="bodyMedium" numberOfLines={1}>{toTitleCase(record.staffName)}</AppText>
-          <View style={styles.deskCardMeta}>
-            {record.totalWorkHours != null && (
-              <AppText variant="caption" color="tertiary">{formatWorkHours(record.totalWorkHours)}</AppText>
-            )}
-            {record.status === "late" && !!record.lateMinutes && (
-              <AppText variant="caption" style={{ color: palette.warning.default }}>
-                {record.totalWorkHours != null ? "  ·  " : ""}{record.lateMinutes}m late
-              </AppText>
-            )}
-            <OvertimeBadge record={record} hidePending={canDecideOvertime} />
-            {canDecideOvertime && record.overtimeApprovalStatus === "pending" && (
-              <OvertimeDecisionChip record={record} onApprove={onApproveOvertime} onReject={onRejectOvertime} />
-            )}
-            {breakExcessMinutes > 0 && (
-              <AppText variant="caption" style={{ color: palette.warning.default }}>
-                {"  ·  "}{breakExcessMinutes}m over break
-              </AppText>
-            )}
-            {hasAutoClosed && (
-              <AppText variant="caption" style={{ color: palette.error.default }}>
-                {"  ·  "}Missed checkout
-              </AppText>
-            )}
-          </View>
-        </View>
-        <View style={[styles.statusBadge, { backgroundColor: color + "22" }]}>
-          <AppText variant="caption" style={{ color, fontSize: 11 }}>
-            {STATUS_LABEL[record.status]}
-          </AppText>
-        </View>
-        {canEdit && (
-          <Pressable onPress={() => onEdit(record)} hitSlop={8} style={{ marginLeft: spacing[2] }}>
-            <Pencil size={16} color={colors.text.tertiary} strokeWidth={2} />
-          </Pressable>
-        )}
-        {hasSessions && (
-          <Pressable onPress={() => setExpanded((v) => !v)} hitSlop={8} style={{ marginLeft: spacing[2] }}>
-            <View style={{ transform: [{ rotate: expanded ? "180deg" : "0deg" }] }}>
-              <ChevronDown size={18} color={colors.text.tertiary} strokeWidth={2} />
-            </View>
-          </Pressable>
-        )}
-      </View>
-
-      {hasSessions && <SessionProgressBar record={record} color={color} />}
-
-      <Collapsible expanded={expanded}>
-        <View>
-          <View style={[styles.deskCardDivider, { backgroundColor: colors.border as string }]} />
-
-          {hasSessions ? (
-            <SessionTimeline record={record} color={color} scrollable />
-          ) : (
-            <View style={styles.deskCardEmpty}>
-              <AppText variant="caption" color="tertiary">Not checked in</AppText>
-            </View>
-          )}
-        </View>
-      </Collapsible>
-    </View>
-  )
-}
-
-// ─── AttendanceScreen ─────────────────────────────────────────────────────────
+const PINNED_DEPARTMENT = "Store"
+
+type GridRow =
+  | { type: "header"; key: string; label: string; count: number }
+  | { type: "records"; key: string; items: AttendanceRecord[] }
 
 export default function AttendanceScreen() {
   const { colors, isDark } = useTheme()
@@ -1022,6 +55,9 @@ export default function AttendanceScreen() {
   const today = moment().format("YYYY-MM-DD")
   const [selectedDate, setSelectedDate] = useState(today)
   const isToday = selectedDate === today
+  const emptyMessage = isToday
+    ? "No attendance records for today"
+    : `No attendance records for ${moment(selectedDate).format("D MMM YYYY")}`
   const { isHR, isAdmin } = useRole()
   const { currentStaff } = useCurrentStaff()
   const { data: staffData } = useStaff()
@@ -1033,6 +69,7 @@ export default function AttendanceScreen() {
   const [otApprovalTarget, setOtApprovalTarget] = useState<AttendanceRecord | null>(null)
   const [editMode, setEditMode] = useState(false)
   const [expandAllSignal, setExpandAllSignal] = useState({ value: false, token: 0 })
+  const [actionError, setActionError] = useState<string | null>(null)
 
   function toggleExpandAll() {
     setExpandAllSignal((prev) => ({ value: !prev.value, token: prev.token + 1 }))
@@ -1067,75 +104,100 @@ export default function AttendanceScreen() {
   }
 
   const summary = data?.summary ?? { present: 0, late: 0, absent: 0 }
-  const records = [...(data?.data ?? [])]
-    .filter((r) => r.staffName.toLowerCase().includes(search.trim().toLowerCase()))
-    .sort((a, b) => {
-      const statusDiff = STATUS_ORDER[a.status] - STATUS_ORDER[b.status]
-      if (statusDiff !== 0) return statusDiff
-      return Number(needsAttention(b)) - Number(needsAttention(a))
+
+  const records = useMemo(() => {
+    const query = search.trim().toLowerCase()
+    return [...(data?.data ?? [])]
+      .filter((r) => r.staffName.toLowerCase().includes(query))
+      .sort((a, b) => {
+        const statusDiff = STATUS_ORDER[a.status] - STATUS_ORDER[b.status]
+        if (statusDiff !== 0) return statusDiff
+        return Number(needsAttention(b)) - Number(needsAttention(a))
+      })
+  }, [data?.data, search])
+
+  const departmentByStaffId = useMemo(() => {
+    const departmentNameById = new Map<string, string>()
+    departmentsData?.data.forEach((d) => {
+      departmentNameById.set(d._id, d.name)
     })
 
-  const departmentNameById = new Map<string, string>()
-  departmentsData?.data.forEach((d) => {
-    departmentNameById.set(d._id, d.name)
-  })
+    const byStaffId = new Map<number, string>()
+    staffData?.data.forEach((s) => {
+      const deptName = s.departmentId ? departmentNameById.get(s.departmentId) : undefined
+      byStaffId.set(s.id, deptName ?? UNASSIGNED_DEPARTMENT)
+    })
+    return byStaffId
+  }, [departmentsData?.data, staffData?.data])
 
-  const departmentById = new Map<number, string>()
-  staffData?.data.forEach((s) => {
-    const deptName = s.departmentId ? departmentNameById.get(s.departmentId) : undefined
-    departmentById.set(s.id, deptName ?? UNASSIGNED_DEPARTMENT)
-  })
+  const { departmentGroups, departmentNames } = useMemo(() => {
+    const groups = new Map<string, AttendanceRecord[]>()
+    records.forEach((r) => {
+      const dept = departmentByStaffId.get(r.staffId) ?? UNASSIGNED_DEPARTMENT
+      if (!groups.has(dept)) groups.set(dept, [])
+      groups.get(dept)!.push(r)
+    })
 
-  const departmentGroups = new Map<string, AttendanceRecord[]>()
-  records.forEach((r) => {
-    const dept = departmentById.get(r.staffId) ?? UNASSIGNED_DEPARTMENT
-    if (!departmentGroups.has(dept)) departmentGroups.set(dept, [])
-    departmentGroups.get(dept)!.push(r)
-  })
+    const names = [
+      ...(groups.has(PINNED_DEPARTMENT) ? [PINNED_DEPARTMENT] : []),
+      ...[...groups.keys()]
+        .filter((d) => d !== UNASSIGNED_DEPARTMENT && d !== PINNED_DEPARTMENT)
+        .sort(),
+      ...(groups.has(UNASSIGNED_DEPARTMENT) ? [UNASSIGNED_DEPARTMENT] : []),
+    ]
 
-  const PINNED_DEPARTMENT = "Store"
-  const departmentNames = [
-    ...(departmentGroups.has(PINNED_DEPARTMENT) ? [PINNED_DEPARTMENT] : []),
-    ...[...departmentGroups.keys()]
-      .filter((d) => d !== UNASSIGNED_DEPARTMENT && d !== PINNED_DEPARTMENT)
-      .sort(),
-    ...(departmentGroups.has(UNASSIGNED_DEPARTMENT) ? [UNASSIGNED_DEPARTMENT] : []),
-  ]
+    return { departmentGroups: groups, departmentNames: names }
+  }, [records, departmentByStaffId])
 
-  type GridRow =
-    | { type: "header"; key: string; label: string; count: number }
-    | { type: "records"; key: string; items: AttendanceRecord[] }
+  const buildGridRows = useCallback(
+    (columns: number): GridRow[] => {
+      const rows: GridRow[] = []
+      departmentNames.forEach((dept) => {
+        const items = departmentGroups.get(dept) ?? []
+        rows.push({ type: "header", key: `header-${dept}`, label: dept, count: items.length })
+        for (let i = 0; i < items.length; i += columns) {
+          rows.push({ type: "records", key: `${dept}-${i}`, items: items.slice(i, i + columns) })
+        }
+      })
+      return rows
+    },
+    [departmentNames, departmentGroups],
+  )
 
-  function buildGridRows(columns: number): GridRow[] {
-    const rows: GridRow[] = []
-    departmentNames.forEach((dept) => {
-      const items = departmentGroups.get(dept) ?? []
-      rows.push({ type: "header", key: `header-${dept}`, label: dept, count: items.length })
-      for (let i = 0; i < items.length; i += columns) {
-        rows.push({ type: "records", key: `${dept}-${i}`, items: items.slice(i, i + columns) })
+  const desktopRows = useMemo(() => buildGridRows(desktopColumns), [buildGridRows, desktopColumns])
+  const mobileRows = useMemo(() => buildGridRows(1), [buildGridRows])
+
+  const canEditRecord = useCallback(
+    (record: AttendanceRecord): boolean => {
+      if (!editMode || !currentStaff) return false
+      return record.staffId !== currentStaff.id
+    },
+    [editMode, currentStaff],
+  )
+
+  const canDecideOvertimeFor = useCallback(
+    (record: AttendanceRecord): boolean => {
+      if (!currentStaff || !(isAdmin || isHR)) return false
+      return record.staffId !== currentStaff.id
+    },
+    [currentStaff, isAdmin, isHR],
+  )
+
+  const handleRejectOvertime = useCallback(
+    async (record: AttendanceRecord) => {
+      try {
+        await attendanceService.decideOvertime(record.staffId, selectedDate, false)
+        refetch()
+      } catch (e) {
+        setActionError(
+          e instanceof Error && e.message
+            ? e.message
+            : `Could not reject overtime for ${toTitleCase(record.staffName)}. Please try again.`,
+        )
       }
-    })
-    return rows
-  }
-
-  function canEditRecord(record: AttendanceRecord): boolean {
-    if (!editMode || !currentStaff) return false
-    return record.staffId !== currentStaff.id
-  }
-
-  function canDecideOvertimeFor(record: AttendanceRecord): boolean {
-    if (!currentStaff || !(isAdmin || isHR)) return false
-    return record.staffId !== currentStaff.id
-  }
-
-  async function handleRejectOvertime(record: AttendanceRecord) {
-    try {
-      await attendanceService.decideOvertime(record.staffId, selectedDate, false)
-      refetch()
-    } catch {
-      // no-op: backend rejects invalid/unauthorized decisions, UI stays as-is
-    }
-  }
+    },
+    [selectedDate, refetch],
+  )
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background.primary }]}>
@@ -1282,7 +344,7 @@ export default function AttendanceScreen() {
       {isDesktop ? (
         <FlatList
           key={`desktop-grid-${desktopColumns}`}
-          data={buildGridRows(desktopColumns)}
+          data={desktopRows}
           keyExtractor={(row) => row.key}
           renderItem={({ item: row, index }) =>
             row.type === "header" ? (
@@ -1308,14 +370,14 @@ export default function AttendanceScreen() {
               <AttendanceListSkeleton />
             ) : (
               <View style={styles.center}>
-                <AppText color="tertiary">No attendance records for today</AppText>
+                <AppText color="tertiary">{emptyMessage}</AppText>
               </View>
             )
           }
         />
       ) : (
       <FlatList
-        data={buildGridRows(1)}
+        data={mobileRows}
         keyExtractor={(row) => row.key}
         renderItem={({ item: row, index }) =>
           row.type === "header" ? (
@@ -1337,7 +399,7 @@ export default function AttendanceScreen() {
             <AttendanceListSkeleton />
           ) : (
             <View style={styles.center}>
-              <AppText color="tertiary">No attendance records for today</AppText>
+              <AppText color="tertiary">{emptyMessage}</AppText>
             </View>
           )
         }
@@ -1352,6 +414,16 @@ export default function AttendanceScreen() {
           onClose={() => setEditTarget(null)}
           onSaved={refetch}
         />
+      )}
+
+      {/* Action error */}
+      {actionError && (
+        <Popup title="Action failed" onClose={() => setActionError(null)}>
+          <AppText color="secondary">{actionError}</AppText>
+          <View style={{ marginTop: spacing[4] }}>
+            <AppButton label="Close" onPress={() => setActionError(null)} />
+          </View>
+        </Popup>
       )}
 
       {/* Overtime approval modal */}
@@ -1438,60 +510,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginTop: spacing[4],
   },
-
-  editSessionRow: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radii.lg,
-    padding: spacing[3],
-    marginBottom: spacing[3],
-    gap: spacing[2],
-  },
-  editSessionRowHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  editTimeField: {
-    borderWidth: 1,
-    borderRadius: radii.md,
-    height: 44,
-    justifyContent: "center",
-    paddingHorizontal: spacing[3],
-  },
-  editAddBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[2],
-    paddingVertical: spacing[3],
-    justifyContent: "center",
-  },
-
-  summaryBar: {
-    flexDirection: "row",
-    paddingHorizontal: spacing[5],
-    gap: spacing[3],
-    minHeight: 64,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  statCard: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[3],
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radii.lg,
-    paddingHorizontal: spacing[4],
-    paddingVertical: spacing[3],
-  },
-  statCardIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: radii.full,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
   deskGridContent: {
     paddingHorizontal: spacing[5],
     paddingTop: spacing[4],
@@ -1515,195 +533,9 @@ const styles = StyleSheet.create({
   deptHeaderPadded: {
     paddingHorizontal: spacing[5],
   },
-  deskCard: {
-    flex: 1,
-    borderRadius: radii.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: spacing[4],
-  },
-  deskCardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[3],
-  },
-  progressBarTrack: {
-    flexDirection: "row",
-    height: 3,
-    borderRadius: radii.full,
-    backgroundColor: palette.neutral[500] + "22",
-    overflow: "hidden",
-  },
-  progressBarSegment: {
-    height: "100%",
-    borderRadius: radii.full,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  progressBarLiveDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-  },
-  progressTooltip: {
-    position: "absolute",
-    top: "100%",
-    left: 0,
-    marginTop: spacing[1],
-    paddingHorizontal: spacing[2],
-    paddingVertical: spacing[1],
-    borderRadius: radii.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    zIndex: 10,
-    elevation: 10,
-  },
-  deskCardMeta: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    marginTop: spacing[1],
-  },
-  deskCardDivider: {
-    height: StyleSheet.hairlineWidth,
-    marginVertical: spacing[3],
-  },
-  deskCardEmpty: {
-    paddingVertical: spacing[2],
-  },
-
   center: {
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: spacing[16],
-  },
-
-  row: {
-    borderBottomWidth: 1,
-  },
-  rowContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: spacing[5],
-    paddingVertical: spacing[4],
-    gap: spacing[3],
-  },
-  rowProgressBar: {
-    paddingHorizontal: spacing[5],
-    paddingBottom: spacing[3],
-  },
-  rowInfo: { flex: 1, gap: spacing[1] },
-  rowMeta: { flexDirection: "row", flexWrap: "wrap" },
-  statusBadge: {
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[1],
-    borderRadius: radii.full,
-  },
-  otChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[1],
-    paddingHorizontal: spacing[2],
-    paddingVertical: 2,
-    borderRadius: radii.full,
-    marginLeft: spacing[1],
-  },
-  onlineDot: {
-    position: "absolute",
-    bottom: -1,
-    right: -1,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: palette.success.default,
-    borderWidth: 2,
-  },
-
-  timeline: {
-    paddingHorizontal: spacing[5],
-    paddingBottom: spacing[4],
-    gap: spacing[3],
-  },
-  timelineScrollable: {
-    maxHeight: 100,
-  },
-  timelineGroup: {
-    gap: spacing[3],
-  },
-  timelineRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[2],
-  },
-  timelineLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[2],
-    width: 108,
-  },
-  sessionDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  timelineTimes: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-  },
-  timeChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[1],
-    flexShrink: 0,
-    minWidth: 78,
-  },
-  timeDash: {
-    width: 16,
-    height: StyleSheet.hairlineWidth,
-    marginHorizontal: spacing[2],
-    flexShrink: 0,
-  },
-  liveBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[1],
-    paddingHorizontal: spacing[2],
-    paddingVertical: 2,
-    borderRadius: radii.full,
-  },
-  liveBadgeDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: palette.success.default,
-  },
-
-  // Modal
-  searchWrap: {
-    paddingHorizontal: spacing[5],
-    paddingVertical: spacing[3],
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  staffRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: spacing[5],
-    paddingVertical: spacing[4],
-    borderBottomWidth: 1,
-    gap: spacing[3],
-  },
-
-  scanBottom: {
-    alignItems: "center",
-    paddingBottom: spacing[12],
-    paddingTop: spacing[6],
-  },
-  scanBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[3],
-    paddingHorizontal: spacing[8],
-    paddingVertical: spacing[4],
-    borderRadius: radii.lg,
-    borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.4)",
   },
 })

@@ -58,14 +58,42 @@ function ChipsSection({
   disabledNote?: string
   remarks: string
   onRemarksChange: (remarks: string) => void
-  onRemarksSave: (remarks: string) => void
+  onRemarksSave: (remarks: string, violations?: string[]) => void
 }) {
   const { colors } = useTheme()
   const [draftRemarks, setDraftRemarks] = useState(remarks)
   const [notesOpen, setNotesOpen] = useState(false)
+  const [pendingToggleKey, setPendingToggleKey] = useState<string | null>(null)
   useEffect(() => setDraftRemarks(remarks), [remarks])
   const isAllOk = activeKeys.length === 0
   const hasRemarks = remarks.trim().length > 0
+
+  // The API rejects a violation with no remark, so a toggle that would create
+  // one opens the notes popover instead of firing a request that cannot succeed.
+  function handleChipPress(key: string) {
+    if (isUpdating) return
+    const wouldBeActive = activeKeys.includes(key) ? activeKeys.filter((k) => k !== key) : [...activeKeys, key]
+    if (wouldBeActive.length > 0 && !hasRemarks) {
+      setPendingToggleKey(key)
+      setDraftRemarks(remarks)
+      setNotesOpen(true)
+      return
+    }
+    onToggle(key)
+  }
+
+  function closeNotes() {
+    setPendingToggleKey(null)
+    setNotesOpen(false)
+  }
+
+  // What the violation state will be once a pending chip toggle is applied.
+  const pendingKeys = pendingToggleKey
+    ? activeKeys.includes(pendingToggleKey)
+      ? activeKeys.filter((k) => k !== pendingToggleKey)
+      : [...activeKeys, pendingToggleKey]
+    : activeKeys
+  const willHaveIssues = pendingKeys.length > 0
 
   if (disabled) {
     return (
@@ -125,7 +153,7 @@ function ChipsSection({
           return (
             <Pressable
               key={item.key}
-              onPress={() => !isUpdating && onToggle(item.key)}
+              onPress={() => handleChipPress(item.key)}
               disabled={isUpdating}
               style={({ pressed, hovered }: any) => [
                 styles.chip,
@@ -151,15 +179,15 @@ function ChipsSection({
       </View>
 
       {notesOpen ? (
-        <Modal transparent animationType="fade" onRequestClose={() => setNotesOpen(false)} visible={notesOpen}>
-          <Pressable style={styles.sheetModalBackdrop} onPress={() => setNotesOpen(false)}>
+        <Modal transparent animationType="fade" onRequestClose={closeNotes} visible={notesOpen}>
+          <Pressable style={styles.sheetModalBackdrop} onPress={closeNotes}>
             <Pressable
               style={[styles.sheetPopover, { backgroundColor: colors.background.primary, borderColor: colors.border }]}
               onPress={(e) => e.stopPropagation()}
             >
               <View style={styles.sheetPopoverHeader}>
                 <AppText variant="heading3">{title}</AppText>
-                {isAllOk ? (
+                {!willHaveIssues ? (
                   <View style={[styles.badge, { backgroundColor: palette.success.default + "18" }]}>
                     <Check size={13} color={palette.success.default} strokeWidth={2.5} />
                     <AppText variant="bodySmall" style={{ color: palette.success.default }}>OK</AppText>
@@ -168,13 +196,13 @@ function ChipsSection({
                   <View style={[styles.badge, { backgroundColor: palette.error.default + "18" }]}>
                     <AlertCircle size={13} color={palette.error.default} strokeWidth={2} />
                     <AppText variant="bodySmall" style={{ color: palette.error.default }}>
-                      {activeKeys.length} issue{activeKeys.length > 1 ? "s" : ""}
+                      {pendingKeys.length} issue{pendingKeys.length > 1 ? "s" : ""}
                     </AppText>
                   </View>
                 )}
               </View>
               <AppText variant="bodySmall" color="secondary" style={{ marginBottom: spacing[2] }}>
-                {isAllOk ? "Remarks" : "Remarks (required)"}
+                {willHaveIssues ? "Remarks (required)" : "Remarks"}
               </AppText>
               <AppInput
                 placeholder="Add a note..."
@@ -185,8 +213,12 @@ function ChipsSection({
               <AppButton
                 label="Save"
                 size="md"
-                onPress={() => { onRemarksChange(draftRemarks); onRemarksSave(draftRemarks); setNotesOpen(false) }}
-                disabled={isUpdating || (!isAllOk && draftRemarks.trim().length === 0)}
+                onPress={() => {
+                  onRemarksChange(draftRemarks)
+                  onRemarksSave(draftRemarks, pendingKeys)
+                  closeNotes()
+                }}
+                disabled={isUpdating || (willHaveIssues && draftRemarks.trim().length === 0)}
                 style={{ marginTop: spacing[3] }}
               />
             </Pressable>
@@ -210,7 +242,7 @@ function StaffDailyCheckCard({
   isUpdating: (category: string) => boolean
   onToggle: (category: string, key: string) => void
   onRemarksChange: (category: string, remarks: string) => void
-  onRemarksSave: (category: string, remarks: string) => void
+  onRemarksSave: (category: string, remarks: string, violations?: string[]) => void
 }) {
   const { colors } = useTheme()
   const isAllOk = record.categories.every((c) => (record.violationsByCategory[c.category] ?? []).length === 0)
@@ -266,7 +298,7 @@ function StaffDailyCheckCard({
           disabledNote={category.note}
           remarks={record.remarksByCategory[category.category] ?? ""}
           onRemarksChange={(remarks) => onRemarksChange(category.category, remarks)}
-          onRemarksSave={(remarks) => onRemarksSave(category.category, remarks)}
+          onRemarksSave={(remarks, violations) => onRemarksSave(category.category, remarks, violations)}
         />
       ))}
     </AppCard>
@@ -744,8 +776,11 @@ export default function DailyCheckScreen() {
         }
       )
     },
-    onError: () => {
-      Toast.show({ type: "error", text1: "Failed to save" })
+    onError: (_e, { apiBasePath }) => {
+      // The optimistic write is now known to be wrong, so drop it and refetch
+      // rather than leaving the screen showing a state the server rejected.
+      queryClient.invalidateQueries({ queryKey: ["category-today", apiBasePath, selectedDate] })
+      Toast.show({ type: "error", text1: "Failed to save", text2: "Your change was not applied" })
     },
     onSettled: (_, __, { category, staffId }) => {
       setUpdatingKeys((prev) => {
@@ -761,6 +796,7 @@ export default function DailyCheckScreen() {
     const current = record?.violationsByCategory[category] ?? []
     const isBad = current.includes(key)
     const updated = isBad ? current.filter((k) => k !== key) : [...current, key]
+    const remarks = record?.remarksByCategory[category] ?? ""
 
     queryClient.setQueryData(
       ["category-today", apiBasePath, selectedDate],
@@ -772,6 +808,10 @@ export default function DailyCheckScreen() {
         return { ...old, data: { ...old.data, staff } }
       }
     )
+
+    // The optimistic cache write above only changes what is on screen. Without
+    // this the toggle is never persisted and is lost on the next refetch.
+    handleSave(staffId, category, apiBasePath, remarks, updated)
   }
 
   function handleRemarksChange(staffId: number, category: string, apiBasePath: string, remarks: string) {
@@ -808,6 +848,16 @@ export default function DailyCheckScreen() {
     }
     return result
   }, [records, search, issuesOnly])
+
+  // Empty lists are usually the result of a filter, so say which one rather
+  // than implying there are no staff at all.
+  const emptyMessage = search
+    ? "No staff match your search"
+    : issuesOnly
+      ? "No staff with issues"
+      : selectedDepartment
+        ? `No staff in ${selectedDepartment}`
+        : "No staff records found"
 
   const { width: winWidth } = useWindowDimensions()
   const numColumns = winWidth >= 1400 ? 3 : winWidth >= 1024 ? 3 : winWidth >= 768 ? 2 : 1
@@ -962,10 +1012,21 @@ export default function DailyCheckScreen() {
         />
       </View>
 
+      {!isToday && (
+        <View style={[styles.pastBanner, { backgroundColor: palette.warning.default + "14", borderBottomColor: colors.border }]}>
+          <AlertCircle size={15} color={palette.warning.default} strokeWidth={2} />
+          <AppText variant="bodySmall" style={{ color: palette.warning.default }}>
+            You are editing {displayDate}, not today
+          </AppText>
+        </View>
+      )}
+
       {/* Legend */}
       <View style={[styles.legend, { backgroundColor: colors.background.secondary, borderBottomColor: colors.border }]}>
         <AppText variant="bodySmall" color="tertiary">
-          Tap any item on a staff card to toggle its violation status
+          {viewMode === "sheet"
+            ? "Tap any cell to review and record its violations"
+            : "Tap any item on a staff card to toggle its violation status"}
         </AppText>
         <View style={styles.legendItems}>
           <View style={styles.legendItem}>
@@ -989,7 +1050,7 @@ export default function DailyCheckScreen() {
         ) : filteredRecords.length === 0 ? (
           <View style={styles.center}>
             <AppText color="tertiary">
-              {search ? "No staff match your search" : "No staff records found"}
+              {emptyMessage}
             </AppText>
           </View>
         ) : (
@@ -1048,10 +1109,10 @@ export default function DailyCheckScreen() {
                         if (!def) return
                         handleRemarksChange(item.staffId, category, def.apiBasePath, remarks)
                       }}
-                      onRemarksSave={(category, remarks) => {
+                      onRemarksSave={(category, remarks, violations) => {
                         const def = item.categories.find((c) => c.category === category)
                         if (!def) return
-                        handleSave(item.staffId, category, def.apiBasePath, remarks)
+                        handleSave(item.staffId, category, def.apiBasePath, remarks, violations)
                       }}
                     />
                   </View>
@@ -1066,7 +1127,7 @@ export default function DailyCheckScreen() {
             ) : (
               <View style={styles.center}>
                 <AppText color="tertiary">
-                  {search ? "No staff match your search" : "No staff records found"}
+                  {emptyMessage}
                 </AppText>
               </View>
             )
@@ -1078,6 +1139,14 @@ export default function DailyCheckScreen() {
 }
 
 const styles = StyleSheet.create({
+  pastBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[2],
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[2],
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
   screen: { flex: 1 },
   header: {
     paddingHorizontal: spacing[5],
