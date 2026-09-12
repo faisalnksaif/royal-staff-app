@@ -13,6 +13,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ListChecks,
+  BriefcaseBusiness,
   MessageSquareQuote,
   Wallet,
 } from "lucide-react-native"
@@ -32,6 +33,7 @@ const NAV_ITEMS = [
   { label: "Follow-ups",  href: "/(tabs)/followups",       icon: ClipboardList,   match: "followups" },
   { label: "Leaves",      href: "/(tabs)/leaves",          icon: CalendarClock,   match: "leaves" },
   { label: "Salary",      href: "/(tabs)/salary",          icon: Wallet,          match: "salary" },
+  { label: "My Work",     href: "/(tabs)/work",            icon: BriefcaseBusiness, match: "work" },
   { label: "Todo",        href: "/(tabs)/todo",            icon: ListChecks,      match: "todo" },
   { label: "Performance", href: "/(tabs)/extra-performance", icon: Award,         match: "extra-performance" },
   { label: "Testimonials", href: "/(tabs)/testimonials",   icon: MessageSquareQuote, match: "testimonials" },
@@ -165,6 +167,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="customers"         options={{ href: null }} />
       <Tabs.Screen name="leaves"            options={{ href: null }} />
       <Tabs.Screen name="salary"            options={{ href: null }} />
+      <Tabs.Screen name="work"              options={{ href: null }} />
       <Tabs.Screen name="todo"              options={{ href: null }} />
       <Tabs.Screen name="extra-performance" options={{ href: null }} />
       <Tabs.Screen name="testimonials"      options={{ href: null }} />

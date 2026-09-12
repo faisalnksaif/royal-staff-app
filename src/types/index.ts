@@ -48,6 +48,8 @@ export interface ShiftResponse {
   startTime: string
   endTime1: string
   endTime2: string
+  breakAllowanceMinutes: number
+  fridayBreakAllowanceMinutes: number
   isDefault?: boolean
   createdAt?: string
   updatedAt?: string
@@ -1357,4 +1359,103 @@ export interface SalaryAdvance {
   approvedByName?: string | null
   approvedAt?: string | null
   rejectionReason?: string | null
+}
+
+// ─── Work scheduling ─────────────────────────────────────────────────────────
+
+export type WorkStatus = "pending" | "in_progress" | "completed" | "cancelled"
+export type WorkPriority = "low" | "normal" | "high"
+export type RecurrenceFrequency = "none" | "daily" | "weekly" | "monthly"
+
+export interface WorkRecurrence {
+  frequency: RecurrenceFrequency
+  interval: number
+  daysOfWeek: number[]
+  dayOfMonth: number | null
+  until: string | null
+}
+
+export interface WorkStatusEvent {
+  status: WorkStatus
+  note: string | null
+  byStaffId: number
+  at: string
+}
+
+/** A single occurrence - what an assignee actually works on. */
+export interface WorkAssignment {
+  _id: string
+  scheduleId: string
+  assigneeStaffId: number
+  assignedByStaffId: number
+  title: string
+  description: string | null
+  priority: WorkPriority
+  dueDate: string
+  deadline: string
+  status: WorkStatus
+  statusHistory: WorkStatusEvent[]
+  completionNote: string | null
+  startedAt: string | null
+  completedAt: string | null
+  isLate: boolean
+  createdAt?: string
+  updatedAt?: string
+}
+
+/** The work definition, including its recurrence rule. */
+export interface WorkScheduleResponse {
+  _id: string
+  title: string
+  description: string | null
+  assigneeStaffId: number
+  assignedByStaffId: number
+  assignedByRole: string
+  priority: WorkPriority
+  startDate: string
+  dueTime: string | null
+  recurrence: WorkRecurrence
+  isActive: boolean
+  lastGeneratedDate: string | null
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface AssignableStaff {
+  staffId: number
+  name: string
+  role: UserRole
+  departmentId?: string
+}
+
+export interface AssignableStaffResponse {
+  success: boolean
+  count: number
+  allowedRoles: UserRole[]
+  data: AssignableStaff[]
+}
+
+export interface WorkAssignmentListResponse {
+  success: boolean
+  count: number
+  data: WorkAssignment[]
+}
+
+export interface WorkScheduleListResponse {
+  success: boolean
+  count: number
+  data: WorkScheduleResponse[]
+}
+
+export interface WorkSummary {
+  staffId: number
+  from: string
+  to: string
+  total: number
+  completed: number
+  late: number
+  pending: number
+  cancelled: number
+  onTimeRate: number
+  completionRate: number
 }

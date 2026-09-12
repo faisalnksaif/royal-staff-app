@@ -1,7 +1,8 @@
 import { formatAmount, toTitleCase } from "../../utils/helpers"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { View, FlatList, ActivityIndicator, StyleSheet, Pressable, TextInput, ScrollView } from "react-native"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useRouter } from "expo-router"
 import { Check, X, Plus, RefreshCw, Wallet, Clock, Banknote, History } from "lucide-react-native"
 import Toast from "react-native-toast-message"
 import moment from "moment"
@@ -825,8 +826,19 @@ function PayrollTab() {
 export default function SalaryScreen() {
   const { colors } = useTheme()
   const { isTablet } = useTablet()
-  const { isSuperAdmin } = useRole()
+  const { isSuperAdmin, isManager } = useRole()
+  const router = useRouter()
   const [view, setView] = useState<SalaryView>("structures")
+
+  // Salary is superAdmin/manager only - HR is bounced out even if they reach
+  // this route directly, since hiding the nav entry alone wouldn't stop them.
+  const canViewSalary = isSuperAdmin || isManager
+
+  useEffect(() => {
+    if (!canViewSalary) router.replace("/(admin)")
+  }, [canViewSalary])
+
+  if (!canViewSalary) return null
 
   const tabs: Array<{ label: string; value: SalaryView; icon: React.ComponentType<any> }> = [
     { label: "Structures", value: "structures", icon: Banknote },
