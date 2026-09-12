@@ -51,14 +51,58 @@ Notifications.setNotificationHandler({
   }),
 })
 
+/**
+ * Everything a notification tap should do, shared by the live listener and
+ * the cold-start path so the two can never diverge.
+ */
+function handleNotificationTap(
+  data: NotificationData,
+  role: string | undefined,
+  router: ReturnType<typeof useRouter>,
+  queryClient: ReturnType<typeof useQueryClient>
+) {
+  queryClient.invalidateQueries({ queryKey: ["staff-outstanding"] })
+  queryClient.invalidateQueries({ queryKey: ["staff-followups"] })
+  queryClient.invalidateQueries({ queryKey: ["notifications"] })
+
+  if (data?.ledgerId) {
+    queryClient.invalidateQueries({ queryKey: ["customer-followups", String(data.ledgerId)] })
+  }
+
+  if (isWorkNotification(data)) {
+    queryClient.invalidateQueries({ queryKey: ["work"] })
+    router.push(workRouteFor(data, role))
+    return
+  }
+
+  if (data?.ledgerName) {
+    router.push({
+      pathname: "/customer/[name]",
+      params: {
+        name: data.ledgerName,
+        totalBalance: "0",
+        drCr: "Dr",
+        customerId: String(data.ledgerId ?? ""),
+        mobile: "",
+      },
+    })
+  }
+}
+
 export function usePushNotifications(enabled: boolean) {
   const router = useRouter()
   const queryClient = useQueryClient()
   const role = useAuthStore((s) => s.user?.role)
+  const lastResponse = Notifications.useLastNotificationResponse()
   // The effect only re-runs on `enabled`, so the listener would close over a
   // stale role - a ref keeps the current one available at tap time.
   const roleRef = useRef(role)
   roleRef.current = role
+
+  // Notification ids already routed, so the cold-start response (which
+  // persists and re-reports) can't navigate a second time for a tap the
+  // live listener already handled.
+  const handledResponseIds = useRef<Set<string>>(new Set())
 
   const notificationListener = useRef<EventSubscription | null>(null)
   const responseListener = useRef<EventSubscription | null>(null)
@@ -102,34 +146,11 @@ export function usePushNotifications(enabled: boolean) {
       }
     })
 
-    // Navigate to the relevant customer when a notification is tapped
+    // Navigate when a notification is tapped while the app is running.
     responseListener.current = Notifications.addNotificationResponseReceivedListener((response) => {
+      handledResponseIds.current.add(response.notification.request.identifier)
       const data = response.notification.request.content.data as NotificationData
-      // Refresh everything on tap too
-      queryClient.invalidateQueries({ queryKey: ["staff-outstanding"] })
-      queryClient.invalidateQueries({ queryKey: ["staff-followups"] })
-      queryClient.invalidateQueries({ queryKey: ["notifications"] })
-      if (data?.ledgerId) {
-        queryClient.invalidateQueries({ queryKey: ["customer-followups", String(data.ledgerId)] })
-      }
-      if (isWorkNotification(data)) {
-        queryClient.invalidateQueries({ queryKey: ["work"] })
-        router.push(workRouteFor(data, roleRef.current))
-        return
-      }
-
-      if (data?.ledgerName) {
-        router.push({
-          pathname: "/customer/[name]",
-          params: {
-            name: data.ledgerName,
-            totalBalance: "0",
-            drCr: "Dr",
-            customerId: String(data.ledgerId ?? ""),
-            mobile: "",
-          },
-        })
-      }
+      handleNotificationTap(data, roleRef.current, router, queryClient)
     })
 
     return () => {
@@ -137,4 +158,31 @@ export function usePushNotifications(enabled: boolean) {
       responseListener.current?.remove()
     }
   }, [enabled])
+
+  // Cold start: a tap that launched the app from a killed state never reaches
+  // the listener above, since it happened before this effect ran. This hook
+  // reports that response instead - it persists and re-reports on re-render,
+  // so it's cleared once handled and guarded by id against double navigation.
+  useEffect(() => {
+    if (Platform.OS === "web") return
+    if (!lastResponse) return
+
+    // Only a plain tap should navigate - action buttons are not a "open this".
+    if (lastResponse.actionIdentifier !== Notifications.DEFAULT_ACTION_IDENTIFIER) return
+
+    // Auth rehydrates from storage asynchronously, so on a cold start this
+    // runs before `enabled` flips true. Waiting rather than returning keeps
+    // the response for the re-run once the user is loaded - otherwise the
+    // tap is dropped, since `lastResponse` never changes again to retrigger.
+    if (!enabled) return
+
+    const id = lastResponse.notification.request.identifier
+    if (handledResponseIds.current.has(id)) return
+    handledResponseIds.current.add(id)
+
+    const data = lastResponse.notification.request.content.data as NotificationData
+    handleNotificationTap(data, role, router, queryClient)
+
+    Notifications.clearLastNotificationResponse()
+  }, [enabled, lastResponse, role])
 }
