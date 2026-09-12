@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react"
 import { View, FlatList, ActivityIndicator, Pressable, StyleSheet } from "react-native"
 import { useQueryClient, useMutation } from "@tanstack/react-query"
+import { useLocalSearchParams } from "expo-router"
 import { Plus, XCircle, Repeat, ClipboardList, StopCircle, Play, CheckCircle2 } from "lucide-react-native"
 import moment from "moment"
 import BackButton from "../../components/shared/BackButton"
@@ -69,7 +70,10 @@ export default function TeamWorkScreen() {
   const { isSuperAdmin } = useRole()
   const queryClient = useQueryClient()
 
-  const [tab, setTab] = useState<Tab>("mine")
+  // A work push deep-links here with ?tab= so the notification opens on the
+  // side it concerns - incoming work vs work you handed out.
+  const { tab: tabParam } = useLocalSearchParams<{ tab?: string }>()
+  const [tab, setTab] = useState<Tab>(tabParam === "assigned" ? "assigned" : "mine")
   const [statusTarget, setStatusTarget] = useState<{
     work: WorkAssignment
     intent: "in_progress" | "completed"
