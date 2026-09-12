@@ -30,6 +30,20 @@ export interface ShiftResponse {
    * @example "19:00"
    */
   endTime2: string;
+  /**
+   * Total daily break allowance in minutes on a normal day, covering all break gaps combined. 0 means this shift gets no break time.
+   * @min 0
+   * @max 480
+   * @example 50
+   */
+  breakAllowanceMinutes: number;
+  /**
+   * Total daily break allowance in minutes on Fridays (longer, to cover Jumu'ah).
+   * @min 0
+   * @max 480
+   * @example 140
+   */
+  fridayBreakAllowanceMinutes: number;
   /** @example true */
   isDefault?: boolean;
   /** @format date-time */
@@ -3828,6 +3842,7 @@ export class Api<SecurityDataType extends unknown> {
               };
               totalFollowedUpAmount?: number;
               totalPromisedAmount?: number;
+              /** Amount actually recovered via this staff member's own follow-ups (sum of FollowUp.amountRecovered on their resolved follow-ups) - independent of who currently owns the paying customer, so unlike total_outstanding this does not shift when a customer is reassigned. */
               totalPaidAmount?: number;
             }[];
           };
@@ -4116,16 +4131,19 @@ export class Api<SecurityDataType extends unknown> {
              * @example 0
              */
             lateMinutes?: number;
-            /** Combined daily break allowance, summed across all session gaps that day. Allowance is 40 minutes on normal days, 140 minutes on Friday. */
+            /** Total break time across all session gaps in the day, measured against a single daily allowance. Staff may take their break time whenever they like during the day. The allowance is configured per shift (see the Shifts endpoints) - it varies between shifts and may be 0 for shifts with no break time. */
             break?: {
               /**
-               * Summed gap minutes across all breaks that day; null if there were no gaps
-               * @example 15
+               * Total minutes across all break gaps that day; null if there were no gaps
+               * @example 45
                */
               minutes?: number | null;
-              /** @example 40 */
+              /**
+               * This staff member's shift allowance for this date (the shift's Friday allowance when the date is a Friday)
+               * @example 50
+               */
               allowanceMinutes?: number;
-              /** @example 0 */
+              /** @example 5 */
               excessMinutes?: number;
             };
             status?: "present" | "absent" | "late" | "half-day";
@@ -4567,7 +4585,7 @@ export class Api<SecurityDataType extends unknown> {
   };
   shifts = {
     /**
-     * @description Retrieve all defined shifts (name, startTime/endTime1/endTime2). Manager/HR/superAdmin only.
+     * @description Retrieve all defined shifts (name, startTime/endTime1/endTime2, break allowances). Manager/HR/superAdmin only.
      *
      * @tags Shifts
      * @name ShiftsList
@@ -4594,7 +4612,7 @@ export class Api<SecurityDataType extends unknown> {
       }),
 
     /**
-     * @description Create a new shift definition. Manager/HR/superAdmin only.
+     * @description Create a new shift definition, including its daily break allowance. Manager/HR/superAdmin only.
      *
      * @tags Shifts
      * @name ShiftsCreate
@@ -4615,6 +4633,20 @@ export class Api<SecurityDataType extends unknown> {
         endTime1: string;
         /** @example "17:30" */
         endTime2: string;
+        /**
+         * Total daily break allowance in minutes on a normal day, covering all break gaps combined. 0 means this shift gets no break time. Optional - defaults to 50 when omitted.
+         * @min 0
+         * @max 480
+         * @example 50
+         */
+        breakAllowanceMinutes?: number;
+        /**
+         * Total daily break allowance in minutes on Fridays (longer, to cover Jumu'ah). Optional - defaults to 140 when omitted.
+         * @min 0
+         * @max 480
+         * @example 140
+         */
+        fridayBreakAllowanceMinutes?: number;
       },
       params: RequestParams = {},
     ) =>
@@ -4661,7 +4693,7 @@ export class Api<SecurityDataType extends unknown> {
       }),
 
     /**
-     * @description Update a shift's name and/or hours. Applies to every staff member currently assigned to this shift.
+     * @description Update a shift's name, hours and/or break allowances. Applies to every staff member currently assigned to this shift.
      *
      * @tags Shifts
      * @name ShiftsPartialUpdate
@@ -4680,6 +4712,20 @@ export class Api<SecurityDataType extends unknown> {
         endTime1?: string;
         /** @example "17:30" */
         endTime2?: string;
+        /**
+         * Total daily break allowance in minutes on a normal day, covering all break gaps combined. 0 means this shift gets no break time.
+         * @min 0
+         * @max 480
+         * @example 50
+         */
+        breakAllowanceMinutes?: number;
+        /**
+         * Total daily break allowance in minutes on Fridays (longer, to cover Jumu'ah).
+         * @min 0
+         * @max 480
+         * @example 140
+         */
+        fridayBreakAllowanceMinutes?: number;
       },
       params: RequestParams = {},
     ) =>
@@ -5221,6 +5267,52 @@ export class Api<SecurityDataType extends unknown> {
       }),
 
     /**
+     * @description Deletes a half-day leave that was auto-created by the attendance lateness policy (4th+ occurrence in a month of arriving >= 31 min late) and reverts the linked Attendance record's status back to 'late'. Use when the staff member has a valid reason for the lateness. Only leaves auto-generated for this purpose can be deleted via this endpoint, regardless of their approve/reject status.
+     *
+     * @tags Leaves
+     * @name HalfDayDelete
+     * @summary Delete an auto-generated half-day leave (ADMIN/HR/SUPER ADMIN)
+     * @request DELETE:/leaves/{leaveId}/half-day
+     * @secure
+     */
+    halfDayDelete: (
+      leaveId: string,
+      data: {
+        /**
+         * Reason for deleting the auto-generated half-day leave (audit trail)
+         * @example "Staff had a valid medical reason for being late"
+         */
+        reason: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          /** @example true */
+          success?: boolean;
+          data?: {
+            id?: string;
+            /** @example "Half-day leave deleted and attendance reverted to late" */
+            message?: string;
+          };
+        },
+        {
+          /** @example false */
+          success?: boolean;
+          /** @example "This leave was not auto-generated for a half-day attendance rule and cannot be deleted via this endpoint." */
+          error?: string;
+        } | void
+      >({
+        path: `/leaves/${leaveId}/half-day`,
+        method: "DELETE",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
      * @description Retrieve aggregated leave statistics across the organization
      *
      * @tags Leaves
@@ -5458,6 +5550,443 @@ export class Api<SecurityDataType extends unknown> {
         secure: true,
         type: ContentType.Json,
         format: "json",
+        ...params,
+      }),
+  };
+  salary = {
+    /**
+     * @description HR proposes basic pay and incentives for a staff member. Takes effect only once approved by a superAdmin.
+     *
+     * @tags Salary
+     * @name StructureProposeCreate
+     * @summary Propose a salary structure (HR)
+     * @request POST:/salary/structure/propose
+     * @secure
+     */
+    structureProposeCreate: (
+      data: {
+        /** Users.user_id of the staff member */
+        staffId: number;
+        /** @example 25000 */
+        basicPay: number;
+        /**
+         * Manually set for now; phase 2 will drive this from follow-up/ledger scoring
+         * @example 0
+         */
+        incentives?: number;
+        /**
+         * @format date
+         * @example "2026-08-01"
+         */
+        effectiveFrom: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<void, void>({
+        path: `/salary/structure/propose`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        ...params,
+      }),
+
+    /**
+     * @description Approves a pending salary structure. Any previously active structure for the same staff member is superseded.
+     *
+     * @tags Salary
+     * @name StructureApproveUpdate
+     * @summary Approve a proposed salary structure (SUPER ADMIN)
+     * @request PUT:/salary/structure/{structureId}/approve
+     * @secure
+     */
+    structureApproveUpdate: (structureId: string, params: RequestParams = {}) =>
+      this.http.request<void, void>({
+        path: `/salary/structure/${structureId}/approve`,
+        method: "PUT",
+        secure: true,
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @tags Salary
+     * @name StructureRejectUpdate
+     * @summary Reject a proposed salary structure (SUPER ADMIN)
+     * @request PUT:/salary/structure/{structureId}/reject
+     * @secure
+     */
+    structureRejectUpdate: (
+      structureId: string,
+      data: {
+        rejectionReason: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<void, void>({
+        path: `/salary/structure/${structureId}/reject`,
+        method: "PUT",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        ...params,
+      }),
+
+    /**
+     * @description Returns one row per staff member with an active salary structure, enriched with their name.
+     *
+     * @tags Salary
+     * @name StructureList
+     * @summary Get every staff member's active salary structure (MANAGERS/HR/SUPER ADMIN)
+     * @request GET:/salary/structure
+     * @secure
+     */
+    structureList: (params: RequestParams = {}) =>
+      this.http.request<void, void>({
+        path: `/salary/structure`,
+        method: "GET",
+        secure: true,
+        ...params,
+      }),
+
+    /**
+     * @description Returns the active structure plus any pending proposals. Staff can view own, HR/managers/superAdmin can view any.
+     *
+     * @tags Salary
+     * @name StructureDetail
+     * @summary Get a staff member's salary structure
+     * @request GET:/salary/structure/{staffId}
+     * @secure
+     */
+    structureDetail: (staffId: number, params: RequestParams = {}) =>
+      this.http.request<void, void>({
+        path: `/salary/structure/${staffId}`,
+        method: "GET",
+        secure: true,
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @tags Salary
+     * @name StructureHistoryList
+     * @summary Get a staff member's salary structure history (MANAGERS/HR/SUPER ADMIN)
+     * @request GET:/salary/structure/{staffId}/history
+     * @secure
+     */
+    structureHistoryList: (staffId: number, params: RequestParams = {}) =>
+      this.http.request<void, void>({
+        path: `/salary/structure/${staffId}/history`,
+        method: "GET",
+        secure: true,
+        ...params,
+      }),
+
+    /**
+     * @description Computes net pay from the active salary structure, deducting per-day amounts for unpaid absences and half-days, and any approved advances for the month. Fails if a final (non-partial) payroll for that staff/month/year was already generated, or if no active salary structure exists. If called for the current, still-in-progress month, the result is marked isPartial - only days up to today are counted (future days are never silently treated as paid) - and calling this again later for the same month replaces that partial record instead of erroring as a duplicate.
+     *
+     * @tags Salary
+     * @name PayrollGenerateCreate
+     * @summary Generate monthly payroll for a staff member (MANAGERS/HR/SUPER ADMIN)
+     * @request POST:/salary/payroll/generate
+     * @secure
+     */
+    payrollGenerateCreate: (
+      data: {
+        staffId: number;
+        /**
+         * @min 1
+         * @max 12
+         */
+        month: number;
+        year: number;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            staffId?: number;
+            month?: number;
+            year?: number;
+            basicPay?: number;
+            incentives?: number;
+            daysInMonth?: number;
+            perDayPay?: number;
+            unpaidAbsenceDays?: number;
+            halfDays?: number;
+            /** One entry per deducted date, explaining the deduction */
+            deductionDetails?: {
+              /** @format date */
+              date?: string;
+              type?: "absent" | "half-day";
+              /** @example "Unapproved absence" */
+              reason?: string;
+              /** @example 1 */
+              days?: number;
+              amount?: number;
+            }[];
+            /** Total deducted for unpaid absences and half-days (sum of deductionDetails.amount) */
+            deductionAmount?: number;
+            /** Total approved SalaryAdvance amount for the month, subtracted from net pay */
+            advanceDeducted?: number;
+            /** basicPay + incentives */
+            grossPay?: number;
+            /** grossPay - deductionAmount - advanceDeducted */
+            netPay?: number;
+            /** True if this was generated before the target month ended - deductions/netPay only reflect days up to periodEnd, not the full month. A partial record can be regenerated later once the month actually ends (does not error as a duplicate); a non-partial one cannot. */
+            isPartial?: boolean;
+            /**
+             * Last day actually counted for this payroll - the last day of the month, unless isPartial is true (in which case it's today, the date it was generated)
+             * @format date
+             */
+            periodEnd?: string;
+            /** @example "generated" */
+            status?: string;
+          };
+        },
+        void
+      >({
+        path: `/salary/payroll/generate`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Runs payroll generation for every staff member with an active salary structure, for the given month/year. Each staff member is processed independently - one failure (duplicate payroll, no active structure as of that month, etc.) does not stop the rest. Returns a per-staff outcome list.
+     *
+     * @tags Salary
+     * @name PayrollGenerateAllCreate
+     * @summary Generate monthly payroll for every staff member (MANAGERS/HR/SUPER ADMIN)
+     * @request POST:/salary/payroll/generate-all
+     * @secure
+     */
+    payrollGenerateAllCreate: (
+      data: {
+        /**
+         * @min 1
+         * @max 12
+         */
+        month: number;
+        year: number;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<
+        {
+          success?: boolean;
+          data?: {
+            totalStaff?: number;
+            generated?: number;
+            failed?: number;
+            results?: {
+              staffId?: number;
+              success?: boolean;
+              error?: string | null;
+              /** Full PayrollRecord on success (see POST /salary/payroll/generate response), including deductionDetails */
+              payslip?: object | null;
+            }[];
+          };
+        },
+        void
+      >({
+        path: `/salary/payroll/generate-all`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @tags Salary
+     * @name PayslipsMyList
+     * @summary Get my payslips
+     * @request GET:/salary/payslips/my
+     * @secure
+     */
+    payslipsMyList: (params: RequestParams = {}) =>
+      this.http.request<void, any>({
+        path: `/salary/payslips/my`,
+        method: "GET",
+        secure: true,
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @tags Salary
+     * @name PayslipsList
+     * @summary Get all payslips (MANAGERS/HR/SUPER ADMIN)
+     * @request GET:/salary/payslips
+     * @secure
+     */
+    payslipsList: (
+      query?: {
+        month?: number;
+        year?: number;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<void, void>({
+        path: `/salary/payslips`,
+        method: "GET",
+        query: query,
+        secure: true,
+        ...params,
+      }),
+
+    /**
+     * @description Staff can view own, HR/managers/superAdmin can view any.
+     *
+     * @tags Salary
+     * @name PayslipsDetail
+     * @summary Get a staff member's payslips
+     * @request GET:/salary/payslips/{staffId}
+     * @secure
+     */
+    payslipsDetail: (staffId: number, params: RequestParams = {}) =>
+      this.http.request<void, void>({
+        path: `/salary/payslips/${staffId}`,
+        method: "GET",
+        secure: true,
+        ...params,
+      }),
+
+    /**
+     * @description Staff requests an advance against days worked so far this month, or HR requests on a staff member's behalf. Prorated as (basicPay / daysInMonth) * daysWorkedAtRequest from the active salary structure. Requires HR/admin approval before it reduces month-end payroll.
+     *
+     * @tags Salary
+     * @name AdvanceRequestCreate
+     * @summary Request a mid-month prorated salary advance
+     * @request POST:/salary/advance/request
+     * @secure
+     */
+    advanceRequestCreate: (
+      data: {
+        /** Required only when a manager/HR/superAdmin requests on behalf of a staff member; ignored for staff requesting their own */
+        staffId?: number;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<void, void>({
+        path: `/salary/advance/request`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @tags Salary
+     * @name AdvanceApproveUpdate
+     * @summary Approve a salary advance request (MANAGERS/HR/SUPER ADMIN)
+     * @request PUT:/salary/advance/{advanceId}/approve
+     * @secure
+     */
+    advanceApproveUpdate: (advanceId: string, params: RequestParams = {}) =>
+      this.http.request<void, void>({
+        path: `/salary/advance/${advanceId}/approve`,
+        method: "PUT",
+        secure: true,
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @tags Salary
+     * @name AdvanceRejectUpdate
+     * @summary Reject a salary advance request (MANAGERS/HR/SUPER ADMIN)
+     * @request PUT:/salary/advance/{advanceId}/reject
+     * @secure
+     */
+    advanceRejectUpdate: (
+      advanceId: string,
+      data: {
+        rejectionReason: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<void, void>({
+        path: `/salary/advance/${advanceId}/reject`,
+        method: "PUT",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        ...params,
+      }),
+
+    /**
+     * @description Returns all advance requests across staff, enriched with staff name. Optionally filter by status/month/year.
+     *
+     * @tags Salary
+     * @name AdvanceList
+     * @summary Get all salary advances (MANAGERS/HR/SUPER ADMIN)
+     * @request GET:/salary/advance
+     * @secure
+     */
+    advanceList: (
+      query?: {
+        status?: "pending" | "approved" | "rejected" | "paid";
+        month?: number;
+        year?: number;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<void, void>({
+        path: `/salary/advance`,
+        method: "GET",
+        query: query,
+        secure: true,
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @tags Salary
+     * @name AdvanceMyList
+     * @summary Get my salary advances
+     * @request GET:/salary/advance/my
+     * @secure
+     */
+    advanceMyList: (params: RequestParams = {}) =>
+      this.http.request<void, any>({
+        path: `/salary/advance/my`,
+        method: "GET",
+        secure: true,
+        ...params,
+      }),
+
+    /**
+     * @description Staff can view own, HR/managers/superAdmin can view any.
+     *
+     * @tags Salary
+     * @name AdvanceDetail
+     * @summary Get a staff member's salary advances
+     * @request GET:/salary/advance/{staffId}
+     * @secure
+     */
+    advanceDetail: (staffId: number, params: RequestParams = {}) =>
+      this.http.request<void, void>({
+        path: `/salary/advance/${staffId}`,
+        method: "GET",
+        secure: true,
         ...params,
       }),
   };
@@ -10172,10 +10701,20 @@ export class Api<SecurityDataType extends unknown> {
           /** @example 5 */
           maxPoints?: number;
           /**
-           * Full points forfeited for the month once missed meetings exceed this count (excused absences don't count)
+           * Once missed meetings (excused absences don't count) exceed this count, points are deducted per the mode below
            * @example 0
            */
           maxMissedAllowed?: number;
+          /**
+           * 'flat' (default): pointsPerBadDay forfeited once, first excess missed meeting. 'perDay': pointsPerBadDay deducted per excess missed meeting, compounds.
+           * @default "flat"
+           */
+          mode?: "flat" | "perDay";
+          /**
+           * Points deducted per the mode above (perDay compounds - e.g. 2 excess missed meetings = -10, floored at 0)
+           * @example 5
+           */
+          pointsPerBadDay?: number;
         };
         extraPerformance?: {
           /** @example 10 */

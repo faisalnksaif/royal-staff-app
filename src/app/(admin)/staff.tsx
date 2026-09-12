@@ -198,6 +198,52 @@ function EditStaffModal({
   )
 }
 
+// ─── Break allowances ───────────────────────────────────────────────────────
+
+const DEFAULT_BREAK_MINUTES = "50"
+const DEFAULT_FRIDAY_BREAK_MINUTES = "140"
+
+// Returns null when the value is not a whole number of minutes within the range
+// the API accepts (0-480). 0 is valid - it means the shift gets no break time.
+function parseAllowance(value: string): number | null {
+  const trimmed = value.trim()
+  if (!/^\d+$/.test(trimmed)) return null
+  const minutes = Number(trimmed)
+  return minutes <= 480 ? minutes : null
+}
+
+function BreakAllowanceInputs({
+  breakMinutes, fridayBreakMinutes, onChangeBreak, onChangeFridayBreak,
+}: {
+  breakMinutes: string
+  fridayBreakMinutes: string
+  onChangeBreak: (value: string) => void
+  onChangeFridayBreak: (value: string) => void
+}) {
+  return (
+    <View style={{ flexDirection: "row", gap: spacing[3], marginTop: spacing[3] }}>
+      <View style={{ flex: 1 }}>
+        <AppInput
+          label="Break (min)"
+          value={breakMinutes}
+          onChangeText={onChangeBreak}
+          keyboardType="number-pad"
+          placeholder={DEFAULT_BREAK_MINUTES}
+        />
+      </View>
+      <View style={{ flex: 1 }}>
+        <AppInput
+          label="Friday break (min)"
+          value={fridayBreakMinutes}
+          onChangeText={onChangeFridayBreak}
+          keyboardType="number-pad"
+          placeholder={DEFAULT_FRIDAY_BREAK_MINUTES}
+        />
+      </View>
+    </View>
+  )
+}
+
 // ─── ShiftEditor ────────────────────────────────────────────────────────────
 
 function ShiftEditor({
@@ -211,17 +257,30 @@ function ShiftEditor({
   const [startTime, setStartTime] = useState(shift.startTime)
   const [endTime1, setEndTime1] = useState(shift.endTime1)
   const [endTime2, setEndTime2] = useState(shift.endTime2)
+  const [breakMinutes, setBreakMinutes] = useState(String(shift.breakAllowanceMinutes))
+  const [fridayBreakMinutes, setFridayBreakMinutes] = useState(String(shift.fridayBreakAllowanceMinutes))
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState("")
 
   const dirty = name !== shift.name || startTime !== shift.startTime
     || endTime1 !== shift.endTime1 || endTime2 !== shift.endTime2
+    || breakMinutes !== String(shift.breakAllowanceMinutes)
+    || fridayBreakMinutes !== String(shift.fridayBreakAllowanceMinutes)
 
   async function handleSave() {
     setIsSaving(true)
     setError("")
     try {
-      await shiftService.updateShift(shift._id, { name, startTime, endTime1, endTime2 })
+      const breakAllowanceMinutes = parseAllowance(breakMinutes)
+      const fridayBreakAllowanceMinutes = parseAllowance(fridayBreakMinutes)
+      if (breakAllowanceMinutes === null || fridayBreakAllowanceMinutes === null) {
+        setError("Break allowances must be between 0 and 480 minutes")
+        return
+      }
+      await shiftService.updateShift(shift._id, {
+        name, startTime, endTime1, endTime2,
+        breakAllowanceMinutes, fridayBreakAllowanceMinutes,
+      })
       onSaved()
     } catch (e) {
       setError((e as Error).message ?? "Failed to update shift")
@@ -243,6 +302,12 @@ function ShiftEditor({
         <TimeInput label="End (normal)" value={endTime1} onChange={setEndTime1} />
         <TimeInput label="End (overtime)" value={endTime2} onChange={setEndTime2} />
       </View>
+      <BreakAllowanceInputs
+        breakMinutes={breakMinutes}
+        fridayBreakMinutes={fridayBreakMinutes}
+        onChangeBreak={setBreakMinutes}
+        onChangeFridayBreak={setFridayBreakMinutes}
+      />
       {error ? (
         <AppText variant="caption" style={{ color: palette.error.default, marginTop: spacing[2] }}>
           {error}
@@ -262,6 +327,8 @@ function NewShiftForm({ onCreated }: { onCreated: () => void }) {
   const [startTime, setStartTime] = useState("09:00")
   const [endTime1, setEndTime1] = useState("18:00")
   const [endTime2, setEndTime2] = useState("18:00")
+  const [breakMinutes, setBreakMinutes] = useState(DEFAULT_BREAK_MINUTES)
+  const [fridayBreakMinutes, setFridayBreakMinutes] = useState(DEFAULT_FRIDAY_BREAK_MINUTES)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState("")
 
@@ -270,14 +337,25 @@ function NewShiftForm({ onCreated }: { onCreated: () => void }) {
       setError("Shift name is required")
       return
     }
+    const breakAllowanceMinutes = parseAllowance(breakMinutes)
+    const fridayBreakAllowanceMinutes = parseAllowance(fridayBreakMinutes)
+    if (breakAllowanceMinutes === null || fridayBreakAllowanceMinutes === null) {
+      setError("Break allowances must be between 0 and 480 minutes")
+      return
+    }
     setIsSaving(true)
     setError("")
     try {
-      await shiftService.createShift({ name: name.trim(), startTime, endTime1, endTime2 })
+      await shiftService.createShift({
+        name: name.trim(), startTime, endTime1, endTime2,
+        breakAllowanceMinutes, fridayBreakAllowanceMinutes,
+      })
       setName("")
       setStartTime("09:00")
       setEndTime1("18:00")
       setEndTime2("18:00")
+      setBreakMinutes(DEFAULT_BREAK_MINUTES)
+      setFridayBreakMinutes(DEFAULT_FRIDAY_BREAK_MINUTES)
       onCreated()
     } catch (e) {
       setError((e as Error).message ?? "Failed to create shift")
@@ -300,6 +378,12 @@ function NewShiftForm({ onCreated }: { onCreated: () => void }) {
         <TimeInput label="End (normal)" value={endTime1} onChange={setEndTime1} />
         <TimeInput label="End (overtime)" value={endTime2} onChange={setEndTime2} />
       </View>
+      <BreakAllowanceInputs
+        breakMinutes={breakMinutes}
+        fridayBreakMinutes={fridayBreakMinutes}
+        onChangeBreak={setBreakMinutes}
+        onChangeFridayBreak={setFridayBreakMinutes}
+      />
       {error ? (
         <AppText variant="caption" style={{ color: palette.error.default, marginTop: spacing[2] }}>
           {error}

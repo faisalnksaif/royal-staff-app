@@ -17,6 +17,8 @@ interface ShiftInput {
   startTime: string
   endTime1: string
   endTime2: string
+  breakAllowanceMinutes?: number
+  fridayBreakAllowanceMinutes?: number
 }
 
 async function createShift(input: ShiftInput): Promise<ShiftResponse> {

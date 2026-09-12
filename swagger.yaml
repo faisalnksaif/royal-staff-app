@@ -3979,7 +3979,11 @@ paths:
                           example: 0
                         break:
                           type: object
-                          description: Total break time across all session gaps in the day, measured against a single daily allowance (40 minutes, 140 minutes on Friday). Staff may take their break time whenever they like during the day.
+                          description: >-
+                            Total break time across all session gaps in the day, measured against a single
+                            daily allowance. Staff may take their break time whenever they like during the
+                            day. The allowance is configured per shift (see the Shifts endpoints) - it
+                            varies between shifts and may be 0 for shifts with no break time.
                           properties:
                             minutes:
                               type: integer
@@ -3988,7 +3992,8 @@ paths:
                               example: 45
                             allowanceMinutes:
                               type: integer
-                              example: 40
+                              description: This staff member's shift allowance for this date (the shift's Friday allowance when the date is a Friday)
+                              example: 50
                             excessMinutes:
                               type: integer
                               example: 5
@@ -4626,7 +4631,7 @@ paths:
       tags:
         - Shifts
       summary: List all shifts
-      description: Retrieve all defined shifts (name, startTime/endTime1/endTime2). Manager/HR/superAdmin only.
+      description: Retrieve all defined shifts (name, startTime/endTime1/endTime2, break allowances). Manager/HR/superAdmin only.
       security:
         - BearerAuth: []
       responses:
@@ -4658,7 +4663,7 @@ paths:
       tags:
         - Shifts
       summary: Create a shift
-      description: Create a new shift definition. Manager/HR/superAdmin only.
+      description: Create a new shift definition, including its daily break allowance. Manager/HR/superAdmin only.
       security:
         - BearerAuth: []
       requestBody:
@@ -4686,6 +4691,18 @@ paths:
                 endTime2:
                   type: string
                   example: '17:30'
+                breakAllowanceMinutes:
+                  type: integer
+                  minimum: 0
+                  maximum: 480
+                  description: Total daily break allowance in minutes on a normal day, covering all break gaps combined. 0 means this shift gets no break time. Optional - defaults to 50 when omitted.
+                  example: 50
+                fridayBreakAllowanceMinutes:
+                  type: integer
+                  minimum: 0
+                  maximum: 480
+                  description: Total daily break allowance in minutes on Fridays (longer, to cover Jumu'ah). Optional - defaults to 140 when omitted.
+                  example: 140
       responses:
         '201':
           description: Shift created
@@ -4756,7 +4773,7 @@ paths:
       tags:
         - Shifts
       summary: Update a shift
-      description: Update a shift's name and/or hours. Applies to every staff member currently assigned to this shift.
+      description: Update a shift's name, hours and/or break allowances. Applies to every staff member currently assigned to this shift.
       security:
         - BearerAuth: []
       parameters:
@@ -4785,6 +4802,18 @@ paths:
                 endTime2:
                   type: string
                   example: '17:30'
+                breakAllowanceMinutes:
+                  type: integer
+                  minimum: 0
+                  maximum: 480
+                  description: Total daily break allowance in minutes on a normal day, covering all break gaps combined. 0 means this shift gets no break time.
+                  example: 50
+                fridayBreakAllowanceMinutes:
+                  type: integer
+                  minimum: 0
+                  maximum: 480
+                  description: Total daily break allowance in minutes on Fridays (longer, to cover Jumu'ah).
+                  example: 140
       responses:
         '200':
           description: Shift updated
@@ -14009,6 +14038,18 @@ components:
           type: string
           description: Overtime threshold - checking out after this counts as overtime. Commonly equal to endTime1 (no OT grace window).
           example: '19:00'
+        breakAllowanceMinutes:
+          type: integer
+          minimum: 0
+          maximum: 480
+          description: Total daily break allowance in minutes on a normal day, covering all break gaps combined. 0 means this shift gets no break time.
+          example: 50
+        fridayBreakAllowanceMinutes:
+          type: integer
+          minimum: 0
+          maximum: 480
+          description: Total daily break allowance in minutes on Fridays (longer, to cover Jumu'ah).
+          example: 140
         isDefault:
           type: boolean
           example: true
@@ -14023,6 +14064,8 @@ components:
         - startTime
         - endTime1
         - endTime2
+        - breakAllowanceMinutes
+        - fridayBreakAllowanceMinutes
 
     DepartmentResponse:
       type: object
