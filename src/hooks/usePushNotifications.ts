@@ -41,15 +41,32 @@ function workRouteFor(data: NotificationData, role?: string): any {
   return { pathname: "/(admin)/team-work", params: { tab } }
 }
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-})
+// expo-notifications is Android/iOS only - every entry point below has to be
+// kept away from web, including this module-scope call.
+const IS_NATIVE = Platform.OS !== "web"
+
+if (IS_NATIVE) {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  })
+}
+
+/**
+ * `useLastNotificationResponse` reads the native last-response store, which
+ * throws on web. A hook can't be called conditionally, so the platform branch
+ * lives here instead: `Platform.OS` is fixed for the life of the process, so
+ * exactly one of these runs on a given platform and the hook count is stable.
+ */
+function useLastNotificationResponseSafe() {
+  if (!IS_NATIVE) return null
+  return Notifications.useLastNotificationResponse()
+}
 
 /**
  * Everything a notification tap should do, shared by the live listener and
@@ -93,7 +110,7 @@ export function usePushNotifications(enabled: boolean) {
   const router = useRouter()
   const queryClient = useQueryClient()
   const role = useAuthStore((s) => s.user?.role)
-  const lastResponse = Notifications.useLastNotificationResponse()
+  const lastResponse = useLastNotificationResponseSafe()
   // The effect only re-runs on `enabled`, so the listener would close over a
   // stale role - a ref keeps the current one available at tap time.
   const roleRef = useRef(role)
@@ -164,7 +181,7 @@ export function usePushNotifications(enabled: boolean) {
   // reports that response instead - it persists and re-reports on re-render,
   // so it's cleared once handled and guarded by id against double navigation.
   useEffect(() => {
-    if (Platform.OS === "web") return
+    if (!IS_NATIVE) return
     if (!lastResponse) return
 
     // Only a plain tap should navigate - action buttons are not a "open this".

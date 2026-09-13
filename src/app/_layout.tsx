@@ -25,13 +25,13 @@ function RootStack() {
       <StatusBar style={isDark ? "light" : "dark"} />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
-        <Stack.Screen name="(auth)" />
+        <Stack.Screen name="(auth)/login" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="(admin)" />
         <Stack.Screen name="scanner" />
-        <Stack.Screen name="customer" />
+        <Stack.Screen name="customer/[name]" />
         <Stack.Screen name="notifications" />
-        <Stack.Screen name="feedback" />
+        <Stack.Screen name="feedback/[token]" />
       </Stack>
     </>
   )
