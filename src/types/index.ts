@@ -651,6 +651,8 @@ export interface AllFollowUpsResponse {
   summary: FollowupsSummary
 }
 
+export type CustomersExportTab = "outstanding" | "retention" | "velocity"
+
 export interface DashboardStaffLeaderboardEntry {
   staff_id: number
   user_id: number

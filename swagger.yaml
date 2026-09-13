@@ -677,6 +677,115 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /ledger/export:
+    get:
+      tags:
+        - Ledger
+      summary: Export customers to Excel (.xlsx) (managers/superAdmin/HR)
+      description: |
+        Downloads the Customers admin page as an Excel workbook. `tab` selects
+        which of the page's three tabs to export, and each one reuses that
+        tab's own endpoint pipeline verbatim - GET /ledger/outstanding,
+        GET /ledger/retention or GET /ledger/payment-velocity - so the sheet
+        matches the list the admin is looking at.
+
+        Unlike those endpoints this one never paginates: it returns every row
+        matching the filters. (`parsePaginationParams` caps `limit` at 100, so
+        an export can't be expressed as "the list route with a big limit".)
+        `page`/`limit` are ignored if sent.
+
+        Nested objects are flattened into columns - the outstanding tab's
+        `follow_up` summary becomes Follow-ups/Open/Last outcome/etc. Balances
+        are sign-folded (Cr negative) so a SUM() over the column is meaningful,
+        and dates are written as YYYY-MM-DD strings in UTC rather than Excel
+        serial numbers, which render differently per locale.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: tab
+          in: query
+          description: Which tab to export. Each accepts that tab's own filter/sort params.
+          schema:
+            type: string
+            enum: [outstanding, retention, velocity]
+            default: outstanding
+        - name: search
+          in: query
+          description: Case-insensitive match on customer name (all tabs)
+          schema:
+            type: string
+        - name: filter
+          in: query
+          description: "`tab=outstanding` only - same values as GET /ledger/outstanding"
+          schema:
+            type: string
+            enum: [all, followed_up, not_followed_up, paid, overdue, open_followup, red_list]
+            default: all
+        - name: retention_status
+          in: query
+          description: "`tab=outstanding` only - narrow to one buying-recency class"
+          schema:
+            type: string
+            enum: [all, active, at_risk, churned, never_purchased]
+            default: all
+        - name: status
+          in: query
+          description: "`tab=retention` only - the retention tab's own status filter (note the different param name to `retention_status` above, matching the two list endpoints)"
+          schema:
+            type: string
+            enum: [all, active, at_risk, churned, never_purchased]
+            default: all
+        - name: sortBy
+          in: query
+          description: >
+            Allowed values depend on `tab` - outstanding:
+            priority|balance|newest (default priority); retention:
+            last_purchase_date|days_since_last_purchase|total_purchases|outstanding_balance|created_at
+            (default last_purchase_date); velocity:
+            avg_days_to_clear|total_debt_amount|total_cleared_amount|cleared_pct|outstanding_balance|days_since_last_payment
+            (default avg_days_to_clear).
+          schema:
+            type: string
+        - name: order
+          in: query
+          description: "`tab=retention` (default desc) and `tab=velocity` (default asc). The outstanding tab's sorts have a fixed direction."
+          schema:
+            type: string
+            enum: [asc, desc]
+        - name: activeDays
+          in: query
+          description: Retention threshold - days since last purchase still counted as active (outstanding/retention tabs)
+          schema:
+            type: integer
+            default: 30
+        - name: churnedDays
+          in: query
+          description: Retention threshold - days since last purchase counted as churned (outstanding/retention tabs)
+          schema:
+            type: integer
+            default: 90
+      responses:
+        '200':
+          description: >
+            An .xlsx workbook with one sheet, sent as a file download.
+            Content-Disposition names it
+            `customers-{tab}-{filters}-{YYYY-MM-DD}.xlsx`, where the filter
+            segment lists only the filters actually sent (e.g.
+            `customers-outstanding-red-list-balance-2026-09-13.xlsx`) so two
+            differently-filtered pulls on the same day don't overwrite each
+            other. A `search` term is included, sanitized and truncated.
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Invalid tab, filter, sortBy, order or retention threshold
+        '403':
+          description: Not a manager/superAdmin/HR
+        '500':
+          description: Failed to build the export
+
   /ledger/customers:
     get:
       tags:
@@ -1445,6 +1554,97 @@ paths:
           description: Forbidden - staff can only access their own customers
         '404':
           description: Staff record not found
+
+  /ledger/staff/{userId}/outstanding/export:
+    get:
+      tags:
+        - Ledger
+      summary: Export one staff member's outstanding customers to Excel (.xlsx)
+      description: |
+        Downloads the Customers tab of the staff follow-ups screen as an Excel
+        workbook. Mirrors GET /ledger/staff/{userId}/outstanding exactly - same
+        ownership resolution, filter, search and sort - but never paginates:
+        every row matching the filters is returned. (`parsePaginationParams`
+        caps `limit` at 100, so an export can't be expressed as "the list route
+        with a big limit".) `page`/`limit` are ignored if sent.
+
+        Access follows the list route: a staff member can only export their own
+        book (authorizeOwnerOnly), and held customers stay excluded for staff
+        while managers/superAdmin still see them - a held customer must not
+        reach a staff member's spreadsheet when the list deliberately hides it.
+
+        `Other contributors` flattens the other_contributors array to
+        `Name (total); Name (total)` text. Balances are sign-folded (Cr
+        negative) so a SUM() over the column is meaningful, and dates are
+        YYYY-MM-DD strings in UTC rather than locale-dependent Excel serials.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          description: The staff member's user_id (not Staff.id)
+          schema:
+            type: integer
+        - name: search
+          in: query
+          description: Case-insensitive match on customer name
+          schema:
+            type: string
+        - name: filter
+          in: query
+          schema:
+            type: string
+            enum: [all, followed_up, not_followed_up, paid, overdue, open_followup, red_list]
+            default: all
+        - name: retention_status
+          in: query
+          description: Narrow to one buying-recency class
+          schema:
+            type: string
+            enum: [all, active, at_risk, churned, never_purchased]
+            default: all
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            enum: [priority, balance, newest]
+            default: priority
+        - name: activeDays
+          in: query
+          description: Retention threshold - days since last purchase still counted as active
+          schema:
+            type: integer
+            default: 30
+        - name: churnedDays
+          in: query
+          description: Retention threshold - days since last purchase counted as churned
+          schema:
+            type: integer
+            default: 90
+      responses:
+        '200':
+          description: >
+            An .xlsx workbook with one "Customers" sheet, sent as a file
+            download. Content-Disposition names it
+            `staff-{name}-customers-{filters}-{YYYY-MM-DD}.xlsx`, where the
+            filter segment lists only the filters actually sent (e.g.
+            `staff-nandana-customers-overdue-priority-2026-09-13.xlsx`) so two
+            differently-filtered pulls on the same day don't overwrite each
+            other. A `search` term is included, sanitized and truncated.
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Invalid filter, sortBy, retention_status or retention threshold
+        '403':
+          description: A staff member tried to export another staff member's customers
+        '404':
+          description: No staff record for this user_id
+        '500':
+          description: Failed to build the export
 
   /ledger/outstanding:
     get:
@@ -2709,6 +2909,117 @@ paths:
           description: Forbidden - managers/superAdmin only
         '404':
           description: Ledger customer not found
+
+  /followups/export:
+    get:
+      tags:
+        - Follow-ups
+      summary: Export follow-ups to Excel (.xlsx) (managers/superAdmin/HR)
+      description: |
+        Downloads the company-wide follow-up list as an Excel workbook. Takes
+        exactly the same filter and sort params as GET /followups/all, and
+        parses them through the same helpers, so the sheet matches the list the
+        admin is looking at.
+
+        Unlike /followups/all this never paginates: it returns every row
+        matching the filters. (`parsePaginationParams` caps `limit` at 100, so
+        an export can't be expressed as "the list route with a big limit".)
+        `page`/`limit` are ignored if sent.
+
+        `Outstanding at logging` is sign-folded (Cr negative) so a SUM() over
+        the column is meaningful, and dates are written as YYYY-MM-DD strings in
+        UTC rather than Excel serial numbers, which render differently per
+        locale. `Outstanding backfilled` flags rows whose outstanding figures
+        came from the one-time migration rather than a live snapshot - see
+        FollowUp.outstandingBackfilled.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: query
+          description: Narrow to a single staff member (a user_id, same convention as GET /followups/all)
+          schema:
+            type: integer
+        - name: dateField
+          in: query
+          description: Which date period/startDate/endDate applies to
+          schema:
+            type: string
+            enum: [loggedAt, promisedDate, resolvedAt]
+            default: loggedAt
+        - name: period
+          in: query
+          description: Shorthand date filter. Overrides startDate/endDate if given.
+          schema:
+            type: string
+            enum: [today, yesterday, this_month]
+        - name: startDate
+          in: query
+          description: Custom range start (YYYY-MM-DD), ignored if period is set
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          description: Custom range end (YYYY-MM-DD), ignored if period is set
+          schema:
+            type: string
+            format: date
+        - name: customerId
+          in: query
+          description: Filter to a single customer by the legacy string customerId
+          schema:
+            type: string
+        - name: ledgerId
+          in: query
+          description: Filter to a single customer by ledger_id
+          schema:
+            type: integer
+        - name: outcome
+          in: query
+          schema:
+            type: string
+            enum: [promisedToPay, promisedPartial, dispute, noResponse, reminderSent]
+        - name: resolutionStatus
+          in: query
+          description: System-detected payment status, independent of `outcome`
+          schema:
+            type: string
+            enum: [resolved, open]
+        - name: sortBy
+          in: query
+          description: Rows with no value for the sorted field always sort last, as in GET /followups/all
+          schema:
+            type: string
+            enum: [loggedAt, promisedAmount, amountRecovered, outstandingAmount]
+            default: loggedAt
+        - name: order
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+      responses:
+        '200':
+          description: >
+            An .xlsx workbook with one "Follow-ups" sheet, sent as a file
+            download. Content-Disposition names it
+            `followups-{filters}-{YYYY-MM-DD}.xlsx`, where the filter segment
+            lists only the non-default filters actually applied (e.g.
+            `followups-staff-3051-this-month-promisedtopay-2026-09-13.xlsx`) so
+            two differently-filtered pulls on the same day don't overwrite each
+            other. An unfiltered export is just `followups-{YYYY-MM-DD}.xlsx`.
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Invalid dateField, outcome, resolutionStatus, period, sortBy or order
+        '403':
+          description: Not a manager/superAdmin/HR
+        '500':
+          description: Failed to build the export
 
   /followups/all:
     get:

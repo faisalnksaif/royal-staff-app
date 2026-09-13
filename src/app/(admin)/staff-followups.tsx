@@ -11,6 +11,8 @@ import {
 } from "lucide-react-native"
 import BackButton from "../../components/shared/BackButton"
 import RefreshButton from "../../components/shared/RefreshButton"
+import ExportButton from "../../components/shared/ExportButton"
+import { exportService } from "../../services/exportService"
 import AnimatedListItem from "../../components/shared/AnimatedListItem"
 import ErrorRetry from "../../components/shared/ErrorRetry"
 import ContactMethodIcon from "../../components/shared/ContactMethodIcon"
@@ -31,7 +33,7 @@ import { useStaffCustomers } from "../../hooks/useStaffCustomers"
 import { toAPIDate, formatDate, toTitleCase } from "../../utils/helpers"
 import moment from "moment"
 import type { FollowupDateField, FollowupSortBy, FollowupOrder } from "../../services/followupService"
-import type { FollowUp, ContactMethod, FollowUpOutcome, LedgerOutstandingFilter } from "../../types"
+import type { FollowUp, ContactMethod, FollowUpOutcome, LedgerOutstandingFilter, LedgerCustomerOutstanding } from "../../types"
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true)
@@ -80,23 +82,45 @@ const CUSTOMER_FILTERS: { value: LedgerOutstandingFilter; label: string }[] = [
 ]
 
 
-const CUSTOMER_SORTS: { value: "priority" | "balance" | "newest"; label: string }[] = [
+type CustomerSort = "priority" | "balance" | "newest"
+
+const CUSTOMER_SORTS: { value: CustomerSort; label: string }[] = [
   { value: "priority", label: "Priority ↑" },
   { value: "balance",  label: "Balance ↑" },
   { value: "newest",   label: "New Customer" },
 ]
 
-function CustomersTab({ staffId }: { staffId: number }) {
+// Filter state and the customers query live in the parent so the header's
+// export button can read them (it exports exactly what's filtered). This
+// component renders the list and drives the filters through the setters.
+interface CustomersTabProps {
+  customerList: LedgerCustomerOutstanding[]
+  isLoading: boolean
+  isFetchingNextPage: boolean
+  hasNextPage: boolean
+  fetchNextPage: () => void
+  searchInput: string
+  onSearchChange: (value: string) => void
+  activeFilter: LedgerOutstandingFilter
+  onFilterChange: (value: LedgerOutstandingFilter) => void
+  sortBy: CustomerSort
+  onSortChange: (value: CustomerSort) => void
+}
+
+function CustomersTab({
+  customerList,
+  isLoading,
+  isFetchingNextPage,
+  hasNextPage,
+  fetchNextPage,
+  searchInput,
+  onSearchChange,
+  activeFilter,
+  onFilterChange,
+  sortBy,
+  onSortChange,
+}: CustomersTabProps) {
   const { colors } = useTheme()
-  const [searchInput, setSearchInput] = useState("")
-  const debouncedSearch = useDebounce(searchInput, 400)
-  const [activeFilter, setActiveFilter] = useState<LedgerOutstandingFilter>("all")
-  const [sortBy, setSortBy] = useState<"priority" | "balance" | "newest">("priority")
-
-  const { data, isLoading, isFetchingNextPage, hasNextPage, fetchNextPage } =
-    useStaffCustomers(staffId, { limit: 20, search: debouncedSearch || undefined, filter: activeFilter, sortBy })
-
-  const customerList = data?.pages.flatMap((p) => p.data) ?? []
 
   return (
     <FlatList
@@ -113,11 +137,11 @@ function CustomersTab({ staffId }: { staffId: number }) {
             <AppInput
               placeholder="Search customer name..."
               value={searchInput}
-              onChangeText={setSearchInput}
+              onChangeText={onSearchChange}
               returnKeyType="search"
               rightIcon={
                 searchInput.length > 0 ? (
-                  <TouchableOpacity onPress={() => setSearchInput("")} hitSlop={8}>
+                  <TouchableOpacity onPress={() => onSearchChange("")} hitSlop={8}>
                     <X size={16} color={colors.text.tertiary} strokeWidth={2} />
                   </TouchableOpacity>
                 ) : undefined
@@ -136,7 +160,7 @@ function CustomersTab({ staffId }: { staffId: number }) {
                 <TouchableOpacity
                   key={value}
                   activeOpacity={0.7}
-                  onPress={() => setActiveFilter(value)}
+                  onPress={() => onFilterChange(value)}
                   style={[styles.filterChip, {
                     backgroundColor: isActive ? colors.accent : colors.background.secondary,
                     borderColor: isActive ? colors.accent : colors.border,
@@ -155,7 +179,7 @@ function CustomersTab({ staffId }: { staffId: number }) {
                 <TouchableOpacity
                   key={value}
                   activeOpacity={0.7}
-                  onPress={() => setSortBy(value)}
+                  onPress={() => onSortChange(value)}
                   style={[styles.filterChip, {
                     backgroundColor: isActive ? colors.text.primary + "18" : colors.background.secondary,
                     borderColor: isActive ? colors.text.primary : colors.border,
@@ -228,6 +252,28 @@ export default function StaffFollowupsScreen() {
   const [sortBy, setSortBy] = useState<FollowupSortBy>("loggedAt")
   const [order, setOrder] = useState<FollowupOrder>("desc")
 
+  // Customers tab state, held here (not in CustomersTab) so the header's export
+  // button can export exactly what the tab is filtered to.
+  const [custSearchInput, setCustSearchInput] = useState("")
+  const custDebouncedSearch = useDebounce(custSearchInput, 400)
+  const [custFilter, setCustFilter] = useState<LedgerOutstandingFilter>("all")
+  const [custSortBy, setCustSortBy] = useState<CustomerSort>("priority")
+
+  const {
+    data: custData,
+    isLoading: custLoading,
+    isFetchingNextPage: custFetchingNextPage,
+    hasNextPage: custHasNextPage,
+    fetchNextPage: custFetchNextPage,
+  } = useStaffCustomers(staffId, {
+    limit: 20,
+    search: custDebouncedSearch || undefined,
+    filter: custFilter,
+    sortBy: custSortBy,
+  })
+
+  const customerList = custData?.pages.flatMap((p) => p.data) ?? []
+
   const isCustom = period === "custom"
 
   const { data, isLoading, isError, refetch, isRefetching, hasNextPage, isFetchingNextPage, fetchNextPage } = useAllFollowups({
@@ -254,6 +300,38 @@ export default function StaffFollowupsScreen() {
         <View style={{ flex: 1 }}>
           <AppText variant="heading3">{params.staffName ?? "Staff Follow-ups"}</AppText>
         </View>
+        {/* Each tab exports its own list, with that tab's filters applied. */}
+        {activeTab === "followups" ? (
+          <ExportButton
+            disabled={isLoading || followups.length === 0}
+            onExport={() =>
+              exportService.exportFollowups({
+                staffId,
+                period: isCustom ? undefined : period,
+                startDate: isCustom && startDate ? toAPIDate(startDate) : undefined,
+                endDate: isCustom && endDate ? toAPIDate(endDate) : undefined,
+                dateField,
+                outcome: outcome === "all" ? undefined : outcome,
+                resolutionStatus: resolutionStatus === "all" ? undefined : resolutionStatus,
+                sortBy,
+                order,
+              })
+            }
+          />
+        ) : (
+          staffId != null && (
+            <ExportButton
+              disabled={custLoading || customerList.length === 0}
+              onExport={() =>
+                exportService.exportStaffCustomers(staffId, {
+                  search: custDebouncedSearch || undefined,
+                  filter: custFilter,
+                  sortBy: custSortBy,
+                })
+              }
+            />
+          )
+        )}
         <RefreshButton onPress={() => refetch()} isRefreshing={isRefetching} />
       </View>
 
@@ -359,7 +437,19 @@ export default function StaffFollowupsScreen() {
 
       {/* Customers tab */}
       {activeTab === "customers" && staffId != null && (
-        <CustomersTab staffId={staffId} />
+        <CustomersTab
+          customerList={customerList}
+          isLoading={custLoading}
+          isFetchingNextPage={custFetchingNextPage}
+          hasNextPage={!!custHasNextPage}
+          fetchNextPage={custFetchNextPage}
+          searchInput={custSearchInput}
+          onSearchChange={setCustSearchInput}
+          activeFilter={custFilter}
+          onFilterChange={setCustFilter}
+          sortBy={custSortBy}
+          onSortChange={setCustSortBy}
+        />
       )}
     </View>
   )

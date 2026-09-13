@@ -35,9 +35,21 @@ httpClient.instance.interceptors.request.use(
 // ─── Response interceptor: normalise errors ──────────────────────────────────
 httpClient.instance.interceptors.response.use(
   (response) => response,
-  (error: AxiosError<{ message?: string; error?: string; success?: boolean }>) => {
+  async (error: AxiosError<{ message?: string; error?: string; success?: boolean }>) => {
     const status = error.response?.status
-    const data = error.response?.data
+    let data = error.response?.data
+
+    // A failed blob request (the Excel exports use format: "blob") delivers its
+    // error body as a Blob, not parsed JSON - so data.error would be undefined
+    // and every export failure would read as the generic fallback message.
+    // Reading the blob back as text recovers the real server error.
+    if (data instanceof Blob) {
+      try {
+        data = JSON.parse(await data.text())
+      } catch {
+        data = undefined
+      }
+    }
 
     if (status === 401 && !handlingUnauthorized) {
       handlingUnauthorized = true

@@ -7,6 +7,8 @@ import {
 } from "lucide-react-native"
 import BackButton from "../../components/shared/BackButton"
 import RefreshButton from "../../components/shared/RefreshButton"
+import ExportButton from "../../components/shared/ExportButton"
+import { exportService } from "../../services/exportService"
 import ErrorRetry from "../../components/shared/ErrorRetry"
 import AnimatedListItem from "../../components/shared/AnimatedListItem"
 import ContactMethodIcon from "../../components/shared/ContactMethodIcon"
@@ -78,6 +80,21 @@ export default function AllFollowupsScreen() {
             <AppText variant="caption" color="secondary">{total} total</AppText>
           )}
         </View>
+        <ExportButton
+          disabled={isLoading || total === 0}
+          onExport={() =>
+            exportService.exportFollowups({
+              period: isCustom ? undefined : period,
+              startDate: isCustom && startDate ? toAPIDate(startDate) : undefined,
+              endDate: isCustom && endDate ? toAPIDate(endDate) : undefined,
+              dateField,
+              outcome: outcome === "all" ? undefined : outcome,
+              resolutionStatus: resolutionStatus === "all" ? undefined : resolutionStatus,
+              sortBy,
+              order,
+            })
+          }
+        />
         <RefreshButton onPress={() => refetch()} isRefreshing={isRefetching} />
       </View>
 

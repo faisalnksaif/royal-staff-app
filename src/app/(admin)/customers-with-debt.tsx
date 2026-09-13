@@ -7,6 +7,8 @@ import {
 import { useRouter, useFocusEffect } from "expo-router"
 import { X, ChevronRight } from "lucide-react-native"
 import BackButton from "../../components/shared/BackButton"
+import ExportButton from "../../components/shared/ExportButton"
+import { exportService } from "../../services/exportService"
 import CustomerOutstandingRow from "../../components/shared/CustomerOutstandingRow"
 import ErrorRetry from "../../components/shared/ErrorRetry"
 import AnimatedListItem from "../../components/shared/AnimatedListItem"
@@ -357,6 +359,32 @@ export default function AllCustomersScreen() {
             <AppText variant="caption" color="secondary">{total} total</AppText>
           )}
         </View>
+        {/* Exports whichever tab is open, with that tab's own filters - see
+            exportService.exportCustomers for the per-tab param mapping. */}
+        <ExportButton
+          onExport={() =>
+            exportService.exportCustomers({
+              tab: mainTab,
+              outstanding: {
+                search: outSearchDebounced || undefined,
+                filter: outFilter,
+                retentionStatus: outRetentionStatus,
+                sortBy: outSort,
+              },
+              retention: {
+                search: retSearchDebounced || undefined,
+                status: retFilter,
+                sortBy: retSortBy,
+                order: retOrder,
+              },
+              velocity: {
+                search: velSearchDebounced || undefined,
+                sortBy: velSortBy,
+                order: velOrder,
+              },
+            })
+          }
+        />
       </View>
 
       {/* Main tabs */}
