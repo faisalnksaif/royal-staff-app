@@ -1335,6 +1335,26 @@ export interface SalaryStructureResponse {
   pending: SalaryStructure[]
 }
 
+export interface PayslipDeductionDetail {
+  date: string
+  type: "absent" | "half-day"
+  reason: string
+  days: number
+  amount: number
+}
+
+export interface PayslipIncentiveDetail {
+  reason: string
+  amount: number
+  source: IncentiveSource
+}
+
+export interface PayslipPenaltyDetail {
+  reason: string
+  amount: number
+  imposedBy: string
+}
+
 export interface Payslip {
   id: string
   staffId: number
@@ -1342,11 +1362,86 @@ export interface Payslip {
   month: number
   year: number
   basicPay: number
+  /** Basic pay after attendance deductions, before incentives. */
+  basicPayEarned: number
   incentives: number
+  incentiveDetails: PayslipIncentiveDetail[]
+  /** Attendance-driven deductions only (absence + half-day). */
   deductions: number
+  deductionDetails: PayslipDeductionDetail[]
+  penaltyAmount: number
+  penaltyDetails: PayslipPenaltyDetail[]
   advancesDeducted: number
+  grossPay: number
   netPay: number
+  /** True when generated before the month ended - covers only up to periodEnd. */
+  isPartial: boolean
+  periodEnd: string
   generatedAt: string
+}
+
+/** Read-only month-to-date projection - never a persisted payroll record. */
+export interface PayrollPreview {
+  staffId: number
+  staffName: string
+  month: number
+  year: number
+  basicPay: number
+  basicPayEarned: number
+  incentives: number
+  incentiveDetails: PayslipIncentiveDetail[]
+  deductionAmount: number
+  deductionDetails: PayslipDeductionDetail[]
+  penaltyAmount: number
+  penaltyDetails: PayslipPenaltyDetail[]
+  advanceDeducted: number
+  unpaidAbsenceDays: number
+  halfDays: number
+  daysInMonth: number
+  perDayPay: number
+  grossPay: number
+  netPay: number
+  isPartial: boolean
+  isPreview: true
+  asOf: string
+  payrollAlreadyGenerated: boolean
+  projected: {
+    basicPayEarned: number
+    grossPay: number
+    netPay: number
+  }
+}
+
+export type IncentiveSource = "manual" | "auto"
+
+export interface SalaryIncentive {
+  id: string
+  staffId: number
+  staffName?: string
+  month: number
+  year: number
+  amount: number
+  reason: string
+  source: IncentiveSource
+  ruleKey?: string | null
+  createdBy: string
+  createdAt: string
+}
+
+export interface SalaryPenalty {
+  id: string
+  staffId: number
+  staffName?: string
+  month: number
+  year: number
+  amount: number
+  reason: string
+  createdBy: string
+  isRevoked: boolean
+  revokedBy?: string | null
+  revokedAt?: string | null
+  revokeReason?: string | null
+  createdAt: string
 }
 
 export type SalaryAdvanceStatus = "pending" | "approved" | "rejected" | "paid"
@@ -1406,6 +1501,13 @@ export interface WorkAssignment {
   scheduleId: string
   assigneeStaffId: number
   assignedByStaffId: number
+  /**
+   * Resolved server-side. Null only when the staff row is gone - the
+   * assignable-staff list can't cover every assignee (deactivated, role
+   * changed, or outside the viewer's assign matrix), so the API stamps it.
+   */
+  assigneeName?: string | null
+  assignedByName?: string | null
   title: string
   description: string | null
   priority: WorkPriority

@@ -41,7 +41,11 @@ export function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max)
 }
 
-export function formatAmount(n: number): string {
+// Tolerates undefined/null/NaN rather than throwing: this is called from ~74
+// render sites, so one missing field in an API payload otherwise takes down
+// the whole screen (and, unguarded by an error boundary, the tree above it).
+export function formatAmount(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return "0"
   return n.toLocaleString("en-IN", { maximumFractionDigits: 0 })
 }
 

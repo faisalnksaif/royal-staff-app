@@ -15,7 +15,6 @@ import {
   ListChecks,
   BriefcaseBusiness,
   MessageSquareQuote,
-  Wallet,
 } from "lucide-react-native"
 
 const EXPANDED_WIDTH = 240
@@ -32,7 +31,6 @@ const NAV_ITEMS = [
   { label: "Customers",   href: "/(tabs)/customers",       icon: Users,           match: "customers" },
   { label: "Follow-ups",  href: "/(tabs)/followups",       icon: ClipboardList,   match: "followups" },
   { label: "Leaves",      href: "/(tabs)/leaves",          icon: CalendarClock,   match: "leaves" },
-  { label: "Salary",      href: "/(tabs)/salary",          icon: Wallet,          match: "salary" },
   { label: "My Work",     href: "/(tabs)/work",            icon: BriefcaseBusiness, match: "work" },
   { label: "Todo",        href: "/(tabs)/todo",            icon: ListChecks,      match: "todo" },
   { label: "Performance", href: "/(tabs)/extra-performance", icon: Award,         match: "extra-performance" },
@@ -166,6 +164,9 @@ export default function TabsLayout() {
       />
       <Tabs.Screen name="customers"         options={{ href: null }} />
       <Tabs.Screen name="leaves"            options={{ href: null }} />
+      {/* Salary/advances is hidden from staff - the page is incomplete. Kept
+          registered with href:null so the route resolves rather than 404s if
+          something still links to it, but it is absent from all navigation. */}
       <Tabs.Screen name="salary"            options={{ href: null }} />
       <Tabs.Screen name="work"              options={{ href: null }} />
       <Tabs.Screen name="todo"              options={{ href: null }} />

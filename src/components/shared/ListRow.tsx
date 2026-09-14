@@ -19,6 +19,8 @@ interface Props {
   number: number
   avatarColor: string
   avatarBgColor: string
+  /** Replaces the numbered avatar - lets a row lead with who it's about. */
+  avatar?: React.ReactNode
   title: string
   pills?: ListRowPill[]
   trailing?: React.ReactNode
@@ -31,6 +33,7 @@ export default function ListRow({
   number,
   avatarColor,
   avatarBgColor,
+  avatar,
   title,
   pills = [],
   trailing,
@@ -53,7 +56,7 @@ export default function ListRow({
   return (
     <View style={[styles.row, { borderBottomColor: colors.border }]}>
       <View style={styles.rowHeader}>
-        <NumberedAvatar number={number} color={avatarColor} bgColor={avatarBgColor} />
+        {avatar ?? <NumberedAvatar number={number} color={avatarColor} bgColor={avatarBgColor} />}
 
         <View style={styles.titleCol}>
           <AppText variant="bodyMedium" numberOfLines={1}>{title}</AppText>

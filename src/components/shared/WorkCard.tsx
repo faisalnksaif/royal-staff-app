@@ -1,7 +1,8 @@
 import { View, StyleSheet } from "react-native"
-import { Clock, Repeat, User, AlertTriangle, CheckCircle2 } from "lucide-react-native"
+import { Clock, Repeat, AlertTriangle, CheckCircle2 } from "lucide-react-native"
 import moment from "moment"
 import AppText from "../ui/AppText"
+import StaffAvatar from "./StaffAvatar"
 import ListRow, { ListRowPill } from "./ListRow"
 import type { ActionMenuItem } from "./ActionMenu"
 import { useTheme } from "../../providers/ThemeProvider"
@@ -74,11 +75,19 @@ export default function WorkCard({
 
   const metaLines: React.ReactNode[] = []
 
+  // Who the work is for leads the meta stack - on the admin list that's the
+  // first thing being scanned for, so it sits above the description.
   if (assigneeName) {
     metaLines.push(
-      <View key="assignee" style={styles.metaRow}>
-        <User size={13} color={colors.text.tertiary} strokeWidth={1.5} />
-        <AppText variant="bodySmall" style={{ color: colors.text.secondary as string }}>
+      <View key="assignee" style={styles.assigneeRow}>
+        <AppText variant="label" style={{ color: colors.text.tertiary as string }}>
+          ASSIGNED TO
+        </AppText>
+        <AppText
+          variant="bodySmall"
+          numberOfLines={1}
+          style={{ color: colors.text.primary as string, flex: 1 }}
+        >
           {assigneeName}
         </AppText>
       </View>
@@ -151,6 +160,13 @@ export default function WorkCard({
       number={(index ?? 0) + 1}
       avatarColor={avatarColor}
       avatarBgColor={avatarBgColor}
+      // On the admin list the avatar carries the assignee's initials - far more
+      // scannable than a row number when triaging a column of work.
+      avatar={
+        assigneeName ? (
+          <StaffAvatar name={assigneeName} color={avatarColor} bgColor={avatarBgColor} size={32} />
+        ) : undefined
+      }
       title={item.title}
       pills={pills}
       menuItems={menuItems}
@@ -162,4 +178,5 @@ export default function WorkCard({
 
 const styles = StyleSheet.create({
   metaRow: { flexDirection: "row", alignItems: "center", gap: spacing[2] },
+  assigneeRow: { flexDirection: "row", alignItems: "center", gap: spacing[2] },
 })

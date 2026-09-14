@@ -17,6 +17,7 @@ import { useTheme } from "../../providers/ThemeProvider"
 import { useTablet } from "../../hooks/useTablet"
 import { useRole } from "../../hooks/useRole"
 import { useAssignedWork, useMyWork, useWorkSchedules, useAssignableStaff } from "../../hooks/useWork"
+import { useStaff } from "../../hooks/useStaff"
 import { workScheduleService } from "../../services/workScheduleService"
 import { spacing, colors as palette, radii } from "../../constants/theme"
 import { describeRecurrence, isOverdue } from "../../utils/work"
@@ -103,12 +104,25 @@ export default function TeamWorkScreen() {
   const { data: schedulesData, isLoading: schedulesLoading } = useWorkSchedules(true)
   const { data: assignable } = useAssignableStaff()
 
-  // Assignments carry only staffId, so names come from the assignable list.
+  // Covers assignees the assignable list can't (deactivated, or outside this
+  // admin's assign matrix). Same ADMIN_ROLES guard as this screen, so every
+  // role that reaches here may call it.
+  const { data: staffData } = useStaff()
+
+  // The API stamps assigneeName, but older payloads and cached pages may not
+  // carry it, so names still resolve locally as a fallback. The assignable list
+  // alone is not enough: it only holds people you may assign to *now* (active,
+  // within your role matrix), while the list shows everything ever assigned -
+  // so the staff directory backs it up, and a visible "Staff #12" backs that up.
   const nameByStaffId = useMemo(() => {
     const map = new Map<number, string>()
+    for (const person of staffData?.data ?? []) map.set(person.id, person.name)
     for (const person of assignable?.data ?? []) map.set(person.staffId, person.name)
     return map
-  }, [assignable])
+  }, [assignable, staffData])
+
+  const assigneeNameFor = (work: WorkAssignment) =>
+    work.assigneeName ?? nameByStaffId.get(work.assigneeStaffId) ?? `Staff #${work.assigneeStaffId}`
 
   const onlyOpen = (list: WorkAssignment[]) =>
     filter === "open" ? list.filter((w) => w.status === "pending" || w.status === "in_progress") : list
@@ -272,7 +286,7 @@ export default function TeamWorkScreen() {
                     index={index}
                     // On "my work" the assignee is me, so showing my own name
                     // is noise - the assigned list is where it matters.
-                    assigneeName={tab === "mine" ? undefined : nameByStaffId.get(item.assigneeStaffId)}
+                    assigneeName={tab === "mine" ? undefined : assigneeNameFor(item)}
                     recurrenceLabel={schedule ? describeRecurrence(schedule.recurrence) : undefined}
                     dueTime={schedule?.dueTime}
                     menuItems={tab === "mine" ? myMenuFor(item) : menuFor(item)}
