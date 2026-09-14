@@ -6,14 +6,16 @@ import {
   ActivityIndicator,
   StyleSheet,
   Pressable,
+  TouchableOpacity,
   Modal,
   TextInput,
 } from "react-native"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { Check, X, Calendar, ChevronLeft, ChevronRight, Award } from "lucide-react-native"
+import { Check, X, Calendar, ChevronLeft, ChevronRight, Award, Plus } from "lucide-react-native"
 import BackButton from "../../components/shared/BackButton"
 import AnimatedListItem from "../../components/shared/AnimatedListItem"
 import ListRow from "../../components/shared/ListRow"
+import ExtraPerformanceSubmitModal from "../../components/shared/ExtraPerformanceSubmitModal"
 import type { ActionMenuItem } from "../../components/shared/ActionMenu"
 import moment from "moment"
 import AppText from "../../components/ui/AppText"
@@ -177,6 +179,7 @@ export default function ExtraPerformanceScreen() {
   const isCurrentMonth = month.isSame(moment(), "month")
   const [rejectTarget, setRejectTarget] = useState<string | null>(null)
   const [actionId, setActionId] = useState<string | null>(null)
+  const [submitOpen, setSubmitOpen] = useState(false)
 
   const { data: pendingData, isLoading: pendingLoading, refetch: refetchPending, isRefetching: refetchingPending } = useQuery({
     queryKey: ["extra-performance-pending", monthParam],
@@ -250,6 +253,13 @@ export default function ExtraPerformanceScreen() {
             <ChevronRight size={18} color={colors.text.secondary} strokeWidth={2} />
           </Pressable>
         </View>
+
+        <TouchableOpacity activeOpacity={0.8} onPress={() => setSubmitOpen(true)}>
+          <View style={[styles.addBtn, { backgroundColor: colors.accent }]}>
+            <Plus size={18} color="#fff" strokeWidth={2.5} />
+            <AppText variant="caption" style={{ color: "#fff" }}>Add</AppText>
+          </View>
+        </TouchableOpacity>
       </View>
 
       {/* Filter tabs */}
@@ -356,6 +366,16 @@ export default function ExtraPerformanceScreen() {
         />
       )}
 
+      {/* Add performance modal */}
+      <ExtraPerformanceSubmitModal
+        visible={submitOpen}
+        onClose={() => setSubmitOpen(false)}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ["extra-performance-pending", monthParam] })
+          queryClient.invalidateQueries({ queryKey: ["extra-performance-approved", monthParam] })
+        }}
+      />
+
       {/* Reject modal */}
       <RejectModal
         visible={rejectTarget != null}
@@ -388,6 +408,14 @@ const styles = StyleSheet.create({
     borderRadius: radii.lg,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: "hidden",
+  },
+  addBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[2],
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+    borderRadius: radii.full,
   },
   navBtn: {
     paddingHorizontal: spacing[3],
