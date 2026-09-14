@@ -3,7 +3,7 @@ import { View, ScrollView, StyleSheet, Pressable, TouchableOpacity, ActivityIndi
 import { useRouter } from "expo-router"
 import { useTablet } from "../../hooks/useTablet"
 import { useQuery } from "@tanstack/react-query"
-import { Users, CalendarClock, ChevronRight, Award, Bell, ClipboardList } from "lucide-react-native"
+import { Users, CalendarClock, ChevronRight, Award, Bell, ClipboardList, MessageSquareQuote } from "lucide-react-native"
 import moment from "moment"
 import AppText from "../../components/ui/AppText"
 import AppCard from "../../components/ui/AppCard"
@@ -14,6 +14,7 @@ import { useStaffBillsSummary } from "../../hooks/useStaffBillsSummary"
 import { leaveService } from "../../services/leaveService"
 import { extraPerformanceService } from "../../services/extraPerformanceService"
 import { notificationService } from "../../services/notificationService"
+import { testimonialService } from "../../services/testimonialService"
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -113,11 +114,20 @@ export default function HomeScreen() {
     queryFn: () => extraPerformanceService.getStaffPerformances(),
     enabled: user?.user_id != null,
   })
+  // Same query key as the testimonials screen, so the two share a cache entry.
+  const { data: testimonialsData, isLoading: testimonialsLoading } = useQuery({
+    queryKey: ["my-testimonials-received", user?.user_id],
+    queryFn: () => testimonialService.getReceivedTestimonials(),
+    enabled: user?.user_id != null,
+  })
 
   const totalCustomers = summary.data?.total_customers ?? 0
   const totalOutstanding = summary.data?.total_outstanding ?? 0
   const leaveBalance = balanceData?.data?.leaveBalance
   const pendingPerformances = performanceData?.data?.stats?.pending ?? 0
+  const testimonialStats = testimonialsData?.data?.stats
+  const approvedTestimonials = testimonialStats?.approved ?? 0
+  const pendingTestimonials = testimonialStats?.pending ?? 0
 
   return (
     <ScrollView
@@ -203,6 +213,26 @@ export default function HomeScreen() {
             accent={palette.warning.default}
             isLoading={balanceLoading}
             onPress={() => router.push("/(tabs)/leaves")}
+          />
+        </View>
+
+        {/* Row 3 */}
+        <View style={styles.gridRow}>
+          <FeatureCard
+            icon={<MessageSquareQuote size={24} color={palette.info.default} strokeWidth={1.6} />}
+            label="Testimonials"
+            subtitle={
+              testimonialsLoading
+                ? ""
+                : pendingTestimonials > 0
+                ? `${approvedTestimonials} approved · ${pendingTestimonials} pending`
+                : approvedTestimonials > 0
+                ? `${approvedTestimonials} approved`
+                : "Give and receive praise"
+            }
+            accent={palette.info.default}
+            isLoading={testimonialsLoading}
+            onPress={() => router.push("/(tabs)/testimonials")}
           />
         </View>
 
