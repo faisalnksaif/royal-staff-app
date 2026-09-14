@@ -1,3 +1,4 @@
+import { Platform } from "react-native"
 import {
   Geist_400Regular,
   Geist_500Medium,
@@ -80,10 +81,25 @@ export const fontScale = {
 
 export type FontVariant = keyof typeof fontScale
 
-export const fontAssets = {
-  Geist_400Regular,
-  Geist_500Medium,
-  Geist_600SemiBold,
-  Geist_700Bold,
-  GeistMono_400Regular,
-} as const
+// On web, load the fonts from /fonts/ (copied verbatim from public/) rather than
+// from the package. Cloudflare Pages drops any upload path containing a
+// `node_modules` segment, and Expo exports package fonts to
+// dist/assets/node_modules/@expo-google-fonts/... — those 404 to the SPA
+// fallback and silently fall back to system sans.
+// Native is unaffected and keeps the bundled assets.
+export const fontAssets = Platform.select({
+  web: {
+    Geist_400Regular: { uri: "/fonts/Geist_400Regular.ttf" },
+    Geist_500Medium: { uri: "/fonts/Geist_500Medium.ttf" },
+    Geist_600SemiBold: { uri: "/fonts/Geist_600SemiBold.ttf" },
+    Geist_700Bold: { uri: "/fonts/Geist_700Bold.ttf" },
+    GeistMono_400Regular: { uri: "/fonts/GeistMono_400Regular.ttf" },
+  },
+  default: {
+    Geist_400Regular,
+    Geist_500Medium,
+    Geist_600SemiBold,
+    Geist_700Bold,
+    GeistMono_400Regular,
+  },
+})
