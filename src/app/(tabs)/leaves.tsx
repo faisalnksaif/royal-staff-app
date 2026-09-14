@@ -29,7 +29,7 @@ import { spacing, colors as palette, radii } from "../../constants/theme"
 import { leaveService } from "../../services/leaveService"
 import useAuthStore from "../../stores/useAuthStore"
 import { useTablet } from "../../hooks/useTablet"
-import type { LeaveRequest, LeaveStatus, LeaveType } from "../../types"
+import type { LeaveRequest, LeaveStatus, RequestableLeaveType } from "../../types"
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -119,7 +119,7 @@ function RequestModal({
   const { colors } = useTheme()
   const [startDate, setStartDate] = useState<Date | null>(null)
   const [endDate, setEndDate] = useState<Date | null>(null)
-  const [leaveType, setLeaveType] = useState<LeaveType>("Personal")
+  const [leaveType, setLeaveType] = useState<RequestableLeaveType>("Personal")
   const [reason, setReason] = useState("")
   const [error, setError] = useState("")
 
@@ -153,7 +153,7 @@ function RequestModal({
     mutation.mutate()
   }
 
-  const TYPES: LeaveType[] = ["Personal", "Medical"]
+  const TYPES: RequestableLeaveType[] = ["Personal", "Medical"]
 
   if (!visible) return null
 

@@ -1,5 +1,5 @@
 import api from "./apiClient"
-import type { LeaveRequest, LeaveStatsOverview, LeaveBalance, LeaveStatus } from "../types"
+import type { LeaveRequest, LeaveStatsOverview, LeaveBalance, LeaveStatus, RequestableLeaveType } from "../types"
 
 async function getLeaves(status?: LeaveStatus): Promise<{ success: boolean; data: { count: number; leaves: LeaveRequest[] } }> {
   const qs = status ? `?status=${status}` : ""
@@ -67,7 +67,7 @@ async function getLeaveBalance(staffId: number): Promise<{ success: boolean; dat
 interface RequestLeavePayload {
   startDate: string
   endDate: string
-  leaveType: "Personal" | "Medical"
+  leaveType: RequestableLeaveType
   reason: string
 }
 

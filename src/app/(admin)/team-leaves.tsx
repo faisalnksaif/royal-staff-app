@@ -30,7 +30,7 @@ import { spacing, colors as palette, radii } from "../../constants/theme"
 import { leaveService } from "../../services/leaveService"
 import { staffService } from "../../services/staffService"
 import useAuthStore from "../../stores/useAuthStore"
-import type { LeaveRequest, LeaveStatus, LeaveType } from "../../types"
+import type { LeaveRequest, LeaveStatus, RequestableLeaveType } from "../../types"
 
 function leaveErrorMessage(e: unknown, fallback: string): string {
   return (e as Error)?.message ?? fallback
@@ -46,8 +46,16 @@ const STATUS_CONFIG: Record<LeaveStatus, { label: string; color: string }> = {
 }
 
 const TYPE_CONFIG = {
-  Personal: { color: palette.primary[500] },
-  Medical:  { color: palette.error.default },
+  Personal:   { color: palette.primary[500] },
+  Medical:    { color: palette.error.default },
+  Attendance: { color: palette.warning.default },
+}
+
+// Mirrors the server-side predicate in LeaveService.deleteHalfDayLeave - only
+// half-day leaves auto-created by AttendanceRuleFinalizer may be deleted via
+// that endpoint. Keep the two in sync.
+function isAutoHalfDayLeave(item: LeaveRequest): boolean {
+  return item.leaveType === "Attendance" && item.reason.startsWith("Auto-generated:")
 }
 
 const FILTERS: Array<{ label: string; value: LeaveStatus | "all" }> = [
@@ -416,7 +424,7 @@ function LeaveCard({
           onPress: onToggleExemption,
         }]
       : []),
-    ...(canDeleteHalfDay && onDeleteHalfDay
+    ...(canDeleteHalfDay && isAutoHalfDayLeave(item) && onDeleteHalfDay
       ? [{
           label: "Delete half-day leave",
           icon: <Trash2 size={16} color={palette.error.default} strokeWidth={1.75} />,
@@ -555,7 +563,7 @@ function MyRequestModal({
   const user = useAuthStore((s) => s.user)
   const [startDate, setStartDate] = useState<Date | null>(null)
   const [endDate, setEndDate] = useState<Date | null>(null)
-  const [leaveType, setLeaveType] = useState<LeaveType>("Personal")
+  const [leaveType, setLeaveType] = useState<RequestableLeaveType>("Personal")
   const [reason, setReason] = useState("")
   const [error, setError] = useState("")
 
@@ -599,7 +607,7 @@ function MyRequestModal({
     mutation.mutate()
   }
 
-  const TYPES: LeaveType[] = ["Personal", "Medical"]
+  const TYPES: RequestableLeaveType[] = ["Personal", "Medical"]
 
   if (!visible) return null
 

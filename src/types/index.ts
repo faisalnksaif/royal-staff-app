@@ -720,7 +720,12 @@ export interface DashboardOverviewResponse {
 }
 
 export type LeaveStatus = "pending" | "approved" | "rejected"
-export type LeaveType = "Personal" | "Medical"
+// "Attendance" is never user-requested - it is stamped on auto-generated
+// half-day leaves by AttendanceRuleFinalizer (see the request-form pickers,
+// which offer only Personal/Medical).
+export type LeaveType = "Personal" | "Medical" | "Attendance"
+// The subset a user may actually request. "Attendance" is excluded by design.
+export type RequestableLeaveType = Exclude<LeaveType, "Attendance">
 
 export interface LeaveRequest {
   id: string
