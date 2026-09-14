@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react"
 import { View, Pressable, ScrollView, StyleSheet, Platform, StatusBar, Modal, Animated, TouchableWithoutFeedback } from "react-native"
 import { Stack, useRouter, usePathname } from "expo-router"
-import { MessageCircleMore, CalendarCheck, CalendarClock, ClipboardCheck, Trophy, Award, Users, Settings, Settings2, LogOut, UsersRound, Bell, ChevronLeft, ChevronRight, IdCard, Radar, ListChecks, BriefcaseBusiness, MessageSquareQuote, Presentation, ThumbsUp, Star, Wallet } from "lucide-react-native"
+import { MessageCircleMore, CalendarCheck, CalendarClock, CalendarOff, ClipboardCheck, Trophy, Award, Users, Settings, Settings2, LogOut, UsersRound, Bell, ChevronLeft, ChevronRight, IdCard, Radar, ListChecks, BriefcaseBusiness, MessageSquareQuote, Presentation, ThumbsUp, Star, Wallet } from "lucide-react-native"
 import { AdminDrawerContext } from "../../contexts/adminDrawer"
 import { useQuery } from "@tanstack/react-query"
 import AppText from "../../components/ui/AppText"
@@ -47,6 +47,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Todo",                href: "/(admin)/team-todo",         icon: ListChecks,        matchExact: false, roles: ["superAdmin", "manager", "hr"], section: "admin" },
   { label: "Mappings",            href: "/(admin)/mappings",          icon: Users,             matchExact: false, roles: ["superAdmin", "manager"], section: "admin" },
   { label: "Feedback Questions",  href: "/(admin)/team-feedback-questions", icon: ThumbsUp,    matchExact: false, roles: ["superAdmin", "manager", "hr"], section: "admin" },
+  { label: "Holidays",            href: "/(admin)/holidays",          icon: CalendarOff,       matchExact: false, roles: ["superAdmin", "manager", "hr"], section: "admin" },
   { label: "Scanning Devices",    href: "/(admin)/scanning-devices",  icon: Radar,             matchExact: false, roles: ["superAdmin"], section: "admin" },
   { label: "Settings",            href: "/(admin)/team-settings",     icon: Settings,          matchExact: false, roles: ["superAdmin", "manager", "hr"], section: "admin" },
 ]

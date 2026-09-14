@@ -61,6 +61,22 @@ export interface ShiftListResponse {
   data: ShiftResponse[]
 }
 
+export interface HolidayResponse {
+  _id: string
+  date: string
+  name: string
+  notes: string | null
+  createdByStaffId: number | null
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface HolidayListResponse {
+  success: boolean
+  count: number
+  data: HolidayResponse[]
+}
+
 export interface DepartmentResponse {
   _id: string
   name: string

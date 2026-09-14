@@ -47,11 +47,18 @@ export default function AppInput({
             borderColor,
             backgroundColor: colors.background.secondary,
           },
+          // A multiline field can't live in the fixed-height, vertically
+          // centred row a single-line one uses: the text grows downward from
+          // the top, so the row grows with it and the caret starts at the top
+          // edge. Without this the content overflows the 48px row and spills
+          // over the label above it.
+          props.multiline && styles.inputRowMultiline,
         ]}
       >
         <TextInput
           style={[
             styles.input,
+            props.multiline && styles.inputMultiline,
             { color: colors.text.primary },
             style,
           ]}
@@ -60,6 +67,7 @@ export default function AppInput({
           onBlur={() => setFocused(false)}
           autoCapitalize="none"
           autoCorrect={false}
+          textAlignVertical={props.multiline ? "top" : undefined}
           {...props}
         />
         {rightIcon && <View style={styles.icon}>{rightIcon}</View>}
@@ -84,12 +92,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[4],
     height: 48,
   },
+  inputRowMultiline: {
+    alignItems: "flex-start",
+    height: undefined,
+    minHeight: 96,
+    paddingVertical: spacing[3],
+  },
   input: {
     flex: 1,
     height: "100%",
     fontSize: 16,
     fontFamily: fontFamilies.sans.regular,
     ...({ outlineStyle: "none" } as object),
+  },
+  inputMultiline: {
+    height: undefined,
+    alignSelf: "stretch",
+    paddingTop: 0,
+    ...({ resize: "none" } as object),
   },
   icon: { marginLeft: spacing[2] },
   error: { marginTop: 2 },
