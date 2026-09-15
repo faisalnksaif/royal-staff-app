@@ -389,7 +389,7 @@ export default function MonthlyAttendanceScreen() {
 
   const [pickerOpen, setPickerOpen] = useState(false)
   const [selectedStaffId, setSelectedStaffId] = useState<number | null>(
-    params.staffId ? Number(params.staffId) : null,
+    params.staffId != null ? Number(params.staffId) : null,
   )
   const [month, setMonth] = useState(CURRENT_MONTH)
   const [editMode, setEditMode] = useState(false)
@@ -418,7 +418,7 @@ export default function MonthlyAttendanceScreen() {
 
   const handleRejectOvertime = useCallback(
     async (day: MonthlyAttendanceDay) => {
-      if (!activeStaffId) return
+      if (activeStaffId == null) return
       try {
         await attendanceService.decideOvertime(activeStaffId, day.date, false)
         refetch()
@@ -501,7 +501,7 @@ export default function MonthlyAttendanceScreen() {
         <View style={styles.center}>
           <AppText color="secondary">Couldn't load this month's attendance.</AppText>
         </View>
-      ) : !activeStaffId ? (
+      ) : activeStaffId == null ? (
         <View style={styles.center}>
           <AppText color="tertiary">Select a staff member to see their month.</AppText>
         </View>
