@@ -18,7 +18,7 @@ export const API_BASE_URL =
 // Base URL the web build of this app is hosted at — used to build the
 // customer-facing feedback link shared over WhatsApp.
 const DEV_WEB = "http://localhost:8081"
-const PROD_WEB = "https://faisalnksaif.github.io/royal-staff-app"
+const PROD_WEB = "https://royalpulse.royalvengara.com"
 
 export const WEB_BASE_URL =
   process.env.EXPO_PUBLIC_WEB_BASE_URL ??
