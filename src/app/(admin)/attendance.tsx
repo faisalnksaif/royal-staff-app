@@ -11,7 +11,7 @@ import {
 } from "react-native"
 import DateTimePicker, { DateTimePickerAndroid } from "@react-native-community/datetimepicker"
 import { useRouter } from "expo-router"
-import { UserPlus, BarChart3, ChevronLeft, ChevronRight, ChevronsUpDown, Pencil } from "lucide-react-native"
+import { UserPlus, BarChart3, CalendarRange, ChevronLeft, ChevronRight, ChevronsUpDown, Pencil } from "lucide-react-native"
 import BackButton from "../../components/shared/BackButton"
 import DrawerMenuButton from "../../components/shared/DrawerMenuButton"
 import RefreshButton from "../../components/shared/RefreshButton"
@@ -226,6 +226,9 @@ export default function AttendanceScreen() {
           </Pressable>
           <Pressable onPress={() => setEditMode((v) => !v)} style={styles.enrollBtn} hitSlop={8}>
             <Pencil size={22} color={editMode ? colors.accent : colors.text.tertiary} strokeWidth={1.75} />
+          </Pressable>
+          <Pressable onPress={() => router.push("/(admin)/attendance-monthly")} style={styles.enrollBtn} hitSlop={8}>
+            <CalendarRange size={22} color={colors.accent} strokeWidth={1.75} />
           </Pressable>
           <Pressable onPress={() => router.push("/(admin)/attendance-dashboard")} style={styles.enrollBtn} hitSlop={8}>
             <BarChart3 size={22} color={colors.accent} strokeWidth={1.75} />

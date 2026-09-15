@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react"
 import { View, Pressable, ScrollView, StyleSheet, Platform, StatusBar, Modal, Animated, TouchableWithoutFeedback } from "react-native"
 import { Stack, useRouter, usePathname } from "expo-router"
-import { MessageCircleMore, CalendarCheck, CalendarClock, CalendarOff, ClipboardCheck, Trophy, Award, Users, Settings, Settings2, LogOut, UsersRound, Bell, ChevronLeft, ChevronRight, IdCard, Radar, ListChecks, BriefcaseBusiness, MessageSquareQuote, Presentation, ThumbsUp, Star, Wallet } from "lucide-react-native"
+import { MessageCircleMore, CalendarCheck, CalendarClock, CalendarOff, CalendarRange, ClipboardCheck, Trophy, Award, Users, Settings, Settings2, LogOut, UsersRound, Bell, ChevronLeft, ChevronRight, IdCard, Radar, ListChecks, BriefcaseBusiness, MessageSquareQuote, Presentation, ThumbsUp, Star, Wallet } from "lucide-react-native"
 import { AdminDrawerContext } from "../../contexts/adminDrawer"
 import { useQuery } from "@tanstack/react-query"
 import AppText from "../../components/ui/AppText"
@@ -30,6 +30,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Customers",           href: "/(admin)/customers-with-debt",     icon: UsersRound,        matchExact: false, roles: ["superAdmin", "manager"], section: "overview" },
 
   { label: "Attendance",          href: "/(admin)/attendance",        icon: CalendarCheck,     matchExact: false, section: "team" },
+  { label: "Monthly Attendance",  href: "/(admin)/attendance-monthly", icon: CalendarRange,    matchExact: false, section: "team" },
   { label: "Leaves",              href: "/(admin)/team-leaves",       icon: CalendarClock,     matchExact: false, section: "team" },
   { label: "Meetings",            href: "/(admin)/team-meetings",     icon: Presentation,      matchExact: false, roles: ["superAdmin", "manager", "hr"], section: "team" },
   { label: "Salary",              href: "/(admin)/team-salary",       icon: Wallet,            matchExact: false, roles: ["superAdmin", "manager"], section: "team" },
@@ -80,7 +81,11 @@ function Sidebar() {
 
   function isActive(item: NavItem) {
     if (item.matchExact) return pathname === "/" || pathname === "/index"
-    return pathname.includes(item.href.split("/").pop() ?? "")
+    // Compare the last path segment exactly rather than by substring:
+    // "attendance-monthly" contains "attendance", so a substring match lights
+    // up both nav rows at once (same overlap exists for leaves/team-leaves).
+    const target = item.href.split("/").pop() ?? ""
+    return pathname.split("/").filter(Boolean).includes(target)
   }
 
   async function handleLogout() {
@@ -208,7 +213,11 @@ function MobileDrawer({ open, onClose }: { open: boolean; onClose: () => void })
 
   function isActive(item: NavItem) {
     if (item.matchExact) return pathname === "/" || pathname === "/index"
-    return pathname.includes(item.href.split("/").pop() ?? "")
+    // Compare the last path segment exactly rather than by substring:
+    // "attendance-monthly" contains "attendance", so a substring match lights
+    // up both nav rows at once (same overlap exists for leaves/team-leaves).
+    const target = item.href.split("/").pop() ?? ""
+    return pathname.split("/").filter(Boolean).includes(target)
   }
 
   function navigate(href: string) {

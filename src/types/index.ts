@@ -554,6 +554,66 @@ export interface AttendanceRecord {
   status: AttendanceStatus
 }
 
+/**
+ * What a calendar day in the monthly view represents. Mirrors MonthlyDayType
+ * on the backend - "no-record" is a rostered day with no attendance document
+ * at all, which is the discrepancy the monthly page exists to surface.
+ */
+export type MonthlyDayType = "working" | "no-record" | "off-day" | "holiday" | "future"
+
+export interface MonthlyAttendanceDay {
+  date: string
+  dayType: MonthlyDayType
+  holidayName: string | null
+  status: AttendanceStatus | null
+  sessionCount: number
+  sessions: AttendanceSession[]
+  totalWorkHours: number | null
+  totalBreakTime: number | null
+  lateMinutes: number
+  pendingOvertimeMinutes: number
+  approvedOvertimeMinutes: number
+  overtimeApprovalStatus: "none" | "pending" | "approved" | "rejected"
+  breakMinutes: number | null
+  breakAllowanceMinutes: number
+  breakExcessMinutes: number
+  isOnLeave: boolean
+  leaveType: string | null
+  isOffDay: boolean
+  hasMissedCheckout: boolean
+  wasEdited: boolean
+  notes: string | null
+}
+
+export interface MonthlyAttendanceSummary {
+  workingDays: number
+  presentDays: number
+  absentDays: number
+  lateDays: number
+  halfDayDays: number
+  onLeaveDays: number
+  noRecordDays: number
+  offDays: number
+  totalWorkHours: number
+  totalLateMinutes: number
+  totalApprovedOvertimeMinutes: number
+  totalPendingOvertimeMinutes: number
+  totalBreakExcessMinutes: number
+  missedCheckoutDays: number
+}
+
+export interface MonthlyAttendanceResponse {
+  success: boolean
+  data: {
+    staffId: number
+    staffName: string
+    month: string
+    period: { start: string; end: string }
+    summary: MonthlyAttendanceSummary
+    days: MonthlyAttendanceDay[]
+  }
+}
+
 export interface AttendanceDayResponse {
   success: boolean
   date: string

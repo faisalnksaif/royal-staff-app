@@ -4,7 +4,7 @@ import * as Application from "expo-application"
 import * as Device from "expo-device"
 import api from "./apiClient"
 import { ContentType } from "./generated/Api"
-import type { AttendanceScanResponse, AttendanceDayResponse, AttendanceSummaryResponse, AttendanceDashboardResponse, StaffListResponse, FaceEnrollResponse, EnrollmentPose, AttendanceRecord, RecentScansResponse } from "../types"
+import type { AttendanceScanResponse, AttendanceDayResponse, AttendanceSummaryResponse, AttendanceDashboardResponse, MonthlyAttendanceResponse, StaffListResponse, FaceEnrollResponse, EnrollmentPose, AttendanceRecord, RecentScansResponse } from "../types"
 
 // Identifies which physical kiosk/phone a scan came from, for audit trail.
 // androidId resets on factory reset/reinstall — good enough to distinguish
@@ -161,6 +161,18 @@ async function getAttendanceDashboard(startDate: string, endDate: string): Promi
   return data
 }
 
+// One staff member's month, day by day, with sessions. Admin-only on the
+// server — the self-service equivalent is /attendance/my-history.
+async function getMonthlyAttendance(staffId: number, month: string): Promise<MonthlyAttendanceResponse> {
+  const { data } = await api.http.request<MonthlyAttendanceResponse>({
+    path: `/attendance/${staffId}/monthly?month=${month}`,
+    method: "GET",
+    secure: true,
+    format: "json",
+  })
+  return data
+}
+
 async function getStaff(): Promise<StaffListResponse> {
   const { data } = await api.http.request<StaffListResponse>({
     path: "/staff",
@@ -206,4 +218,4 @@ async function decideOvertime(
   return data
 }
 
-export const attendanceService = { scanFace, getRecentScans, enrollFace, deleteFaceEnrollment, getAttendance, getAttendanceSummary, getAttendanceDashboard, getStaff, editSessions, decideOvertime }
+export const attendanceService = { scanFace, getRecentScans, enrollFace, deleteFaceEnrollment, getAttendance, getAttendanceSummary, getAttendanceDashboard, getMonthlyAttendance, getStaff, editSessions, decideOvertime }
