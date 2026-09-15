@@ -57,13 +57,29 @@ function BalanceCard({ staffId }: { staffId?: number }) {
   })
 
   const balance = data?.data
-  const used = balance?.leaveUsedThisYear ?? 0
-  const total = balance?.totalLeavePerYear ?? 12
+  // Everything drawing on the allowance - approved leave, pending leave and
+  // no-show days. leaveUsedThisYear counts approved leave only, so a staff
+  // member whose days are all no-shows would read as 0% used next to a
+  // negative balance.
+  const used = balance?.totalRequestedThisYear ?? 0
+  const total = balance?.totalLeavePerYear ?? 0
   const remaining = balance?.leaveBalance ?? 0
   const usedThisMonth = balance?.leaveUsedThisMonth ?? 0
-  const fillRatio = total > 0 ? Math.min(used / total, 1) : 0
-  const pct = Math.round(fillRatio * 100)
-  const barColor = fillRatio > 0.8 ? palette.error.default : fillRatio > 0.5 ? palette.warning.default : palette.success.default
+  const noShows = balance?.noShowDaysThisYear ?? 0
+  const overBy = remaining < 0 ? -remaining : 0
+  const isOver = overBy > 0
+  const rawRatio = total > 0 ? used / total : 0
+  const pct = Math.round(rawRatio * 100)
+  // The bar can't render past full, so an over-quota month is called out in
+  // words rather than left to read as merely "100% used".
+  const barWidth = Math.min(rawRatio, 1) * 100
+  const barColor = isOver
+    ? palette.error.default
+    : rawRatio > 0.8
+    ? palette.error.default
+    : rawRatio > 0.5
+    ? palette.warning.default
+    : palette.success.default
 
   return (
     <View style={[styles.balanceCard, { borderBottomColor: colors.border }]}>
@@ -92,13 +108,23 @@ function BalanceCard({ staffId }: { staffId?: number }) {
           {/* Progress bar */}
           <View style={styles.balanceBarWrap}>
             <View style={[styles.balanceTrack, { backgroundColor: colors.border }]}>
-              <View style={[styles.balanceFill, { backgroundColor: barColor, width: `${pct}%` }]} />
+              <View style={[styles.balanceFill, { backgroundColor: barColor, width: `${barWidth}%` }]} />
             </View>
             <AppText variant="caption" style={{ color: barColor, fontSize: 11 }}>{pct}%</AppText>
           </View>
           <AppText variant="caption" color="tertiary" style={{ marginTop: spacing[1] }}>
             {used} of {total} days used this year
           </AppText>
+          {isOver && (
+            <AppText variant="caption" style={{ color: palette.error.default }}>
+              {overBy} day{overBy !== 1 ? "s" : ""} over your allowance.
+            </AppText>
+          )}
+          {noShows > 0 && (
+            <AppText variant="caption" color="tertiary">
+              Includes {noShows} absent day{noShows !== 1 ? "s" : ""} with no leave requested.
+            </AppText>
+          )}
         </>
       )}
     </View>

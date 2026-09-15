@@ -206,9 +206,11 @@ export default function HomeScreen() {
             subtitle={
               balanceLoading
                 ? ""
-                : leaveBalance != null
-                ? `${leaveBalance} days remaining`
-                : "View leave requests"
+                : leaveBalance == null
+                ? "View leave requests"
+                : leaveBalance < 0
+                ? `${-leaveBalance} day${-leaveBalance !== 1 ? "s" : ""} over allowance`
+                : `${leaveBalance} day${leaveBalance !== 1 ? "s" : ""} remaining`
             }
             accent={palette.warning.default}
             isLoading={balanceLoading}

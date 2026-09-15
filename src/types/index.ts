@@ -823,11 +823,16 @@ export interface LeaveBalance {
   staffId: number
   name: string
   totalLeavePerYear: number
+  /** Entitlement minus everything used. Goes negative once the allowance is spent. */
   leaveBalance: number
+  /** Approved leave only - excludes pending leave and no-show days. */
   leaveUsedThisYear: number
   leaveUsedThisMonth: number
+  /** Everything drawing on the allowance: approved + pending leave + no-show days. */
   totalRequestedThisYear: number
   totalRequestedThisMonth: number
+  /** Absences with no leave requested. Already included in totalRequestedThisYear. */
+  noShowDaysThisYear: number
   recommendedMonthlyLimit: number
 }
 
