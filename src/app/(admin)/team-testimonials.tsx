@@ -116,8 +116,8 @@ function PendingCard({
       number={(index ?? 0) + 1}
       avatarColor={avatarColor}
       avatarBgColor={avatarBgColor}
-      title={toTitleCase(item.revieweeName)}
-      pills={[{ key: "from", label: `From ${toTitleCase(item.reviewerName)}`, color: colors.accent, bgColor: colors.accentSubtle }]}
+      title={toTitleCase(item.reviewerName)}
+      pills={[{ key: "about", label: `About ${toTitleCase(item.revieweeName)}`, color: colors.accent, bgColor: colors.accentSubtle }]}
       menuItems={menuItems}
       isBusy={isApproving || isRejecting}
       metaLines={[
@@ -138,8 +138,8 @@ function ApprovedCard({ item, index }: { item: Testimonial; index?: number }) {
       number={(index ?? 0) + 1}
       avatarColor={palette.success.default}
       avatarBgColor={palette.success.default + "18"}
-      title={toTitleCase(item.revieweeName)}
-      pills={[{ key: "from", label: `From ${toTitleCase(item.reviewerName)}`, color: colors.accent, bgColor: colors.accentSubtle }]}
+      title={toTitleCase(item.reviewerName)}
+      pills={[{ key: "about", label: `About ${toTitleCase(item.revieweeName)}`, color: colors.accent, bgColor: colors.accentSubtle }]}
       trailing={
         <AppText variant="bodyMedium" style={{ color: palette.success.default }}>+{item.points}</AppText>
       }
