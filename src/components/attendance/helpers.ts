@@ -47,6 +47,15 @@ export function statusColor(status: AttendanceRecord["status"]): string {
 export const STATUS_LABEL = { present: "Present", late: "Late", "half-day": "Half-day", absent: "Absent" }
 export const STATUS_ORDER: Record<AttendanceRecord["status"], number> = { present: 0, late: 1, "half-day": 2, absent: 3 }
 
+/**
+ * A session with no checkOut that was not auto-closed - the staff member is
+ * still checked in. On today that is normal; on a past day it is a dangling
+ * record someone has to correct.
+ */
+export function hasOpenSession(record: AttendanceRecord): boolean {
+  return !!record.sessions?.some((s) => !s.checkOut && !s.autoClosed)
+}
+
 export function needsAttention(record: AttendanceRecord): boolean {
   const breakExcessMinutes = record.break?.excessMinutes ?? 0
   const hasAutoClosed = record.sessions?.some((s) => s.autoClosed)

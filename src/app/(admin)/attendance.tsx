@@ -30,12 +30,12 @@ import { useRole } from "../../hooks/useRole"
 import { useCurrentStaff, useStaff } from "../../hooks/useStaff"
 import { useDepartments } from "../../hooks/useDepartments"
 import { attendanceService } from "../../services/attendanceService"
-import SummaryBar from "../../components/attendance/SummaryBar"
+import SummaryBar, { type SummaryFilter } from "../../components/attendance/SummaryBar"
 import AttendanceRow from "../../components/attendance/AttendanceRow"
 import StaffCardDesktop from "../../components/attendance/StaffCardDesktop"
 import EditSessionsModal from "../../components/attendance/EditSessionsModal"
 import OvertimeApprovalModal from "../../components/attendance/OvertimeApprovalModal"
-import { STATUS_ORDER, needsAttention } from "../../components/attendance/helpers"
+import { STATUS_ORDER, needsAttention, hasOpenSession } from "../../components/attendance/helpers"
 import type { AttendanceRecord } from "../../types"
 
 const UNASSIGNED_DEPARTMENT = "Other"
@@ -55,7 +55,7 @@ export default function AttendanceScreen() {
   const today = moment().format("YYYY-MM-DD")
   const [selectedDate, setSelectedDate] = useState(today)
   const isToday = selectedDate === today
-  const emptyMessage = isToday
+  const baseEmptyMessage = isToday
     ? "No attendance records for today"
     : `No attendance records for ${moment(selectedDate).format("D MMM YYYY")}`
   const { isHR, isAdmin } = useRole()
@@ -68,6 +68,17 @@ export default function AttendanceScreen() {
   const [editTarget, setEditTarget] = useState<AttendanceRecord | null>(null)
   const [otApprovalTarget, setOtApprovalTarget] = useState<AttendanceRecord | null>(null)
   const [editMode, setEditMode] = useState(false)
+  const [statusFilter, setStatusFilter] = useState<SummaryFilter | null>(null)
+  const FILTER_LABEL: Record<SummaryFilter, string> = {
+    present: "present",
+    late: "late",
+    absent: "absent",
+    open: "still checked in",
+  }
+  // A filter that matches nothing should say so, rather than read as an empty day.
+  const emptyMessage = statusFilter
+    ? `No ${FILTER_LABEL[statusFilter]} staff${isToday ? " today" : ` on ${moment(selectedDate).format("D MMM YYYY")}`}`
+    : baseEmptyMessage
   const [expandAllSignal, setExpandAllSignal] = useState({ value: false, token: 0 })
   const [actionError, setActionError] = useState<string | null>(null)
 
@@ -77,13 +88,20 @@ export default function AttendanceScreen() {
 
   const { data, isLoading, refetch, isRefetching } = useAttendance(selectedDate)
 
+  // The "Open" card only exists on past days, so a filter must not survive a
+  // date change that would leave it stranded on a day where it cannot be cleared.
+  function changeDate(next: string) {
+    setStatusFilter(null)
+    setSelectedDate(next)
+  }
+
   function goToPrevDay() {
-    setSelectedDate(moment(selectedDate).subtract(1, "day").format("YYYY-MM-DD"))
+    changeDate(moment(selectedDate).subtract(1, "day").format("YYYY-MM-DD"))
   }
 
   function goToNextDay() {
     if (isToday) return
-    setSelectedDate(moment(selectedDate).add(1, "day").format("YYYY-MM-DD"))
+    changeDate(moment(selectedDate).add(1, "day").format("YYYY-MM-DD"))
   }
 
   function openDatePicker() {
@@ -93,7 +111,7 @@ export default function AttendanceScreen() {
         value: current,
         mode: "date",
         maximumDate: new Date(),
-        onChange: (_, d) => { if (d) setSelectedDate(moment(d).format("YYYY-MM-DD")) },
+        onChange: (_, d) => { if (d) changeDate(moment(d).format("YYYY-MM-DD")) },
       })
     } else if (Platform.OS === "ios") {
       setIosTempDate(current)
@@ -105,16 +123,28 @@ export default function AttendanceScreen() {
 
   const summary = data?.summary ?? { present: 0, late: 0, absent: 0 }
 
+  // Dangling sessions are only an anomaly once the day is over - today's open
+  // sessions are just staff still at work.
+  const openCount = useMemo(
+    () => (isToday ? 0 : (data?.data ?? []).filter(hasOpenSession).length),
+    [data?.data, isToday],
+  )
+
   const records = useMemo(() => {
     const query = search.trim().toLowerCase()
     return [...(data?.data ?? [])]
       .filter((r) => r.staffName.toLowerCase().includes(query))
+      .filter((r) => {
+        if (!statusFilter) return true
+        if (statusFilter === "open") return hasOpenSession(r)
+        return r.status === statusFilter
+      })
       .sort((a, b) => {
         const statusDiff = STATUS_ORDER[a.status] - STATUS_ORDER[b.status]
         if (statusDiff !== 0) return statusDiff
         return Number(needsAttention(b)) - Number(needsAttention(a))
       })
-  }, [data?.data, search])
+  }, [data?.data, search, statusFilter])
 
   const departmentByStaffId = useMemo(() => {
     const departmentNameById = new Map<string, string>()
@@ -338,7 +368,11 @@ export default function AttendanceScreen() {
           present={summary.present}
           late={summary.late}
           absent={summary.absent}
+          open={openCount}
+          showOpen={!isToday && openCount > 0}
           isLoading={isLoading}
+          activeFilter={statusFilter}
+          onFilterChange={setStatusFilter}
         />
       </View>
 
