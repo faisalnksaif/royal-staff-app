@@ -254,7 +254,10 @@ export default function MappingsScreen() {
     mutationFn: ({ ledgerId, staffId }: { ledgerId: number; staffId: number }) =>
       mappingService.reassign(ledgerId, staffId),
     onSuccess: (updated) => {
-      qc.setQueryData<typeof data>(["mappings", debouncedSearch], (old) => {
+      // Prefix match, not the exact key: the list is cached per
+      // search/ownership/hold/sort combination, so patching only the current
+      // one leaves every other cached variant showing the old staff name.
+      qc.setQueriesData<typeof data>({ queryKey: ["mappings"] }, (old) => {
         if (!old) return old
         return {
           ...old,
