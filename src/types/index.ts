@@ -212,7 +212,7 @@ export interface LedgerCustomerOutstanding {
   mobile: string | null
   outstanding_balance: number
   outstanding_dr_cr: "Dr" | "Cr"
-  ownership_source: "assigned" | "dynamic" | "unassigned"
+  ownership_source: "assigned" | "unassigned"
   staff_sales_total: number
   other_contributors: { staff_id: number; staff_name: string; sales_total: number }[]
   follow_up: LedgerCustomerFollowUp
@@ -341,7 +341,7 @@ export interface CustomerLedgerResponse {
   ownership: {
     staffId: number | null
     staffName: string | null
-    source: "assigned" | "dynamic" | "unassigned"
+    source: "assigned" | "unassigned"
   } | null
   feedback?: CustomerFeedbackSubmission[]
 }

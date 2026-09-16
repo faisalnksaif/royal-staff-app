@@ -8,7 +8,7 @@ export interface CustomerMapping {
   balance: number
   assigned_staff_id: number | null
   assigned_staff_name: string | null
-  ownership_source?: "assigned" | "dynamic" | "unassigned"
+  ownership_source?: "assigned" | "unassigned"
   is_new?: boolean
   created_at?: string
   on_hold?: boolean
@@ -54,7 +54,7 @@ async function getMappings(params: {
   page?: number
   limit?: number
   search?: string
-  ownership?: "all" | "assigned" | "dynamic" | "unassigned"
+  ownership?: "all" | "assigned" | "unassigned"
   hold?: "all" | "held" | "not_held"
   sortBy?: "created_at" | "balance" | "name"
   order?: "asc" | "desc"

@@ -91,7 +91,7 @@ export interface LedgerCustomerResponse {
    */
   balance?: number;
   /**
-   * Staff currently responsible for this customer (see ownership cutoff rule)
+   * Staff currently responsible for this customer (see CustomerOwnershipResolver)
    * @example 2646
    */
   assigned_staff_id?: number | null;
@@ -1853,6 +1853,76 @@ export class Api<SecurityDataType extends unknown> {
   };
   ledger = {
     /**
+     * @description Downloads the Customers admin page as an Excel workbook. `tab` selects which of the page's three tabs to export, and each one reuses that tab's own endpoint pipeline verbatim - GET /ledger/outstanding, GET /ledger/retention or GET /ledger/payment-velocity - so the sheet matches the list the admin is looking at. Unlike those endpoints this one never paginates: it returns every row matching the filters. (`parsePaginationParams` caps `limit` at 100, so an export can't be expressed as "the list route with a big limit".) `page`/`limit` are ignored if sent. Nested objects are flattened into columns - the outstanding tab's `follow_up` summary becomes Follow-ups/Open/Last outcome/etc. Balances are sign-folded (Cr negative) so a SUM() over the column is meaningful, and dates are written as YYYY-MM-DD strings in UTC rather than Excel serial numbers, which render differently per locale.
+     *
+     * @tags Ledger
+     * @name ExportList
+     * @summary Export customers to Excel (.xlsx) (managers/superAdmin/HR)
+     * @request GET:/ledger/export
+     * @secure
+     */
+    exportList: (
+      query?: {
+        /**
+         * Which tab to export. Each accepts that tab's own filter/sort params.
+         * @default "outstanding"
+         */
+        tab?: "outstanding" | "retention" | "velocity";
+        /** Case-insensitive match on customer name (all tabs) */
+        search?: string;
+        /**
+         * `tab=outstanding` only - same values as GET /ledger/outstanding
+         * @default "all"
+         */
+        filter?:
+          | "all"
+          | "followed_up"
+          | "not_followed_up"
+          | "paid"
+          | "overdue"
+          | "open_followup"
+          | "red_list";
+        /**
+         * `tab=outstanding` only - narrow to one buying-recency class
+         * @default "all"
+         */
+        retention_status?:
+          | "all"
+          | "active"
+          | "at_risk"
+          | "churned"
+          | "never_purchased";
+        /**
+         * `tab=retention` only - the retention tab's own status filter (note the different param name to `retention_status` above, matching the two list endpoints)
+         * @default "all"
+         */
+        status?: "all" | "active" | "at_risk" | "churned" | "never_purchased";
+        /** Allowed values depend on `tab` - outstanding: priority|balance|newest (default priority); retention: last_purchase_date|days_since_last_purchase|total_purchases|outstanding_balance|created_at (default last_purchase_date); velocity: avg_days_to_clear|total_debt_amount|total_cleared_amount|cleared_pct|outstanding_balance|days_since_last_payment (default avg_days_to_clear). */
+        sortBy?: string;
+        /** `tab=retention` (default desc) and `tab=velocity` (default asc). The outstanding tab's sorts have a fixed direction. */
+        order?: "asc" | "desc";
+        /**
+         * Retention threshold - days since last purchase still counted as active (outstanding/retention tabs)
+         * @default 30
+         */
+        activeDays?: number;
+        /**
+         * Retention threshold - days since last purchase counted as churned (outstanding/retention tabs)
+         * @default 90
+         */
+        churnedDays?: number;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<Blob, void>({
+        path: `/ledger/export`,
+        method: "GET",
+        query: query,
+        secure: true,
+        ...params,
+      }),
+
+    /**
      * @description Paginated list of all rowbest ledger customers with dr/cr summary - managers only
      *
      * @tags Ledger
@@ -2003,11 +2073,11 @@ export class Api<SecurityDataType extends unknown> {
             is_overdue?: boolean;
             total_promised_amount?: number;
           };
-          /** Who currently "owns" this customer, per the ownership cutoff rule (see GET /ledger/staff/{userId}/outstanding) */
+          /** Who currently "owns" this customer - the sheet assignment, or unassigned (see GET /ledger/staff/{userId}/outstanding) */
           ownership?: {
             staffId?: number | null;
             staffName?: string | null;
-            source?: "assigned" | "dynamic" | "unassigned";
+            source?: "assigned" | "unassigned";
           };
           /** Completed customer feedback submissions for this customer, newest first (see POST /feedback/requests). Pending/expired links (no answers yet) are excluded. */
           feedback?: {
@@ -2146,7 +2216,7 @@ export class Api<SecurityDataType extends unknown> {
       }),
 
     /**
-     * @description Returns customers currently assigned to this staff (per the ownership cutoff rule in Settings key `ledger_ownership_cutoff_date` - before the cutoff, ownership comes from the manually-maintained staff-customer mapping spreadsheet; after it, ownership is derived dynamically from each customer's most recent matched Sales voucher). Each customer includes its live outstanding balance and a breakdown of which staff have historically sold to them (no single "owner" is forced on the sales-contribution side). Staff can only access their own, managers can access any. Customers on hold (see PUT /ledger/customers/{ledgerId}/hold) never appear in `data` for a staff viewer (managers still see them, with `on_hold`/`hold_reason` populated) and are always excluded from `totals` and `follow_up_insights`, regardless of viewer.
+     * @description Returns customers currently assigned to this staff (per the manually-maintained staff-customer mapping spreadsheet, LedgerCustomer.assigned_staff_id - the sole basis for ownership). Each customer includes its live outstanding balance and a breakdown of which staff have historically sold to them (no single "owner" is forced on the sales-contribution side). Staff can only access their own, managers can access any. Customers on hold (see PUT /ledger/customers/{ledgerId}/hold) never appear in `data` for a staff viewer (managers still see them, with `on_hold`/`hold_reason` populated) and are always excluded from `totals` and `follow_up_insights`, regardless of viewer.
      *
      * @tags Ledger
      * @name StaffOutstandingList
@@ -2231,8 +2301,8 @@ export class Api<SecurityDataType extends unknown> {
             /** @example 8064269 */
             outstanding_balance?: number;
             outstanding_dr_cr?: "Dr" | "Cr";
-            /** Whether ownership came from the spreadsheet (assigned), derived post-cutoff (dynamic), or is unset */
-            ownership_source?: "assigned" | "dynamic" | "unassigned";
+            /** Whether ownership came from the spreadsheet (assigned) or is unset (unassigned) */
+            ownership_source?: "assigned" | "unassigned";
             /** This staff's share of total Sales debit to this customer */
             staff_sales_total?: number;
             other_contributors?: {
@@ -2350,6 +2420,62 @@ export class Api<SecurityDataType extends unknown> {
         query: query,
         secure: true,
         format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Downloads the Customers tab of the staff follow-ups screen as an Excel workbook. Mirrors GET /ledger/staff/{userId}/outstanding exactly - same ownership resolution, filter, search and sort - but never paginates: every row matching the filters is returned. (`parsePaginationParams` caps `limit` at 100, so an export can't be expressed as "the list route with a big limit".) `page`/`limit` are ignored if sent. Access follows the list route: a staff member can only export their own book (authorizeOwnerOnly), and held customers stay excluded for staff while managers/superAdmin still see them - a held customer must not reach a staff member's spreadsheet when the list deliberately hides it. `Other contributors` flattens the other_contributors array to `Name (total); Name (total)` text. Balances are sign-folded (Cr negative) so a SUM() over the column is meaningful, and dates are YYYY-MM-DD strings in UTC rather than locale-dependent Excel serials.
+     *
+     * @tags Ledger
+     * @name StaffOutstandingExportList
+     * @summary Export one staff member's outstanding customers to Excel (.xlsx)
+     * @request GET:/ledger/staff/{userId}/outstanding/export
+     * @secure
+     */
+    staffOutstandingExportList: (
+      userId: number,
+      query?: {
+        /** Case-insensitive match on customer name */
+        search?: string;
+        /** @default "all" */
+        filter?:
+          | "all"
+          | "followed_up"
+          | "not_followed_up"
+          | "paid"
+          | "overdue"
+          | "open_followup"
+          | "red_list";
+        /**
+         * Narrow to one buying-recency class
+         * @default "all"
+         */
+        retention_status?:
+          | "all"
+          | "active"
+          | "at_risk"
+          | "churned"
+          | "never_purchased";
+        /** @default "priority" */
+        sortBy?: "priority" | "balance" | "newest";
+        /**
+         * Retention threshold - days since last purchase still counted as active
+         * @default 30
+         */
+        activeDays?: number;
+        /**
+         * Retention threshold - days since last purchase counted as churned
+         * @default 90
+         */
+        churnedDays?: number;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<Blob, void>({
+        path: `/ledger/staff/${userId}/outstanding/export`,
+        method: "GET",
+        query: query,
+        secure: true,
         ...params,
       }),
 
@@ -2883,7 +3009,7 @@ export class Api<SecurityDataType extends unknown> {
       }),
 
     /**
-     * @description Only customers with balance > 0 (see GET /ledger/outstanding for the same convention). `ownership_source` reflects the actual resolved owner - `assigned` (from the manually-maintained mapping, LedgerCustomer.assigned_staff_id) before the ownership cutoff date, or after it `dynamic` (derived from the customer's most recent matched Sales voucher) falling back to `assigned` if there's no dynamic signal yet, or `unassigned` if neither exists - see GET /ledger/staff/{userId}/outstanding for the same rule. Combine with `is_new` to find brand-new customers that still need a staff assignment.
+     * @description Only customers with balance > 0 (see GET /ledger/outstanding for the same convention). `ownership_source` reflects the actual resolved owner - `assigned` (from the manually-maintained mapping, LedgerCustomer.assigned_staff_id), or `unassigned` if the customer has no assignment - see GET /ledger/staff/{userId}/outstanding for the same rule. Combine with `is_new` to find brand-new customers that still need a staff assignment.
      *
      * @tags Ledger
      * @name MappingsList
@@ -2908,7 +3034,7 @@ export class Api<SecurityDataType extends unknown> {
          * Filter `data` to a single resolved ownership_source
          * @default "all"
          */
-        ownership?: "all" | "assigned" | "dynamic" | "unassigned";
+        ownership?: "all" | "assigned" | "unassigned";
         /**
          * Filter `data` by hold status - see PUT /ledger/customers/{ledgerId}/hold
          * @default "all"
@@ -2945,7 +3071,7 @@ export class Api<SecurityDataType extends unknown> {
             balance?: number;
             assigned_staff_id?: number | null;
             assigned_staff_name?: string | null;
-            ownership_source?: "assigned" | "dynamic" | "unassigned";
+            ownership_source?: "assigned" | "unassigned";
             /** First synced from rowbest within the last `newDays` days */
             is_new?: boolean;
             /**
@@ -2960,7 +3086,7 @@ export class Api<SecurityDataType extends unknown> {
             held_at?: string | null;
           }[];
           newDays?: number;
-          ownership?: "all" | "assigned" | "dynamic" | "unassigned";
+          ownership?: "all" | "assigned" | "unassigned";
           hold?: "all" | "held" | "not_held";
           sortBy?: "created_at" | "balance" | "name";
           order?: "asc" | "desc";
@@ -3263,6 +3389,70 @@ export class Api<SecurityDataType extends unknown> {
         secure: true,
         type: ContentType.Json,
         format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Downloads the company-wide follow-up list as an Excel workbook. Takes exactly the same filter and sort params as GET /followups/all, and parses them through the same helpers, so the sheet matches the list the admin is looking at. Unlike /followups/all this never paginates: it returns every row matching the filters. (`parsePaginationParams` caps `limit` at 100, so an export can't be expressed as "the list route with a big limit".) `page`/`limit` are ignored if sent. `Outstanding at logging` is sign-folded (Cr negative) so a SUM() over the column is meaningful, and dates are written as YYYY-MM-DD strings in UTC rather than Excel serial numbers, which render differently per locale. `Outstanding backfilled` flags rows whose outstanding figures came from the one-time migration rather than a live snapshot - see FollowUp.outstandingBackfilled.
+     *
+     * @tags Follow-ups
+     * @name ExportList
+     * @summary Export follow-ups to Excel (.xlsx) (managers/superAdmin/HR)
+     * @request GET:/followups/export
+     * @secure
+     */
+    exportList: (
+      query?: {
+        /** Narrow to a single staff member (a user_id, same convention as GET /followups/all) */
+        staffId?: number;
+        /**
+         * Which date period/startDate/endDate applies to
+         * @default "loggedAt"
+         */
+        dateField?: "loggedAt" | "promisedDate" | "resolvedAt";
+        /** Shorthand date filter. Overrides startDate/endDate if given. */
+        period?: "today" | "yesterday" | "this_month";
+        /**
+         * Custom range start (YYYY-MM-DD), ignored if period is set
+         * @format date
+         */
+        startDate?: string;
+        /**
+         * Custom range end (YYYY-MM-DD), ignored if period is set
+         * @format date
+         */
+        endDate?: string;
+        /** Filter to a single customer by the legacy string customerId */
+        customerId?: string;
+        /** Filter to a single customer by ledger_id */
+        ledgerId?: number;
+        outcome?:
+          | "promisedToPay"
+          | "promisedPartial"
+          | "dispute"
+          | "noResponse"
+          | "reminderSent";
+        /** System-detected payment status, independent of `outcome` */
+        resolutionStatus?: "resolved" | "open";
+        /**
+         * Rows with no value for the sorted field always sort last, as in GET /followups/all
+         * @default "loggedAt"
+         */
+        sortBy?:
+          | "loggedAt"
+          | "promisedAmount"
+          | "amountRecovered"
+          | "outstandingAmount";
+        /** @default "desc" */
+        order?: "asc" | "desc";
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<Blob, void>({
+        path: `/followups/export`,
+        method: "GET",
+        query: query,
+        secure: true,
         ...params,
       }),
 

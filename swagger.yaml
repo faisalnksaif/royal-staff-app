@@ -1027,7 +1027,7 @@ paths:
                         type: number
                   ownership:
                     type: object
-                    description: Who currently "owns" this customer, per the ownership cutoff rule (see GET /ledger/staff/{userId}/outstanding)
+                    description: Who currently "owns" this customer - the sheet assignment, or unassigned (see GET /ledger/staff/{userId}/outstanding)
                     properties:
                       staffId:
                         type: integer
@@ -1037,7 +1037,7 @@ paths:
                         nullable: true
                       source:
                         type: string
-                        enum: [assigned, dynamic, unassigned]
+                        enum: [assigned, unassigned]
                   feedback:
                     type: array
                     description: Completed customer feedback submissions for this customer, newest first (see POST /feedback/requests). Pending/expired links (no answers yet) are excluded.
@@ -1255,10 +1255,8 @@ paths:
       summary: Get customers currently owned by a staff member, with outstanding
       description: >
         Returns customers currently assigned to this staff (per the
-        ownership cutoff rule in Settings key `ledger_ownership_cutoff_date`
-        - before the cutoff, ownership comes from the manually-maintained
-        staff-customer mapping spreadsheet; after it, ownership is derived
-        dynamically from each customer's most recent matched Sales voucher).
+        manually-maintained staff-customer mapping spreadsheet,
+        LedgerCustomer.assigned_staff_id - the sole basis for ownership).
         Each customer includes its live outstanding balance and a breakdown
         of which staff have historically sold to them (no single "owner" is
         forced on the sales-contribution side). Staff can only access their
@@ -1394,8 +1392,8 @@ paths:
                           enum: [Dr, Cr]
                         ownership_source:
                           type: string
-                          enum: [assigned, dynamic, unassigned]
-                          description: Whether ownership came from the spreadsheet (assigned), derived post-cutoff (dynamic), or is unset
+                          enum: [assigned, unassigned]
+                          description: Whether ownership came from the spreadsheet (assigned) or is unset (unassigned)
                         staff_sales_total:
                           type: number
                           description: This staff's share of total Sales debit to this customer
@@ -2350,10 +2348,8 @@ paths:
         Only customers with balance > 0 (see GET /ledger/outstanding for
         the same convention). `ownership_source` reflects the actual
         resolved owner - `assigned` (from the manually-maintained mapping,
-        LedgerCustomer.assigned_staff_id) before the ownership cutoff date,
-        or after it `dynamic` (derived from the customer's most recent
-        matched Sales voucher) falling back to `assigned` if there's no
-        dynamic signal yet, or `unassigned` if neither exists - see
+        LedgerCustomer.assigned_staff_id), or `unassigned` if the customer
+        has no assignment - see
         GET /ledger/staff/{userId}/outstanding for the same rule. Combine
         with `is_new` to find brand-new customers that still need a staff
         assignment.
@@ -2386,7 +2382,7 @@ paths:
           description: Filter `data` to a single resolved ownership_source
           schema:
             type: string
-            enum: [all, assigned, dynamic, unassigned]
+            enum: [all, assigned, unassigned]
             default: all
         - name: hold
           in: query
@@ -2457,7 +2453,7 @@ paths:
                           nullable: true
                         ownership_source:
                           type: string
-                          enum: [assigned, dynamic, unassigned]
+                          enum: [assigned, unassigned]
                         is_new:
                           type: boolean
                           description: First synced from rowbest within the last `newDays` days
@@ -2481,7 +2477,7 @@ paths:
                     type: integer
                   ownership:
                     type: string
-                    enum: [all, assigned, dynamic, unassigned]
+                    enum: [all, assigned, unassigned]
                   hold:
                     type: string
                     enum: [all, held, not_held]
@@ -14431,7 +14427,7 @@ components:
         assigned_staff_id:
           type: integer
           nullable: true
-          description: Staff currently responsible for this customer (see ownership cutoff rule)
+          description: Staff currently responsible for this customer (see CustomerOwnershipResolver)
           example: 2646
         assigned_staff_name:
           type: string

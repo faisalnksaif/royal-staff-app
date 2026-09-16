@@ -170,11 +170,6 @@ function MappingRow({
               <AppText variant="caption" style={{ color: palette.error.default, fontSize: 9 }}>Unassigned</AppText>
             </View>
           )}
-          {item.ownership_source === "dynamic" && (
-            <View style={[styles.badge, { backgroundColor: palette.warning.default + "22" }]}>
-              <AppText variant="caption" style={{ color: palette.warning.default, fontSize: 9 }}>Dynamic</AppText>
-            </View>
-          )}
         </View>
         {item.mobile && <AppText variant="caption" color="tertiary">{item.mobile}</AppText>}
         {item.on_hold && item.hold_reason && (
@@ -216,7 +211,7 @@ export default function MappingsScreen() {
   const [search, setSearch] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [ownership, setOwnership] = useState<"all" | "assigned" | "dynamic" | "unassigned">("all")
+  const [ownership, setOwnership] = useState<"all" | "assigned" | "unassigned">("all")
   const [holdFilter, setHoldFilter] = useState<"all" | "held" | "not_held">("all")
   const [sortBy, setSortBy] = useState<"created_at" | "balance" | "name">("created_at")
   const [order, setOrder] = useState<"asc" | "desc">("desc")
@@ -356,7 +351,7 @@ export default function MappingsScreen() {
       {/* Filters */}
       <View style={[styles.filterWrap, { borderBottomColor: colors.border as string }]}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
-          {(["all", "assigned", "dynamic", "unassigned"] as const).map((v) => {
+          {(["all", "assigned", "unassigned"] as const).map((v) => {
             const active = ownership === v
             return (
               <TouchableOpacity key={v} onPress={() => setOwnership(v)}
