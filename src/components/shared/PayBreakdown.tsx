@@ -1,9 +1,16 @@
 import { View, StyleSheet } from "react-native"
+import moment from "moment"
 import AppText from "../ui/AppText"
 import { useTheme } from "../../providers/ThemeProvider"
 import { spacing, colors as palette, radii } from "../../constants/theme"
 import { formatAmount } from "../../utils/helpers"
-import type { PayslipIncentiveDetail, PayslipPenaltyDetail, PayslipDeductionDetail } from "../../types"
+import type {
+  PayslipIncentiveDetail,
+  PayslipPenaltyDetail,
+  PayslipDeductionDetail,
+  PayslipOvertimeDetail,
+  PayslipBreakExcessDetail,
+} from "../../types"
 
 /**
  * The itemised pay breakdown, shared by the admin payslip list, the staff's
@@ -13,13 +20,29 @@ import type { PayslipIncentiveDetail, PayslipPenaltyDetail, PayslipDeductionDeta
  * Deliberately mirrors the arithmetic in SalaryService.computePayroll:
  *
  *   basicPayEarned = basicPay - attendance deductions
- *   grossPay       = basicPayEarned + incentives
+ *   grossPay       = basicPayEarned + overtimePay - breakExcessDeduction + incentives
  *   netPay         = grossPay - penalties - advances
  *
  * Basic and incentives are shown as separate strands because they behave
  * differently - absence reduces basic only, and never claws back incentives
- * already earned in the month.
+ * already earned in the month. Overtime is its own strand too: only approved
+ * minutes are paid, and pending minutes are shown so they aren't missed.
+ * Break excess sits right under overtime because it comes out of overtime
+ * first (then basic); waived minutes are shown but not charged.
  */
+
+/** "2026-09-02" -> "Wed, 2 Sep"; anything that isn't an ISO date passes through. */
+function formatDay(date: string): string {
+  const m = moment(date, "YYYY-MM-DD", true)
+  return m.isValid() ? m.format("ddd, D MMM") : date
+}
+
+/** 90 -> "1h 30m", 45 -> "45m". */
+function formatMinutes(minutes: number): string {
+  const h = Math.floor(minutes / 60)
+  const m = Math.round(minutes % 60)
+  return h > 0 ? `${h}h ${m}m` : `${m}m`
+}
 
 export interface PayBreakdownProps {
   basicPay: number
@@ -28,6 +51,15 @@ export interface PayBreakdownProps {
   deductionDetails?: PayslipDeductionDetail[]
   incentives: number
   incentiveDetails?: PayslipIncentiveDetail[]
+  overtimePay?: number
+  overtimeMinutes?: number
+  hourlyRate?: number
+  overtimeDetails?: PayslipOvertimeDetail[]
+  pendingOvertimeMinutes?: number
+  breakExcessDeduction?: number
+  breakExcessMinutes?: number
+  breakExcessDetails?: PayslipBreakExcessDetail[]
+  waivedBreakExcessMinutes?: number
   penaltyAmount: number
   penaltyDetails?: PayslipPenaltyDetail[]
   advanceDeducted: number
@@ -43,34 +75,56 @@ function Row({
   sign,
   emphasis,
   indent,
+  total,
 }: {
   label: string
   amount: number
   sign?: "plus" | "minus"
   emphasis?: boolean
   indent?: boolean
+  /** The closing net-pay line - tinted, no rule underneath. */
+  total?: boolean
 }) {
   const { colors } = useTheme()
   const amountColor =
     sign === "minus" ? palette.error.default : emphasis ? colors.accent : colors.text.primary
   const prefix = sign === "minus" ? "−" : sign === "plus" ? "+" : ""
+  const variant = emphasis ? "bodyMedium" : indent ? "bodySmall" : "body"
 
   return (
-    <View style={[styles.row, indent && styles.rowIndent]}>
+    <View
+      style={[
+        styles.row,
+        { borderBottomColor: colors.border as string },
+        indent && [styles.rowIndent, { backgroundColor: colors.background.secondary }],
+        total && [styles.rowTotal, { backgroundColor: colors.accent + "14" }],
+      ]}
+    >
       <AppText
-        variant={emphasis ? "bodyMedium" : indent ? "caption" : "body"}
-        color={indent ? "tertiary" : emphasis ? "primary" : "secondary"}
+        variant={variant}
+        color={indent ? "secondary" : emphasis ? "primary" : "secondary"}
         style={{ flex: 1 }}
         numberOfLines={2}
       >
         {label}
       </AppText>
       <AppText
-        variant={emphasis ? "bodyMedium" : indent ? "caption" : "body"}
-        style={{ color: indent ? undefined : amountColor }}
-        color={indent ? "tertiary" : undefined}
+        variant={variant}
+        style={[styles.amount, { color: indent ? (colors.text.secondary as string) : amountColor }]}
       >
         {prefix}₹{formatAmount(Math.abs(amount))}
+      </AppText>
+    </View>
+  )
+}
+
+/** A caption line inside the table (pending overtime, waived break). */
+function Note({ children, color }: { children: React.ReactNode; color?: string }) {
+  const { colors } = useTheme()
+  return (
+    <View style={[styles.note, { borderBottomColor: colors.border as string }]}>
+      <AppText variant="caption" color={color ? undefined : "tertiary"} style={color ? { color } : undefined}>
+        {children}
       </AppText>
     </View>
   )
@@ -83,6 +137,15 @@ export default function PayBreakdown({
   deductionDetails = [],
   incentives,
   incentiveDetails = [],
+  overtimePay = 0,
+  overtimeMinutes = 0,
+  hourlyRate = 0,
+  overtimeDetails = [],
+  pendingOvertimeMinutes = 0,
+  breakExcessDeduction = 0,
+  breakExcessMinutes = 0,
+  breakExcessDetails = [],
+  waivedBreakExcessMinutes = 0,
   penaltyAmount,
   penaltyDetails = [],
   advanceDeducted,
@@ -93,7 +156,7 @@ export default function PayBreakdown({
   const { colors } = useTheme()
 
   return (
-    <View style={[styles.container, { borderColor: colors.border as string }]}>
+    <View style={[styles.container, { borderColor: colors.border as string, backgroundColor: colors.surface }]}>
       {/* Basic track - attendance deductions apply here and nowhere else */}
       <Row label="Basic pay" amount={basicPay} />
       {deductionAmount > 0 && (
@@ -103,7 +166,7 @@ export default function PayBreakdown({
             deductionDetails.map((d, i) => (
               <Row
                 key={`${d.date}-${i}`}
-                label={`${d.date} · ${d.reason}`}
+                label={`${formatDay(d.date)} · ${d.reason}`}
                 amount={d.amount}
                 indent
               />
@@ -115,7 +178,7 @@ export default function PayBreakdown({
       {/* Incentive track - untouched by absence */}
       {incentives > 0 && (
         <>
-          <View style={[styles.divider, { backgroundColor: colors.border as string }]} />
+          <View style={styles.sectionGap} />
           <Row label="Incentives" amount={incentives} sign="plus" />
           {expanded &&
             incentiveDetails.map((inc, i) => (
@@ -129,9 +192,62 @@ export default function PayBreakdown({
         </>
       )}
 
+      {/* Overtime track - approved minutes only */}
+      {(overtimePay > 0 || pendingOvertimeMinutes > 0) && (
+        <>
+          <View style={styles.sectionGap} />
+          {overtimePay > 0 && (
+            <Row
+              label={`Overtime · ${formatMinutes(overtimeMinutes)} @ ₹${formatAmount(hourlyRate)}/hr`}
+              amount={overtimePay}
+              sign="plus"
+            />
+          )}
+          {expanded &&
+            overtimeDetails.map((o) => (
+              <Row
+                key={o.date}
+                label={`${formatDay(o.date)} · ${formatMinutes(o.minutes)}${o.multiplier !== 1 ? ` × ${o.multiplier}` : ""}${o.isOffDay ? " (off day)" : ""}`}
+                amount={o.amount}
+                indent
+              />
+            ))}
+          {pendingOvertimeMinutes > 0 && (
+            <Note color={palette.warning.default}>
+              {formatMinutes(pendingOvertimeMinutes)} overtime awaiting approval - not paid
+            </Note>
+          )}
+        </>
+      )}
+
+      {/* Break excess - off overtime first, then basic */}
+      {(breakExcessDeduction > 0 || waivedBreakExcessMinutes > 0) && (
+        <>
+          {overtimePay <= 0 && pendingOvertimeMinutes <= 0 && (
+            <View style={styles.sectionGap} />
+          )}
+          {breakExcessDeduction > 0 && (
+            <Row
+              label={`Excess break · ${formatMinutes(breakExcessMinutes)}`}
+              amount={breakExcessDeduction}
+              sign="minus"
+            />
+          )}
+          {expanded &&
+            breakExcessDetails.map((b) => (
+              <Row key={b.date} label={`${formatDay(b.date)} · ${formatMinutes(b.minutes)} over`} amount={b.amount} indent />
+            ))}
+          {waivedBreakExcessMinutes > 0 && (
+            <Note>
+              {formatMinutes(waivedBreakExcessMinutes)} excess break waived - not charged
+            </Note>
+          )}
+        </>
+      )}
+
       {/* Net deductions - applied after incentives */}
       {(penaltyAmount > 0 || advanceDeducted > 0) && (
-        <View style={[styles.divider, { backgroundColor: colors.border as string }]} />
+        <View style={styles.sectionGap} />
       )}
       {penaltyAmount > 0 && (
         <>
@@ -144,8 +260,7 @@ export default function PayBreakdown({
       )}
       {advanceDeducted > 0 && <Row label="Advances drawn" amount={advanceDeducted} sign="minus" />}
 
-      <View style={[styles.divider, { backgroundColor: colors.border as string }]} />
-      <Row label="Net pay" amount={netPay} emphasis />
+      <Row label="Net pay" amount={netPay} emphasis total />
     </View>
   )
 }
@@ -154,14 +269,23 @@ const styles = StyleSheet.create({
   container: {
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radii.md,
-    padding: spacing[3],
-    gap: spacing[1],
+    overflow: "hidden",
   },
   row: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[3],
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  rowIndent: { paddingLeft: spacing[3] },
-  divider: { height: StyleSheet.hairlineWidth, marginVertical: spacing[1] },
+  rowIndent: { paddingLeft: spacing[6], paddingVertical: spacing[2] - 2 },
+  rowTotal: { borderBottomWidth: 0, paddingVertical: spacing[3] },
+  amount: { fontVariant: ["tabular-nums"], textAlign: "right" },
+  note: {
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  sectionGap: { height: spacing[3] },
 })

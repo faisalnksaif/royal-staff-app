@@ -135,7 +135,7 @@ function MonthSummary({ summary }: { summary: MonthlyAttendanceSummary }) {
 // ─── day row ────────────────────────────────────────────────────────────────
 
 function DayRow({
-  day, record, canEdit, onEdit, canDecideOvertime, onApproveOvertime, onRejectOvertime,
+  day, record, canEdit, onEdit, canDecideOvertime, onApproveOvertime, onRejectOvertime, onToggleBreakWaiver,
 }: {
   day: MonthlyAttendanceDay
   record: AttendanceRecord
@@ -144,6 +144,7 @@ function DayRow({
   canDecideOvertime: boolean
   onApproveOvertime: (day: MonthlyAttendanceDay) => void
   onRejectOvertime: (day: MonthlyAttendanceDay) => void
+  onToggleBreakWaiver: (day: MonthlyAttendanceDay) => void
 }) {
   const { colors } = useTheme()
   const [expanded, setExpanded] = useState(false)
@@ -211,10 +212,26 @@ function DayRow({
               onReject={() => onRejectOvertime(day)}
             />
           )}
+          {/* Break excess is deducted from pay unless waived here; off days
+              have no allowance, so nothing to deduct or waive. */}
           {day.breakExcessMinutes > 0 && (
-            <AppText variant="caption" style={{ color: palette.warning.default, fontSize: 10 }}>
+            <AppText
+              variant="caption"
+              style={{
+                color: day.breakExcessWaived ? colors.text.tertiary : palette.warning.default,
+                fontSize: 10,
+                textDecorationLine: day.breakExcessWaived ? "line-through" : "none",
+              }}
+            >
               {day.breakExcessMinutes}m over break
             </AppText>
+          )}
+          {day.breakExcessMinutes > 0 && !day.isOffDay && canDecideOvertime && (
+            <Pressable onPress={() => onToggleBreakWaiver(day)} hitSlop={6}>
+              <AppText variant="caption" style={{ color: colors.accent, fontSize: 10 }}>
+                {day.breakExcessWaived ? "Waived · undo" : "Waive"}
+              </AppText>
+            </Pressable>
           )}
         </View>
 
@@ -433,6 +450,23 @@ export default function MonthlyAttendanceScreen() {
     [activeStaffId, refetch],
   )
 
+  const handleToggleBreakWaiver = useCallback(
+    async (day: MonthlyAttendanceDay) => {
+      if (activeStaffId == null) return
+      try {
+        await attendanceService.setBreakExcessWaiver(activeStaffId, day.date, !day.breakExcessWaived)
+        refetch()
+      } catch (e) {
+        setActionError(
+          e instanceof Error && e.message
+            ? e.message
+            : `Could not update the break waiver for ${moment(day.date).format("D MMM")}. Please try again.`,
+        )
+      }
+    },
+    [activeStaffId, refetch],
+  )
+
   const isCurrentMonth = month === CURRENT_MONTH
   const goPrevMonth = useCallback(() => {
     setMonth((m) => moment(m, "YYYY-MM").subtract(1, "month").format("YYYY-MM"))
@@ -519,6 +553,7 @@ export default function MonthlyAttendanceScreen() {
                 canDecideOvertime={canDecide}
                 onApproveOvertime={handleApproveOvertime}
                 onRejectOvertime={handleRejectOvertime}
+                onToggleBreakWaiver={handleToggleBreakWaiver}
               />
             </AnimatedListItem>
           )}

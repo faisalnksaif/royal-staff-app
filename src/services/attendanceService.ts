@@ -218,4 +218,22 @@ async function decideOvertime(
   return data
 }
 
-export const attendanceService = { scanFace, getRecentScans, enrollFace, deleteFaceEnrollment, getAttendance, getAttendanceSummary, getAttendanceDashboard, getMonthlyAttendance, getStaff, editSessions, decideOvertime }
+/** Waive (true) or reinstate (false) a day's break-excess pay deduction. */
+async function setBreakExcessWaiver(
+  staffId: number,
+  date: string,
+  waived: boolean,
+  reason?: string
+): Promise<{ success: boolean; data: AttendanceRecord }> {
+  const { data } = await api.http.request<{ success: boolean; data: AttendanceRecord }>({
+    path: `/attendance/${staffId}/${date}/break-excess-waiver`,
+    method: "PATCH",
+    body: { waived, reason },
+    type: ContentType.Json,
+    secure: true,
+    format: "json",
+  })
+  return data
+}
+
+export const attendanceService = { scanFace, getRecentScans, enrollFace, deleteFaceEnrollment, getAttendance, getAttendanceSummary, getAttendanceDashboard, getMonthlyAttendance, getStaff, editSessions, decideOvertime, setBreakExcessWaiver }

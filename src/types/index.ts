@@ -577,6 +577,8 @@ export interface MonthlyAttendanceDay {
   breakMinutes: number | null
   breakAllowanceMinutes: number
   breakExcessMinutes: number
+  /** Excused from the payroll deduction by a manager/HR/superAdmin. */
+  breakExcessWaived: boolean
   isOnLeave: boolean
   leaveType: string | null
   isOffDay: boolean
@@ -1419,6 +1421,21 @@ export interface PayslipIncentiveDetail {
   source: IncentiveSource
 }
 
+export interface PayslipOvertimeDetail {
+  date: string
+  minutes: number
+  /** Weekly off day or public holiday - paid at the off-day multiplier. */
+  isOffDay: boolean
+  multiplier: number
+  amount: number
+}
+
+export interface PayslipBreakExcessDetail {
+  date: string
+  minutes: number
+  amount: number
+}
+
 export interface PayslipPenaltyDetail {
   reason: string
   amount: number
@@ -1437,11 +1454,22 @@ export interface Payslip {
   incentives: number
   incentiveDetails: PayslipIncentiveDetail[]
   /** Attendance-driven deductions only (absence + half-day). */
-  deductions: number
+  deductionAmount: number
   deductionDetails: PayslipDeductionDetail[]
+  hourlyRate?: number
+  overtimeMinutes?: number
+  overtimeDetails?: PayslipOvertimeDetail[]
+  overtimePay?: number
+  /** Overtime still awaiting approval at generation - not paid. */
+  pendingOvertimeMinutes?: number
+  breakExcessMinutes?: number
+  breakExcessDetails?: PayslipBreakExcessDetail[]
+  /** Comes off overtime first, then basic - never incentives. */
+  breakExcessDeduction?: number
+  waivedBreakExcessMinutes?: number
   penaltyAmount: number
   penaltyDetails: PayslipPenaltyDetail[]
-  advancesDeducted: number
+  advanceDeducted: number
   grossPay: number
   netPay: number
   /** True when generated before the month ended - covers only up to periodEnd. */
@@ -1462,6 +1490,15 @@ export interface PayrollPreview {
   incentiveDetails: PayslipIncentiveDetail[]
   deductionAmount: number
   deductionDetails: PayslipDeductionDetail[]
+  hourlyRate: number
+  overtimeMinutes: number
+  overtimeDetails: PayslipOvertimeDetail[]
+  overtimePay: number
+  pendingOvertimeMinutes: number
+  breakExcessMinutes: number
+  breakExcessDetails: PayslipBreakExcessDetail[]
+  breakExcessDeduction: number
+  waivedBreakExcessMinutes: number
   penaltyAmount: number
   penaltyDetails: PayslipPenaltyDetail[]
   advanceDeducted: number
@@ -1527,6 +1564,8 @@ export interface GenerateAllPayrollResult {
   totalStaff: number
   generated: number
   failed: number
+  /** Staff whose overtime was still pending at generation - it goes unpaid. */
+  pendingOvertime?: { staffId: number; staffName: string; pendingOvertimeMinutes: number }[]
   results: GenerateAllPayrollResultItem[]
 }
 

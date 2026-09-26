@@ -1,9 +1,9 @@
 import { formatAmount, toTitleCase } from "../../utils/helpers"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { View, FlatList, ActivityIndicator, StyleSheet, Pressable, TextInput, ScrollView } from "react-native"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useRouter } from "expo-router"
-import { Check, X, Plus, RefreshCw, Wallet, Clock, Banknote, History, TrendingUp, MinusCircle, Trash2, CalendarClock } from "lucide-react-native"
+import { Check, X, Plus, RefreshCw, Wallet, Clock, Banknote, History, TrendingUp, MinusCircle, Trash2, CalendarClock, ChevronLeft, ChevronRight, ChevronDown, Search, Users } from "lucide-react-native"
 import Toast from "react-native-toast-message"
 import moment from "moment"
 import BackButton from "../../components/shared/BackButton"
@@ -12,6 +12,7 @@ import AnimatedListItem from "../../components/shared/AnimatedListItem"
 import PayBreakdown from "../../components/shared/PayBreakdown"
 import DatePickerField from "../../components/shared/DatePickerField"
 import Popup from "../../components/shared/Popup"
+import ErrorRetry from "../../components/shared/ErrorRetry"
 import ListRow, { ListRowPill } from "../../components/shared/ListRow"
 import type { ActionMenuItem } from "../../components/shared/ActionMenu"
 import AppText from "../../components/ui/AppText"
@@ -744,15 +745,24 @@ function GenerateAllPayrollModal({
   visible,
   onClose,
   onSuccess,
+  initialPeriod,
 }: {
   visible: boolean
   onClose: () => void
   onSuccess: (result: GenerateAllPayrollResult) => void
+  /** The month on screen - the modal opens on it rather than today's month. */
+  initialPeriod?: moment.Moment
 }) {
   const { colors } = useTheme()
   const [month, setMonth] = useState(String(moment().month() + 1))
   const [year, setYear] = useState(String(moment().year()))
   const [error, setError] = useState("")
+
+  useEffect(() => {
+    if (!visible || !initialPeriod) return
+    setMonth(String(initialPeriod.month() + 1))
+    setYear(String(initialPeriod.year()))
+  }, [visible])
 
   const mutation = useMutation({
     mutationFn: () => salaryService.generateAllPayroll(Number(month), Number(year)),
@@ -1180,171 +1190,641 @@ function AdvancesTab() {
 // earned so far this month, plus where the month lands if the rest is worked.
 // Read-only - hitting this never creates a PayrollRecord.
 
+/** Searchable staff list - a persistent side panel on tablet, a popup on phone. */
+function PreviewStaffList({
+  selectedStaffId,
+  onSelect,
+  autoFocus,
+}: {
+  selectedStaffId: number | null
+  onSelect: (id: number) => void
+  autoFocus?: boolean
+}) {
+  const { colors } = useTheme()
+  const [q, setQ] = useState("")
+  const { data, isLoading } = useQuery({
+    queryKey: ["staff"],
+    queryFn: () => staffService.getStaff(),
+  })
+  const staffList = data?.data ?? []
+  const filtered = q.trim()
+    ? staffList.filter((s) => s.name.toLowerCase().includes(q.trim().toLowerCase()))
+    : staffList
+
+  return (
+    <View style={{ flex: 1 }}>
+      <View style={[styles.searchBox, { borderColor: colors.border, backgroundColor: colors.background.secondary }]}>
+        <Search size={14} color={colors.text.tertiary} strokeWidth={1.75} />
+        <TextInput
+          style={[styles.searchInput, { color: colors.text.primary }]}
+          placeholder="Search staff…"
+          placeholderTextColor={colors.text.tertiary}
+          value={q}
+          onChangeText={setQ}
+          autoFocus={autoFocus}
+        />
+      </View>
+      {isLoading ? (
+        <ActivityIndicator color={colors.accent} style={{ marginVertical: spacing[6] }} />
+      ) : (
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: spacing[4] }}>
+          {filtered.map((s) => {
+            const isSelected = selectedStaffId === s.user_id
+            return (
+              <Pressable
+                key={s.user_id}
+                onPress={() => onSelect(s.user_id!)}
+                style={[styles.previewStaffRow, isSelected && { backgroundColor: colors.accent + "18" }]}
+              >
+                <StaffAvatar name={s.name} color={colors.accent} bgColor={colors.accentSubtle} />
+                <View style={{ flex: 1 }}>
+                  <AppText variant="bodyMedium" numberOfLines={1} style={isSelected ? { color: colors.accent } : undefined}>
+                    {toTitleCase(s.name)}
+                  </AppText>
+                  <AppText variant="caption" color="tertiary" numberOfLines={1}>{toTitleCase(s.role ?? "")}</AppText>
+                </View>
+                {isSelected && <Check size={16} color={colors.accent} strokeWidth={2.5} />}
+              </Pressable>
+            )
+          })}
+          {filtered.length === 0 && (
+            <AppText variant="caption" color="tertiary" style={{ padding: spacing[4], textAlign: "center" }}>
+              No staff found
+            </AppText>
+          )}
+        </ScrollView>
+      )}
+    </View>
+  )
+}
+
+/** ‹ September 2026 › - can't step past the current month, there's nothing to preview there. */
+function MonthStepper({ value, onChange }: { value: moment.Moment; onChange: (m: moment.Moment) => void }) {
+  const { colors } = useTheme()
+  const canGoNext = value.isBefore(moment(), "month")
+  return (
+    <View style={[styles.monthStepper, { borderColor: colors.border }]}>
+      <Pressable onPress={() => onChange(value.clone().subtract(1, "month"))} hitSlop={8} style={styles.stepperBtn}>
+        <ChevronLeft size={18} color={colors.text.secondary} strokeWidth={2} />
+      </Pressable>
+      <AppText variant="bodyMedium" style={{ minWidth: 120, textAlign: "center" }}>{value.format("MMMM YYYY")}</AppText>
+      <Pressable
+        onPress={() => canGoNext && onChange(value.clone().add(1, "month"))}
+        hitSlop={8}
+        disabled={!canGoNext}
+        style={[styles.stepperBtn, !canGoNext && { opacity: 0.3 }]}
+      >
+        <ChevronRight size={18} color={colors.text.secondary} strokeWidth={2} />
+      </Pressable>
+    </View>
+  )
+}
+
+function PreviewStat({ icon: Icon, label, value, tone }: {
+  icon: React.ComponentType<any>
+  label: string
+  value: string
+  tone?: string
+}) {
+  const { colors } = useTheme()
+  return (
+    <View style={[styles.previewStat, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      <View style={styles.metaItem}>
+        <Icon size={14} color={tone ?? colors.text.tertiary} strokeWidth={1.75} />
+        <AppText variant="caption" color="tertiary" numberOfLines={1}>{label}</AppText>
+      </View>
+      <AppText variant="heading3" style={tone ? { color: tone } : undefined}>{value}</AppText>
+    </View>
+  )
+}
+
+function PreviewResult({ preview }: { preview: PayrollPreview }) {
+  const { colors } = useTheme()
+  const monthStart = moment(`${preview.year}-${preview.month}-01`, "YYYY-M-DD")
+  const asOf = moment(preview.asOf, "YYYY-MM-DD")
+  const daysElapsed = preview.isPartial ? asOf.date() : preview.daysInMonth
+  const progress = Math.min(1, daysElapsed / preview.daysInMonth)
+  const overtimeHours = preview.overtimeMinutes / 60
+
+  return (
+    <View style={{ gap: spacing[4] }}>
+      {/* Hero: earned so far, with the month's progress and where it lands */}
+      <View style={[styles.previewHero, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <View style={styles.previewHeroTop}>
+          <View style={{ flex: 1, minWidth: 180, gap: spacing[1] }}>
+            <AppText variant="caption" color="tertiary">
+              {preview.isPartial ? `Earned up to ${asOf.format("D MMM")}` : `Earned in ${monthStart.format("MMMM")}`}
+            </AppText>
+            <AppText variant="heading1" style={{ color: colors.accent }}>₹{formatAmount(preview.netPay)}</AppText>
+            <AppText variant="caption" color="tertiary">
+              Net pay · basic ₹{formatAmount(preview.basicPay)}/month
+            </AppText>
+          </View>
+          {preview.isPartial && (
+            <View style={[styles.previewProjection, { backgroundColor: colors.background.secondary }]}>
+              <View style={styles.metaItem}>
+                <CalendarClock size={14} color={colors.text.tertiary} strokeWidth={1.5} />
+                <AppText variant="caption" color="tertiary">Projected for {monthStart.format("MMMM")}</AppText>
+              </View>
+              <AppText variant="heading3">₹{formatAmount(preview.projected.netPay)}</AppText>
+              <AppText variant="caption" color="tertiary">if the rest is worked in full</AppText>
+            </View>
+          )}
+        </View>
+
+        <View style={{ gap: spacing[2] }}>
+          <View style={[styles.progressTrack, { backgroundColor: colors.background.tertiary }]}>
+            <View style={[styles.progressFill, { width: `${progress * 100}%`, backgroundColor: colors.accent }]} />
+          </View>
+          <View style={styles.progressLabels}>
+            <AppText variant="caption" color="tertiary">Day {daysElapsed} of {preview.daysInMonth}</AppText>
+            <AppText variant="caption" color="tertiary">
+              {preview.isPartial ? `${preview.daysInMonth - daysElapsed} days left` : "Month complete"}
+            </AppText>
+          </View>
+        </View>
+      </View>
+
+      {preview.payrollAlreadyGenerated && (
+        <View style={[styles.previewNotice, { backgroundColor: palette.warning.default + "18" }]}>
+          <Clock size={14} color={palette.warning.default} strokeWidth={1.75} />
+          <AppText variant="caption" style={{ color: palette.warning.default, flex: 1 }}>
+            Payroll for this month has already been generated - this preview is informational only.
+          </AppText>
+        </View>
+      )}
+
+      <View style={styles.previewStats}>
+        <PreviewStat icon={Banknote} label="Per day" value={`₹${formatAmount(preview.perDayPay)}`} />
+        <PreviewStat
+          icon={X}
+          label="Unpaid absences"
+          value={String(preview.unpaidAbsenceDays)}
+          tone={preview.unpaidAbsenceDays > 0 ? palette.error.default : undefined}
+        />
+        <PreviewStat
+          icon={MinusCircle}
+          label="Half-days"
+          value={String(preview.halfDays)}
+          tone={preview.halfDays > 0 ? palette.warning.default : undefined}
+        />
+        <PreviewStat
+          icon={TrendingUp}
+          label="Overtime"
+          value={overtimeHours > 0 ? `${overtimeHours.toFixed(1)}h` : "—"}
+          tone={overtimeHours > 0 ? palette.success.default : undefined}
+        />
+      </View>
+
+      <View>
+        <AppText variant="bodyMedium" style={{ marginBottom: spacing[2] }}>Breakdown</AppText>
+        <PayBreakdown
+          basicPay={preview.basicPay}
+          basicPayEarned={preview.basicPayEarned}
+          deductionAmount={preview.deductionAmount}
+          deductionDetails={preview.deductionDetails}
+          incentives={preview.incentives}
+          incentiveDetails={preview.incentiveDetails}
+          overtimePay={preview.overtimePay}
+          overtimeMinutes={preview.overtimeMinutes}
+          hourlyRate={preview.hourlyRate}
+          overtimeDetails={preview.overtimeDetails}
+          pendingOvertimeMinutes={preview.pendingOvertimeMinutes}
+          breakExcessDeduction={preview.breakExcessDeduction}
+          breakExcessMinutes={preview.breakExcessMinutes}
+          breakExcessDetails={preview.breakExcessDetails}
+          waivedBreakExcessMinutes={preview.waivedBreakExcessMinutes}
+          penaltyAmount={preview.penaltyAmount}
+          penaltyDetails={preview.penaltyDetails}
+          advanceDeducted={preview.advanceDeducted}
+          grossPay={preview.grossPay}
+          netPay={preview.netPay}
+          expanded
+        />
+      </View>
+    </View>
+  )
+}
+
 function PayrollPreviewTab() {
   const { colors } = useTheme()
+  const { isTablet } = useTablet()
   const [selectedStaffId, setSelectedStaffId] = useState<number | null>(null)
-  const [month, setMonth] = useState(String(moment().month() + 1))
-  const [year, setYear] = useState(String(moment().year()))
+  const [period, setPeriod] = useState(() => moment().startOf("month"))
+  const [pickerOpen, setPickerOpen] = useState(false)
+
+  const month = period.month() + 1
+  const year = period.year()
+
+  const { data: staffData } = useQuery({
+    queryKey: ["staff"],
+    queryFn: () => staffService.getStaff(),
+  })
+  const selectedStaff = staffData?.data?.find((s) => s.user_id === selectedStaffId)
 
   const previewQuery = useQuery({
     queryKey: ["salary-preview", selectedStaffId, month, year],
-    queryFn: () => salaryService.previewPayroll(selectedStaffId!, Number(month), Number(year)),
+    queryFn: () => salaryService.previewPayroll(selectedStaffId!, month, year),
     enabled: selectedStaffId != null,
   })
-
   const preview: PayrollPreview | undefined = previewQuery.data?.data
 
-  return (
-    <ScrollView contentContainerStyle={styles.previewScroll} showsVerticalScrollIndicator={false}>
-      <AppText variant="caption" color="tertiary" style={styles.fieldLabel}>Staff Member</AppText>
-      <StaffPicker selectedStaffId={selectedStaffId} onSelect={setSelectedStaffId} enabled />
-
-      <MonthYearRow month={month} year={year} onMonth={setMonth} onYear={setYear} />
-
-      {selectedStaffId == null ? (
-        <View style={styles.center}>
-          <AppText color="tertiary">Select a staff member to see their pay so far</AppText>
-        </View>
-      ) : previewQuery.isLoading ? (
-        <ActivityIndicator size="large" color={colors.accent} style={styles.center} />
-      ) : previewQuery.isError ? (
-        <View style={styles.center}>
-          <AppText color="tertiary" style={{ textAlign: "center" }}>
-            {salaryErrorMessage(previewQuery.error, "Could not load the preview")}
+  const toolbar = (
+    <View style={styles.previewToolbar}>
+      {!isTablet && (
+        <Pressable
+          onPress={() => setPickerOpen(true)}
+          style={[styles.staffSelectBtn, { borderColor: colors.border, backgroundColor: colors.surface }]}
+        >
+          {selectedStaff ? (
+            <StaffAvatar name={selectedStaff.name} color={colors.accent} bgColor={colors.accentSubtle} />
+          ) : (
+            <Users size={18} color={colors.text.tertiary} strokeWidth={1.75} />
+          )}
+          <AppText
+            variant="bodyMedium"
+            numberOfLines={1}
+            style={{ flex: 1, color: selectedStaff ? colors.text.primary : colors.text.tertiary }}
+          >
+            {selectedStaff ? toTitleCase(selectedStaff.name) : "Choose staff member"}
           </AppText>
+          <ChevronDown size={16} color={colors.text.tertiary} strokeWidth={2} />
+        </Pressable>
+      )}
+      {isTablet && selectedStaff && (
+        <View style={{ flex: 1 }}>
+          <AppText variant="heading3" numberOfLines={1}>{toTitleCase(selectedStaff.name)}</AppText>
+          <AppText variant="caption" color="tertiary">{toTitleCase(selectedStaff.role ?? "")}</AppText>
         </View>
-      ) : preview ? (
-        <View style={{ gap: spacing[4], marginTop: spacing[4] }}>
-          <View style={[styles.previewHeadline, { borderColor: colors.border as string }]}>
-            <AppText variant="caption" color="tertiary">
-              {toTitleCase(preview.staffName)} · earned as of {moment(preview.asOf, "YYYY-MM-DD").format("D MMM YYYY")}
-            </AppText>
-            <AppText variant="heading1" style={{ color: colors.accent }}>
-              ₹{formatAmount(preview.netPay)}
-            </AppText>
-            <AppText variant="caption" color="tertiary">
-              {preview.unpaidAbsenceDays} unpaid absence{preview.unpaidAbsenceDays === 1 ? "" : "s"}
-              {preview.halfDays > 0 ? ` · ${preview.halfDays} half-day${preview.halfDays === 1 ? "" : "s"}` : ""}
-              {" · "}₹{formatAmount(preview.perDayPay)}/day
-            </AppText>
-          </View>
+      )}
+      {isTablet && !selectedStaff && <View style={{ flex: 1 }} />}
+      <MonthStepper value={period} onChange={setPeriod} />
+      {selectedStaffId != null && (
+        <Pressable onPress={() => previewQuery.refetch()} hitSlop={8} style={{ padding: spacing[2] }}>
+          {previewQuery.isRefetching
+            ? <ActivityIndicator size="small" color={colors.accent} />
+            : <RefreshCw size={18} color={colors.text.tertiary} strokeWidth={1.75} />}
+        </Pressable>
+      )}
+    </View>
+  )
 
-          <PayBreakdown
-            basicPay={preview.basicPay}
-            basicPayEarned={preview.basicPayEarned}
-            deductionAmount={preview.deductionAmount}
-            deductionDetails={preview.deductionDetails}
-            incentives={preview.incentives}
-            incentiveDetails={preview.incentiveDetails}
-            penaltyAmount={preview.penaltyAmount}
-            penaltyDetails={preview.penaltyDetails}
-            advanceDeducted={preview.advanceDeducted}
-            grossPay={preview.grossPay}
-            netPay={preview.netPay}
-            expanded
-          />
-
-          {/* Projection: only meaningful while the month is still running. */}
-          {preview.isPartial && (
-            <View style={[styles.previewProjection, { borderColor: colors.border as string }]}>
-              <View style={styles.metaItem}>
-                <CalendarClock size={14} color={colors.text.tertiary} strokeWidth={1.5} />
-                <AppText variant="caption" color="tertiary" style={{ flex: 1 }}>
-                  If the rest of {moment(`${preview.year}-${preview.month}-01`, "YYYY-M-DD").format("MMMM")} is worked in full
-                </AppText>
-              </View>
-              <AppText variant="heading3" color="primary">
-                ₹{formatAmount(preview.projected.netPay)}
-              </AppText>
-            </View>
-          )}
-
-          {preview.payrollAlreadyGenerated && (
-            <View style={[styles.previewNotice, { backgroundColor: palette.warning.default + "18" }]}>
-              <Clock size={14} color={palette.warning.default} strokeWidth={1.75} />
-              <AppText variant="caption" style={{ color: palette.warning.default, flex: 1 }}>
-                Payroll for this month has already been generated - this preview is informational only.
-              </AppText>
-            </View>
-          )}
+  const body =
+    selectedStaffId == null ? (
+      <View style={styles.center}>
+        <View style={[styles.emptyIcon, { backgroundColor: colors.accentSubtle }]}>
+          <Wallet size={28} color={colors.accent} strokeWidth={1.75} />
         </View>
-      ) : null}
+        <AppText variant="bodyMedium" style={{ marginTop: spacing[3] }}>See pay earned so far</AppText>
+        <AppText variant="caption" color="tertiary" style={{ textAlign: "center", marginTop: spacing[1] }}>
+          {isTablet ? "Pick a staff member from the list" : "Choose a staff member"} to preview what they've earned this month.
+        </AppText>
+        {!isTablet && (
+          <AppButton label="Choose staff" onPress={() => setPickerOpen(true)} style={{ marginTop: spacing[4] }} />
+        )}
+      </View>
+    ) : previewQuery.isLoading ? (
+      <ActivityIndicator size="large" color={colors.accent} style={styles.center} />
+    ) : previewQuery.isError ? (
+      <ErrorRetry
+        message={salaryErrorMessage(previewQuery.error, "Could not load the preview")}
+        onRetry={() => previewQuery.refetch()}
+      />
+    ) : preview ? (
+      <PreviewResult preview={preview} />
+    ) : null
+
+  const content = (
+    <ScrollView contentContainerStyle={styles.previewScroll} showsVerticalScrollIndicator={false}>
+      {toolbar}
+      {body}
     </ScrollView>
+  )
+
+  return (
+    <View style={{ flex: 1, flexDirection: isTablet ? "row" : "column" }}>
+      {isTablet && (
+        <View style={[styles.previewSidebar, { borderRightColor: colors.border }]}>
+          <PreviewStaffList selectedStaffId={selectedStaffId} onSelect={setSelectedStaffId} />
+        </View>
+      )}
+      <View style={{ flex: 1 }}>{content}</View>
+
+      {pickerOpen && (
+        <Popup title="Choose Staff Member" onClose={() => setPickerOpen(false)} contentStyle={{ maxHeight: "80%" }}>
+          <View style={{ height: 420 }}>
+            <PreviewStaffList
+              selectedStaffId={selectedStaffId}
+              onSelect={(id) => { setSelectedStaffId(id); setPickerOpen(false) }}
+              autoFocus
+            />
+          </View>
+        </Popup>
+      )}
+    </View>
   )
 }
 
 // ─── PayrollTab ───────────────────────────────────────────────────────────────
+// Same shape as "Up to Today": pick a month, see the month's totals, drill into
+// one payslip for its full breakdown. Staff list is a side panel on tablet and
+// sits under the month overview on phone.
 
-function PayslipCard({ item, index }: { item: Payslip; index?: number }) {
-  const { colors, isDark } = useTheme()
-  const [expanded, setExpanded] = useState(false)
-  const avatarColor = isDark ? colors.accent : palette.primary[700]
-  const avatarBgColor = isDark ? colors.accentSubtle : palette.primary[100]
-  const monthLabel = moment(`${item.year}-${item.month}-01`, "YYYY-M-DD").format("MMMM YYYY")
+function sumBy(items: Payslip[], pick: (p: Payslip) => number | undefined): number {
+  return items.reduce((acc, p) => acc + (pick(p) ?? 0), 0)
+}
 
-  // A payslip generated mid-month covers only part of it - say so, otherwise a
-  // smaller-than-expected net pay reads as an error rather than a period.
-  const pills: ListRowPill[] = item.isPartial
-    ? [{
-        key: "partial",
-        label: `Up to ${moment(item.periodEnd, "YYYY-MM-DD").format("D MMM")}`,
-        color: palette.warning.default,
-        bgColor: palette.warning.default + "22",
-      }]
-    : []
+function PayslipListRow({ item, selected, onPress }: { item: Payslip; selected: boolean; onPress: () => void }) {
+  const { colors } = useTheme()
+  const name = toTitleCase(item.staffName ?? `Staff #${item.staffId}`)
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[styles.previewStaffRow, selected && { backgroundColor: colors.accent + "18" }]}
+    >
+      <StaffAvatar name={name} color={colors.accent} bgColor={colors.accentSubtle} />
+      <View style={{ flex: 1 }}>
+        <AppText variant="bodyMedium" numberOfLines={1} style={selected ? { color: colors.accent } : undefined}>
+          {name}
+        </AppText>
+        <AppText
+          variant="caption"
+          numberOfLines={1}
+          style={{ color: item.isPartial ? palette.warning.default : (colors.text.tertiary as string) }}
+        >
+          {item.isPartial
+            ? `Partial · up to ${moment(item.periodEnd, "YYYY-MM-DD").format("D MMM")}`
+            : `Generated ${moment(item.generatedAt).format("D MMM")}`}
+        </AppText>
+      </View>
+      <AppText variant="bodyMedium" style={[styles.tabularAmount, { color: selected ? colors.accent : colors.text.primary }]}>
+        ₹{formatAmount(item.netPay)}
+      </AppText>
+    </Pressable>
+  )
+}
+
+function PayrollMonthOverview({
+  period,
+  payslips,
+  onGenerate,
+}: {
+  period: moment.Moment
+  payslips: Payslip[]
+  onGenerate: () => void
+}) {
+  const { colors } = useTheme()
+  const partialCount = payslips.filter((p) => p.isPartial).length
+
+  if (payslips.length === 0) {
+    return (
+      <View style={styles.center}>
+        <View style={[styles.emptyIcon, { backgroundColor: colors.accentSubtle }]}>
+          <Wallet size={28} color={colors.accent} strokeWidth={1.75} />
+        </View>
+        <AppText variant="bodyMedium" style={{ marginTop: spacing[3] }}>
+          No payroll for {period.format("MMMM YYYY")} yet
+        </AppText>
+        <AppText variant="caption" color="tertiary" style={{ textAlign: "center", marginTop: spacing[1] }}>
+          Generate payslips for every staff member with an active salary structure.
+        </AppText>
+        <AppButton label="Generate payroll" onPress={onGenerate} style={{ marginTop: spacing[4] }} />
+      </View>
+    )
+  }
+
+  const totalNet = sumBy(payslips, (p) => p.netPay)
+  const totalGross = sumBy(payslips, (p) => p.grossPay)
+  const totalDeductions = sumBy(payslips, (p) => (p.deductionAmount ?? 0) + (p.breakExcessDeduction ?? 0) + (p.penaltyAmount ?? 0))
+  const totalOvertime = sumBy(payslips, (p) => p.overtimePay)
+  const totalAdvances = sumBy(payslips, (p) => p.advanceDeducted)
 
   return (
-    <ListRow
-      number={(index ?? 0) + 1}
-      avatarColor={avatarColor}
-      avatarBgColor={avatarBgColor}
-      title={toTitleCase(item.staffName ?? `Staff #${item.staffId}`)}
-      pills={pills}
-      trailing={
-        <AppText variant="bodyMedium" style={{ color: colors.accent }}>
-          ₹{formatAmount(item.netPay)}
-        </AppText>
-      }
-      metaLines={[
-        <Pressable key="toggle" onPress={() => setExpanded((v) => !v)} style={styles.metaItem}>
-          <Banknote size={14} color={colors.text.tertiary} strokeWidth={1.5} />
-          <AppText variant="body" style={{ color: colors.accent }}>
-            {monthLabel} · {expanded ? "Hide breakdown" : "Show breakdown"}
+    <View style={{ gap: spacing[4] }}>
+      <View style={[styles.previewHero, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <View style={{ gap: spacing[1] }}>
+          <AppText variant="caption" color="tertiary">Total payout · {period.format("MMMM YYYY")}</AppText>
+          <AppText variant="heading1" style={{ color: colors.accent }}>₹{formatAmount(totalNet)}</AppText>
+          <AppText variant="caption" color="tertiary">
+            {payslips.length} payslip{payslips.length === 1 ? "" : "s"}
+            {partialCount > 0 ? ` · ${partialCount} partial` : ""}
           </AppText>
-        </Pressable>,
+        </View>
+      </View>
+
+      {partialCount > 0 && (
+        <View style={[styles.previewNotice, { backgroundColor: palette.warning.default + "18" }]}>
+          <Clock size={14} color={palette.warning.default} strokeWidth={1.75} />
+          <AppText variant="caption" style={{ color: palette.warning.default, flex: 1 }}>
+            {partialCount} payslip{partialCount === 1 ? " was" : "s were"} generated before the month ended and only cover part of it.
+          </AppText>
+        </View>
+      )}
+
+      <View style={styles.previewStats}>
+        <PreviewStat icon={Banknote} label="Gross" value={`₹${formatAmount(totalGross)}`} />
+        <PreviewStat
+          icon={MinusCircle}
+          label="Deductions"
+          value={`₹${formatAmount(totalDeductions)}`}
+          tone={totalDeductions > 0 ? palette.error.default : undefined}
+        />
+        <PreviewStat
+          icon={TrendingUp}
+          label="Overtime paid"
+          value={`₹${formatAmount(totalOvertime)}`}
+          tone={totalOvertime > 0 ? palette.success.default : undefined}
+        />
+        <PreviewStat icon={Clock} label="Advances recovered" value={`₹${formatAmount(totalAdvances)}`} />
+      </View>
+    </View>
+  )
+}
+
+function PayslipDetail({ item, onBack }: { item: Payslip; onBack: () => void }) {
+  const { colors } = useTheme()
+  const monthLabel = moment(`${item.year}-${item.month}-01`, "YYYY-M-DD").format("MMMM YYYY")
+  const overtimeHours = (item.overtimeMinutes ?? 0) / 60
+  const absenceDays = item.deductionDetails?.length ?? 0
+
+  return (
+    <View style={{ gap: spacing[4] }}>
+      <Pressable onPress={onBack} hitSlop={8} style={[styles.metaItem, { alignSelf: "flex-start" }]}>
+        <ChevronLeft size={16} color={colors.accent} strokeWidth={2} />
+        <AppText variant="bodyMedium" style={{ color: colors.accent }}>{monthLabel} overview</AppText>
+      </Pressable>
+
+      <View style={[styles.previewHero, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <View style={{ gap: spacing[1] }}>
+          <AppText variant="caption" color="tertiary">
+            {toTitleCase(item.staffName ?? `Staff #${item.staffId}`)} · net pay for {monthLabel}
+          </AppText>
+          <AppText variant="heading1" style={{ color: colors.accent }}>₹{formatAmount(item.netPay)}</AppText>
+          <AppText variant="caption" color="tertiary">
+            Generated {moment(item.generatedAt).format("D MMM YYYY, h:mm A")} · basic ₹{formatAmount(item.basicPay)}/month
+          </AppText>
+        </View>
+      </View>
+
+      {item.isPartial && (
+        <View style={[styles.previewNotice, { backgroundColor: palette.warning.default + "18" }]}>
+          <Clock size={14} color={palette.warning.default} strokeWidth={1.75} />
+          <AppText variant="caption" style={{ color: palette.warning.default, flex: 1 }}>
+            Partial payslip - covers only up to {moment(item.periodEnd, "YYYY-MM-DD").format("D MMM")}.
+          </AppText>
+        </View>
+      )}
+
+      <View style={styles.previewStats}>
+        <PreviewStat
+          icon={X}
+          label="Deduction days"
+          value={String(absenceDays)}
+          tone={absenceDays > 0 ? palette.error.default : undefined}
+        />
+        <PreviewStat
+          icon={TrendingUp}
+          label="Overtime"
+          value={overtimeHours > 0 ? `${overtimeHours.toFixed(1)}h` : "—"}
+          tone={overtimeHours > 0 ? palette.success.default : undefined}
+        />
+        <PreviewStat icon={Plus} label="Incentives" value={`₹${formatAmount(item.incentives)}`} />
+        <PreviewStat
+          icon={MinusCircle}
+          label="Penalties"
+          value={`₹${formatAmount(item.penaltyAmount ?? 0)}`}
+          tone={(item.penaltyAmount ?? 0) > 0 ? palette.error.default : undefined}
+        />
+      </View>
+
+      <View>
+        <AppText variant="bodyMedium" style={{ marginBottom: spacing[2] }}>Breakdown</AppText>
         <PayBreakdown
-          key="breakdown"
           basicPay={item.basicPay}
           basicPayEarned={item.basicPayEarned ?? item.basicPay}
-          deductionAmount={item.deductions ?? 0}
+          deductionAmount={item.deductionAmount ?? 0}
           deductionDetails={item.deductionDetails}
           incentives={item.incentives}
           incentiveDetails={item.incentiveDetails}
+          overtimePay={item.overtimePay}
+          overtimeMinutes={item.overtimeMinutes}
+          hourlyRate={item.hourlyRate}
+          overtimeDetails={item.overtimeDetails}
+          pendingOvertimeMinutes={item.pendingOvertimeMinutes}
+          breakExcessDeduction={item.breakExcessDeduction}
+          breakExcessMinutes={item.breakExcessMinutes}
+          breakExcessDetails={item.breakExcessDetails}
+          waivedBreakExcessMinutes={item.waivedBreakExcessMinutes}
           penaltyAmount={item.penaltyAmount ?? 0}
           penaltyDetails={item.penaltyDetails}
-          advanceDeducted={item.advancesDeducted ?? 0}
+          advanceDeducted={item.advanceDeducted ?? 0}
           grossPay={item.grossPay ?? item.basicPay + item.incentives}
           netPay={item.netPay}
-          expanded={expanded}
-        />,
-      ]}
-    />
+          expanded
+        />
+      </View>
+    </View>
+  )
+}
+
+/** Outcome of the last "Generate for all" run - who was skipped and why. */
+function GenerateResultCard({ result, onDismiss }: { result: GenerateAllPayrollResult; onDismiss: () => void }) {
+  const { colors } = useTheme()
+  const failedResults = result.results.filter((r) => !r.success)
+  const pendingOvertime = result.pendingOvertime ?? []
+
+  return (
+    <View style={[styles.previewSectionCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      <View style={[styles.metaItem, { justifyContent: "space-between" }]}>
+        <AppText variant="bodyMedium">Last generation run</AppText>
+        <Pressable onPress={onDismiss} hitSlop={8}>
+          <X size={16} color={colors.text.tertiary} strokeWidth={2} />
+        </Pressable>
+      </View>
+      <View style={styles.previewStats}>
+        <PreviewStat icon={Users} label="Total staff" value={String(result.totalStaff)} />
+        <PreviewStat icon={Check} label="Generated" value={String(result.generated)} tone={palette.success.default} />
+        <PreviewStat
+          icon={X}
+          label="Skipped"
+          value={String(result.failed)}
+          tone={result.failed > 0 ? palette.error.default : undefined}
+        />
+      </View>
+
+      {failedResults.length > 0 && (
+        <View>
+          <AppText variant="caption" color="tertiary" style={{ marginBottom: spacing[1] }}>Skipped staff</AppText>
+          {failedResults.map((r) => (
+            <View key={r.staffId} style={[styles.payrollFailRow, { borderBottomColor: colors.border }]}>
+              <AppText variant="bodySmall">Staff #{r.staffId}</AppText>
+              <AppText variant="caption" color="tertiary" numberOfLines={1} style={{ flex: 1, textAlign: "right" }}>
+                {r.error ?? "Failed"}
+              </AppText>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {pendingOvertime.length > 0 && (
+        <View>
+          <AppText variant="caption" style={{ color: palette.warning.default, marginBottom: spacing[1] }}>
+            Unpaid overtime - still pending approval when payroll was generated
+          </AppText>
+          {pendingOvertime.map((p) => (
+            <View key={p.staffId} style={[styles.payrollFailRow, { borderBottomColor: colors.border }]}>
+              <AppText variant="bodySmall">{toTitleCase(p.staffName)}</AppText>
+              <AppText variant="caption" color="tertiary" style={{ flex: 1, textAlign: "right" }}>
+                {Math.floor(p.pendingOvertimeMinutes / 60)}h {p.pendingOvertimeMinutes % 60}m
+              </AppText>
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
   )
 }
 
 function PayrollTab() {
   const { colors } = useTheme()
+  const { isTablet } = useTablet()
+  const queryClient = useQueryClient()
+  const [period, setPeriod] = useState(() => moment().startOf("month"))
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [q, setQ] = useState("")
   const [generateOpen, setGenerateOpen] = useState(false)
   const [lastResult, setLastResult] = useState<GenerateAllPayrollResult | null>(null)
+  const scrollRef = useRef<ScrollView>(null)
+
+  const month = period.month() + 1
+  const year = period.year()
+
+  // On phone the list sits below the overview, so opening a payslip from far
+  // down would otherwise leave you looking at the middle of its breakdown.
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ y: 0, animated: false })
+  }, [selectedId])
 
   const payslipsQuery = useQuery({
-    queryKey: ["salary-payslips-all"],
-    queryFn: () => salaryService.getAllPayslips(),
+    queryKey: ["salary-payslips-all", month, year],
+    queryFn: () => salaryService.getAllPayslips(month, year),
   })
+  const payslips = [...(payslipsQuery.data?.data ?? [])].sort((a, b) =>
+    (a.staffName ?? "").localeCompare(b.staffName ?? ""),
+  )
+  const filtered = q.trim()
+    ? payslips.filter((p) => (p.staffName ?? "").toLowerCase().includes(q.trim().toLowerCase()))
+    : payslips
+  const selected = payslips.find((p) => p.id === selectedId) ?? null
+
+  function changePeriod(next: moment.Moment) {
+    setPeriod(next)
+    setSelectedId(null)
+  }
 
   function handleSuccess(result: GenerateAllPayrollResult) {
     setLastResult(result)
-    payslipsQuery.refetch()
+    queryClient.invalidateQueries({ queryKey: ["salary-payslips-all"] })
     Toast.show({
       type: result.failed > 0 ? "info" : "success",
       text1: `Payroll generated for ${result.generated} of ${result.totalStaff} staff`,
@@ -1352,86 +1832,98 @@ function PayrollTab() {
     })
   }
 
-  const failedResults = lastResult?.results.filter((r) => !r.success) ?? []
-  const payslips = payslipsQuery.data?.data ?? []
-
-  return (
-    <View style={{ flex: 1 }}>
-      <View style={styles.actionsRow}>
-        <View style={{ flex: 1 }} />
-        <Pressable
-          onPress={() => payslipsQuery.refetch()}
-          hitSlop={8}
-          style={{ padding: spacing[2] }}
-        >
-          {payslipsQuery.isRefetching
-            ? <ActivityIndicator size="small" color={colors.accent} />
-            : <RefreshCw size={18} color={colors.text.tertiary} strokeWidth={1.75} />
-          }
-        </Pressable>
-        <Pressable onPress={() => setGenerateOpen(true)} style={[styles.addBtn, { backgroundColor: colors.accent }]}>
-          <Wallet size={16} color="#fff" strokeWidth={2.5} />
-          <AppText variant="caption" style={{ color: "#fff" }}>Generate</AppText>
-        </Pressable>
-      </View>
-
-      {lastResult && (
-        <View style={[styles.payrollSummary, { borderColor: colors.border, marginHorizontal: spacing[4] }]}>
-          <View style={styles.payrollSummaryRow}>
-            <View style={styles.payrollSummaryStat}>
-              <AppText variant="heading3" color="primary">{lastResult.totalStaff}</AppText>
-              <AppText variant="caption" color="tertiary">Total Staff</AppText>
-            </View>
-            <View style={styles.payrollSummaryStat}>
-              <AppText variant="heading3" style={{ color: palette.success.default }}>{lastResult.generated}</AppText>
-              <AppText variant="caption" color="tertiary">Generated</AppText>
-            </View>
-            <View style={styles.payrollSummaryStat}>
-              <AppText variant="heading3" style={{ color: palette.error.default }}>{lastResult.failed}</AppText>
-              <AppText variant="caption" color="tertiary">Skipped</AppText>
-            </View>
-          </View>
-
-          {failedResults.length > 0 && (
-            <View style={{ width: "100%", marginTop: spacing[4] }}>
-              <AppText variant="caption" color="tertiary" style={{ marginBottom: spacing[2] }}>Skipped staff</AppText>
-              {failedResults.map((r) => (
-                <View key={r.staffId} style={[styles.payrollFailRow, { borderBottomColor: colors.border }]}>
-                  <AppText variant="bodySmall">Staff #{r.staffId}</AppText>
-                  <AppText variant="caption" color="tertiary" numberOfLines={1} style={{ flex: 1, textAlign: "right" }}>
-                    {r.error ?? "Failed"}
-                  </AppText>
-                </View>
-              ))}
-            </View>
-          )}
+  const staffList = (
+    <View style={{ flex: isTablet ? 1 : undefined }}>
+      {payslips.length > 0 && (
+        <View style={[styles.searchBox, { borderColor: colors.border, backgroundColor: colors.background.secondary }]}>
+          <Search size={14} color={colors.text.tertiary} strokeWidth={1.75} />
+          <TextInput
+            style={[styles.searchInput, { color: colors.text.primary }]}
+            placeholder="Search payslips…"
+            placeholderTextColor={colors.text.tertiary}
+            value={q}
+            onChangeText={setQ}
+          />
         </View>
       )}
+      {isTablet ? (
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: spacing[4] }}>
+          {filtered.map((p) => (
+            <PayslipListRow key={p.id} item={p} selected={p.id === selectedId} onPress={() => setSelectedId(p.id)} />
+          ))}
+          {payslipsQuery.isLoading && <ActivityIndicator color={colors.accent} style={{ marginVertical: spacing[6] }} />}
+          {!payslipsQuery.isLoading && filtered.length === 0 && (
+            <AppText variant="caption" color="tertiary" style={{ padding: spacing[4], textAlign: "center" }}>
+              {payslips.length === 0 ? `No payslips for ${period.format("MMM YYYY")}` : "No staff found"}
+            </AppText>
+          )}
+        </ScrollView>
+      ) : (
+        filtered.map((p) => (
+          <PayslipListRow key={p.id} item={p} selected={false} onPress={() => setSelectedId(p.id)} />
+        ))
+      )}
+    </View>
+  )
 
-      <FlatList
-        data={payslips}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item, index }) => (
-          <AnimatedListItem index={index}>
-            <PayslipCard item={item} index={index} />
-          </AnimatedListItem>
-        )}
-        contentContainerStyle={styles.rowList}
-        ListEmptyComponent={
-          payslipsQuery.isLoading ? (
-            <ActivityIndicator size="large" color={colors.accent} style={styles.center} />
-          ) : (
-            <View style={styles.center}>
-              <AppText color="tertiary">No payslips generated yet</AppText>
-            </View>
-          )
-        }
-      />
+  const toolbar = (
+    <View style={styles.previewToolbar}>
+      <View style={{ flex: 1 }}>
+        <AppText variant="heading3">Payroll</AppText>
+        <AppText variant="caption" color="tertiary">Generated payslips by month</AppText>
+      </View>
+      <MonthStepper value={period} onChange={changePeriod} />
+      <Pressable onPress={() => payslipsQuery.refetch()} hitSlop={8} style={{ padding: spacing[2] }}>
+        {payslipsQuery.isRefetching
+          ? <ActivityIndicator size="small" color={colors.accent} />
+          : <RefreshCw size={18} color={colors.text.tertiary} strokeWidth={1.75} />}
+      </Pressable>
+      <Pressable onPress={() => setGenerateOpen(true)} style={[styles.addBtn, { backgroundColor: colors.accent, marginLeft: 0 }]}>
+        <Wallet size={16} color="#fff" strokeWidth={2.5} />
+        <AppText variant="caption" style={{ color: "#fff" }}>Generate</AppText>
+      </Pressable>
+    </View>
+  )
+
+  const body = selected ? (
+    <PayslipDetail item={selected} onBack={() => setSelectedId(null)} />
+  ) : payslipsQuery.isLoading ? (
+    <ActivityIndicator size="large" color={colors.accent} style={styles.center} />
+  ) : payslipsQuery.isError ? (
+    <ErrorRetry
+      message={salaryErrorMessage(payslipsQuery.error, "Could not load payslips")}
+      onRetry={() => payslipsQuery.refetch()}
+    />
+  ) : (
+    <View style={{ gap: spacing[4] }}>
+      {lastResult && <GenerateResultCard result={lastResult} onDismiss={() => setLastResult(null)} />}
+      <PayrollMonthOverview period={period} payslips={payslips} onGenerate={() => setGenerateOpen(true)} />
+      {!isTablet && payslips.length > 0 && (
+        <View>
+          <AppText variant="bodyMedium" style={{ marginBottom: spacing[2] }}>Payslips</AppText>
+          {staffList}
+        </View>
+      )}
+    </View>
+  )
+
+  return (
+    <View style={{ flex: 1, flexDirection: isTablet ? "row" : "column" }}>
+      {isTablet && (
+        <View style={[styles.previewSidebar, { borderRightColor: colors.border }]}>{staffList}</View>
+      )}
+      <View style={{ flex: 1 }}>
+        <ScrollView ref={scrollRef} contentContainerStyle={styles.previewScroll} showsVerticalScrollIndicator={false}>
+          {toolbar}
+          {body}
+        </ScrollView>
+      </View>
 
       <GenerateAllPayrollModal
         visible={generateOpen}
         onClose={() => setGenerateOpen(false)}
         onSuccess={handleSuccess}
+        initialPeriod={period}
       />
     </View>
   )
@@ -1530,21 +2022,101 @@ const styles = StyleSheet.create({
     gap: spacing[5],
   },
 
-  previewScroll: { padding: spacing[4], paddingBottom: spacing[16] },
-  previewHeadline: {
-    alignItems: "center",
-    gap: spacing[1],
-    padding: spacing[4],
-    borderRadius: radii.lg,
-    borderWidth: StyleSheet.hairlineWidth,
+  previewScroll: { padding: spacing[4], paddingBottom: spacing[16], width: "100%", maxWidth: 880, alignSelf: "center" },
+  previewSidebar: {
+    width: 300,
+    paddingTop: spacing[4],
+    paddingHorizontal: spacing[3],
+    borderRightWidth: StyleSheet.hairlineWidth,
   },
-  previewProjection: {
+  previewToolbar: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    flexWrap: "wrap",
     gap: spacing[3],
-    padding: spacing[3],
+    marginBottom: spacing[4],
+  },
+  staffSelectBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[3],
+    flexGrow: 1,
+    flexBasis: 220,
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+    borderRadius: radii.lg,
+    borderWidth: 1,
+  },
+  monthStepper: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderRadius: radii.full,
+    paddingHorizontal: spacing[1],
+    paddingVertical: spacing[1],
+  },
+  stepperBtn: { padding: spacing[2] },
+  searchBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[2],
+    borderWidth: 1,
     borderRadius: radii.md,
+    paddingHorizontal: spacing[3],
+    marginBottom: spacing[3],
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: spacing[2],
+    fontSize: 14,
+    // The surrounding box already draws the border - drop the browser focus ring.
+    ...({ outlineStyle: "none" } as object),
+  },
+  previewStaffRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[3],
+    paddingHorizontal: spacing[2],
+    paddingVertical: spacing[2],
+    borderRadius: radii.md,
+  },
+  emptyIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: radii.full,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  previewHero: {
+    gap: spacing[4],
+    padding: spacing[5],
+    borderRadius: radii.xl,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  previewHeroTop: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "flex-start",
+    gap: spacing[4],
+  },
+  previewProjection: {
+    gap: spacing[1],
+    padding: spacing[3],
+    borderRadius: radii.lg,
+    flexGrow: 1,
+    flexBasis: 180,
+    maxWidth: 280,
+  },
+  progressTrack: { height: 6, borderRadius: radii.full, overflow: "hidden" },
+  progressFill: { height: "100%", borderRadius: radii.full },
+  progressLabels: { flexDirection: "row", justifyContent: "space-between" },
+  previewStats: { flexDirection: "row", flexWrap: "wrap", gap: spacing[3] },
+  previewStat: {
+    flexGrow: 1,
+    flexBasis: 140,
+    gap: spacing[1],
+    padding: spacing[3],
+    borderRadius: radii.lg,
     borderWidth: StyleSheet.hairlineWidth,
   },
   previewNotice: {
@@ -1590,21 +2162,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   monthYearRow: { flexDirection: "row", gap: spacing[3] },
-  payrollSummary: {
-    width: "100%",
-    maxWidth: 420,
-    marginTop: spacing[6],
+  previewSectionCard: {
+    gap: spacing[3],
     padding: spacing[4],
     borderRadius: radii.lg,
     borderWidth: StyleSheet.hairlineWidth,
-    alignItems: "center",
   },
-  payrollSummaryRow: {
-    flexDirection: "row",
-    width: "100%",
-    justifyContent: "space-around",
-  },
-  payrollSummaryStat: { alignItems: "center", gap: spacing[1] },
+  tabularAmount: { fontVariant: ["tabular-nums"] },
   payrollFailRow: {
     flexDirection: "row",
     alignItems: "center",
