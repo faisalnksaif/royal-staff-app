@@ -14,6 +14,9 @@ import { attendanceService } from "../../services/attendanceService"
 import { toTitleCase } from "../../utils/helpers"
 import type { AttendanceRecord } from "../../types"
 
+// Matches the API's check - the reason is shown to anyone reviewing the day.
+const MIN_REASON_LENGTH = 10
+
 /** Force a picked time onto the record's own day, so editing a past day never rolls to the next date. */
 function onDay(date: string, picked: Date) {
   return moment(date, "YYYY-MM-DD")
@@ -157,8 +160,8 @@ export default function EditSessionsModal({
         return
       }
     }
-    if (!reason.trim()) {
-      setError("Reason is required")
+    if (reason.trim().length < MIN_REASON_LENGTH) {
+      setError(`Please give a reason of at least ${MIN_REASON_LENGTH} characters`)
       return
     }
     setIsSaving(true)
@@ -225,7 +228,7 @@ export default function EditSessionsModal({
           </Pressable>
 
           <AppInput
-            placeholder="Reason for edit"
+            placeholder="Reason for edit (e.g. forgot to scan after lunch)"
             value={reason}
             onChangeText={setReason}
             style={{ marginTop: spacing[3] }}

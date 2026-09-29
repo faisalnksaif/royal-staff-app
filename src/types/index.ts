@@ -557,6 +557,19 @@ export interface AttendanceRecord {
   lateMinutes?: number
   break?: BreakSummary
   status: AttendanceStatus
+  /** Most recent manual session edit by a manager/HR/superAdmin; null if never edited. */
+  lastEdit?: AttendanceLastEdit | null
+  editCount?: number
+}
+
+export interface AttendanceLastEdit {
+  editedAt: string
+  editedByStaffId: number
+  editedByName: string | null
+  editedByRole: string
+  reason: string | null
+  before: { checkIn: string; checkOut: string | null }[]
+  after: { checkIn: string; checkOut: string | null }[]
 }
 
 /**
@@ -589,6 +602,8 @@ export interface MonthlyAttendanceDay {
   isOffDay: boolean
   hasMissedCheckout: boolean
   wasEdited: boolean
+  lastEdit?: AttendanceLastEdit | null
+  editCount?: number
   notes: string | null
 }
 

@@ -14,6 +14,7 @@ import OvertimeBadge from "./OvertimeBadge"
 import OvertimeDecisionChip from "./OvertimeDecisionChip"
 import SessionTimeline from "./SessionTimeline"
 import SessionProgressBar from "./SessionProgressBar"
+import { EditedFlag, EditedFooter } from "./EditedBadge"
 import type { AttendanceRecord } from "../../types"
 
 export default function AttendanceRow({
@@ -39,6 +40,7 @@ export default function AttendanceRow({
   const firstSession = record.sessions?.[0]
   const hasAutoClosed = record.sessions?.some((s) => s.autoClosed)
   const hasSessions = record.sessions?.length > 0
+  const canExpand = hasSessions || !!record.lastEdit
   const hasOpenSession = record.sessions?.some((s) => !s.checkOut && !s.autoClosed)
   const breakExcessMinutes = record.break?.excessMinutes ?? 0
 
@@ -50,10 +52,10 @@ export default function AttendanceRow({
       ]}
     >
       <Pressable
-        onPress={() => hasSessions && setExpanded((v) => !v)}
+        onPress={() => canExpand && setExpanded((v) => !v)}
         onPressIn={() => setPressed(true)}
         onPressOut={() => setPressed(false)}
-        style={[styles.rowContent, { opacity: pressed && hasSessions ? 0.7 : 1 }]}
+        style={[styles.rowContent, { opacity: pressed && canExpand ? 0.7 : 1 }]}
       >
         <View>
           <StaffAvatar name={record.staffName} color={color} bgColor={color + "22"} />
@@ -101,6 +103,7 @@ export default function AttendanceRow({
                 {"  ·  "}Missed checkout
               </AppText>
             )}
+            <EditedFlag record={record} />
           </View>
         </View>
 
@@ -116,7 +119,7 @@ export default function AttendanceRow({
           </Pressable>
         )}
 
-        {hasSessions && (
+        {canExpand && (
           <View style={{ transform: [{ rotate: expanded ? "180deg" : "0deg" }], marginLeft: spacing[1] }}>
             <ChevronDown size={18} color={colors.text.tertiary} strokeWidth={2} />
           </View>
@@ -129,9 +132,16 @@ export default function AttendanceRow({
         </View>
       )}
 
-      {hasSessions && (
+      {canExpand && (
         <Collapsible expanded={expanded}>
-          <SessionTimeline record={record} color={color} />
+          <View>
+            {hasSessions && <SessionTimeline record={record} color={color} />}
+            {record.lastEdit && (
+              <View style={styles.rowEditFooter}>
+                <EditedFooter record={record} />
+              </View>
+            )}
+          </View>
         </Collapsible>
       )}
     </View>
@@ -152,6 +162,10 @@ const styles = StyleSheet.create({
   rowProgressBar: {
     paddingHorizontal: spacing[5],
     paddingBottom: spacing[3],
+  },
+  rowEditFooter: {
+    paddingHorizontal: spacing[5],
+    paddingBottom: spacing[4],
   },
   rowInfo: { flex: 1, gap: spacing[1] },
   rowMeta: { flexDirection: "row", flexWrap: "wrap" },

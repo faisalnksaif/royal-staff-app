@@ -13,6 +13,7 @@ import OvertimeBadge from "./OvertimeBadge"
 import OvertimeDecisionChip from "./OvertimeDecisionChip"
 import SessionTimeline from "./SessionTimeline"
 import SessionProgressBar from "./SessionProgressBar"
+import { EditedFlag, EditedFooter } from "./EditedBadge"
 import type { AttendanceRecord } from "../../types"
 
 export default function StaffCardDesktop({
@@ -78,6 +79,7 @@ export default function StaffCardDesktop({
                 {"  ·  "}Missed checkout
               </AppText>
             )}
+            <EditedFlag record={record} onPress={() => setExpanded(true)} />
           </View>
         </View>
         <View style={[sharedStyles.statusBadge, { backgroundColor: color + "22" }]}>
@@ -90,7 +92,7 @@ export default function StaffCardDesktop({
             <Pencil size={16} color={colors.text.tertiary} strokeWidth={2} />
           </Pressable>
         )}
-        {hasSessions && (
+        {(hasSessions || !!record.lastEdit) && (
           <Pressable onPress={() => setExpanded((v) => !v)} hitSlop={8} style={{ marginLeft: spacing[2] }}>
             <View style={{ transform: [{ rotate: expanded ? "180deg" : "0deg" }] }}>
               <ChevronDown size={18} color={colors.text.tertiary} strokeWidth={2} />
@@ -101,6 +103,7 @@ export default function StaffCardDesktop({
 
       {hasSessions && <SessionProgressBar record={record} color={color} />}
 
+
       <Collapsible expanded={expanded}>
         <View>
           <View style={[styles.deskCardDivider, { backgroundColor: colors.border as string }]} />
@@ -110,6 +113,12 @@ export default function StaffCardDesktop({
           ) : (
             <View style={styles.deskCardEmpty}>
               <AppText variant="caption" color="tertiary">Not checked in</AppText>
+            </View>
+          )}
+
+          {record.lastEdit && (
+            <View style={[styles.deskCardEditFooter, { borderTopColor: colors.border as string }]}>
+              <EditedFooter record={record} />
             </View>
           )}
         </View>
@@ -138,6 +147,11 @@ const styles = StyleSheet.create({
   deskCardDivider: {
     height: StyleSheet.hairlineWidth,
     marginVertical: spacing[3],
+  },
+  deskCardEditFooter: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: spacing[3],
+    marginTop: spacing[1],
   },
   deskCardEmpty: {
     paddingVertical: spacing[2],

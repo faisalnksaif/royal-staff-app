@@ -6,6 +6,7 @@ import { useTheme } from "../../providers/ThemeProvider"
 import { spacing, colors as palette, radii } from "../../constants/theme"
 import { computeSessionGaps, formatWorkHours, type SessionGap } from "./helpers"
 import { sharedStyles } from "./styles"
+import { editMarksFor, SessionEditNote, EDIT_COLOR } from "./EditedBadge"
 import type { AttendanceRecord, AttendanceSession } from "../../types"
 
 function BreakRow({ gap, isOver }: { gap: SessionGap; isOver: boolean }) {
@@ -73,6 +74,7 @@ export default function SessionTimeline({
   // and the next session's checkIn — the API no longer identifies individual
   // tea/lunch windows, only a single summed daily break allowance/excess.
   const gaps = computeSessionGaps(record.sessions)
+  const { bySession: editMarks } = editMarksFor(record)
   const isOverAll = (record.break?.excessMinutes ?? 0) > 0
 
   // Sessions render newest-first, so a break must attach to the session that
@@ -90,6 +92,7 @@ export default function SessionTimeline({
       {orderedSessions.map((session) => {
         const isOpen = !session.checkOut && !session.autoClosed
         const breaks = breaksAfter(session)
+        const mark = editMarks.get(session.sessionNumber)
 
         return (
           <View key={session.sessionNumber} style={styles.timelineGroup}>
@@ -104,7 +107,7 @@ export default function SessionTimeline({
               <View style={sharedStyles.timelineTimes}>
                 <View style={sharedStyles.timeChip}>
                   <LogIn size={13} color={palette.success.default} strokeWidth={2} />
-                  <AppText variant="caption" style={{ color: colors.text.primary }}>
+                  <AppText variant="caption" style={{ color: mark?.inWas !== undefined || mark?.added ? EDIT_COLOR : colors.text.primary }}>
                     {moment(session.checkIn).format("h:mm A")}
                   </AppText>
                 </View>
@@ -114,7 +117,7 @@ export default function SessionTimeline({
                 {session.checkOut ? (
                   <View style={sharedStyles.timeChip}>
                     <LogOut size={13} color={palette.error.default} strokeWidth={2} />
-                    <AppText variant="caption" style={{ color: colors.text.primary }}>
+                    <AppText variant="caption" style={{ color: mark?.outWas !== undefined || mark?.added ? EDIT_COLOR : colors.text.primary }}>
                       {moment(session.checkOut).format("h:mm A")}
                     </AppText>
                   </View>
@@ -164,6 +167,8 @@ export default function SessionTimeline({
               )}
             </View>
 
+            <SessionEditNote mark={mark} indent={TIMELINE_LABEL_WIDTH} />
+
             {breaks.map((b) => (
               <BreakRow key={b.key} gap={b.gap} isOver={isOverAll} />
             ))}
@@ -173,6 +178,9 @@ export default function SessionTimeline({
     </Container>
   )
 }
+
+// timelineLeft width + row gap, so edit notes line up under the times.
+const TIMELINE_LABEL_WIDTH = 108 + spacing[2]
 
 const styles = StyleSheet.create({
   timeline: {

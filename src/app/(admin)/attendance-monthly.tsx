@@ -17,6 +17,7 @@ import EditSessionsModal from "../../components/attendance/EditSessionsModal"
 import OvertimeApprovalModal from "../../components/attendance/OvertimeApprovalModal"
 import OvertimeBadge from "../../components/attendance/OvertimeBadge"
 import OvertimeDecisionChip from "../../components/attendance/OvertimeDecisionChip"
+import { EditedFlag, EditedFooter, SessionEditNote, editMarksFor, EDIT_COLOR } from "../../components/attendance/EditedBadge"
 import { useTheme } from "../../providers/ThemeProvider"
 import { useTablet } from "../../hooks/useTablet"
 import { spacing, radii, colors as palette } from "../../constants/theme"
@@ -58,6 +59,8 @@ function toAttendanceRecord(
       excessMinutes: day.breakExcessMinutes,
     },
     status: day.status ?? "absent",
+    lastEdit: day.lastEdit ?? null,
+    editCount: day.editCount ?? 0,
   }
 }
 
@@ -150,7 +153,9 @@ function DayRow({
   const [expanded, setExpanded] = useState(false)
   const { label, color, muted } = dayLabel(day)
   const hasSessions = day.sessions.length > 0
+  const canExpand = hasSessions || !!record.lastEdit
   const gaps = useMemo(() => computeSessionGaps(day.sessions), [day.sessions])
+  const { bySession: editMarks } = editMarksFor(record)
   const isWeekend = moment(day.date).day() === 0
 
   const attention = day.dayType === "no-record" || day.hasMissedCheckout
@@ -159,9 +164,9 @@ function DayRow({
   return (
     <View style={[styles.dayCard, { borderColor: attention ? palette.error.default + "55" : (colors.border as string), backgroundColor: colors.surface }]}>
       <Pressable
-        onPress={() => hasSessions && setExpanded((v) => !v)}
+        onPress={() => canExpand && setExpanded((v) => !v)}
         style={styles.dayHeader}
-        disabled={!hasSessions}
+        disabled={!canExpand}
       >
         {/* date */}
         <View style={styles.dayDate}>
@@ -226,6 +231,7 @@ function DayRow({
               {day.breakExcessMinutes}m over break
             </AppText>
           )}
+          <EditedFlag record={record} small />
           {day.breakExcessMinutes > 0 && !day.isOffDay && canDecideOvertime && (
             <Pressable onPress={() => onToggleBreakWaiver(day)} hitSlop={6}>
               <AppText variant="caption" style={{ color: colors.accent, fontSize: 10 }}>
@@ -237,14 +243,13 @@ function DayRow({
 
         {/* markers */}
         <View style={styles.dayMarkers}>
-          {day.wasEdited && !canEdit && <Pencil size={12} color={colors.text.tertiary} strokeWidth={1.75} />}
           {attention && <AlertTriangle size={13} color={palette.error.default} strokeWidth={2} />}
           {canEdit && (
             <Pressable onPress={() => onEdit(day)} hitSlop={8}>
               <Pencil size={15} color={colors.accent} strokeWidth={2} />
             </Pressable>
           )}
-          {hasSessions && (
+          {canExpand && (
             <ChevronDown
               size={15}
               color={colors.text.tertiary}
@@ -255,11 +260,12 @@ function DayRow({
         </View>
       </Pressable>
 
-      {hasSessions && (
+      {canExpand && (
         <Collapsible expanded={expanded}>
           <View style={[styles.sessionBlock, { borderTopColor: colors.border as string }]}>
             {day.sessions.map((session, idx) => {
               const gapAfter = gaps.find((g) => g.startTime === session.checkOut)
+              const mark = editMarks.get(session.sessionNumber)
               return (
                 <View key={session.sessionNumber} style={{ gap: spacing[2] }}>
                   <View style={sharedStyles.timelineRow}>
@@ -268,12 +274,12 @@ function DayRow({
                       <AppText variant="caption" color="tertiary">Session {session.sessionNumber}</AppText>
                     </View>
                     <View style={sharedStyles.timelineTimes}>
-                      <AppText variant="caption" style={{ color: colors.text.primary }}>
+                      <AppText variant="caption" style={{ color: mark?.inWas !== undefined || mark?.added ? EDIT_COLOR : colors.text.primary }}>
                         {moment(session.checkIn).format("h:mm A")}
                       </AppText>
                       <View style={[sharedStyles.timeDash, { backgroundColor: colors.border as string }]} />
                       {session.checkOut ? (
-                        <AppText variant="caption" style={{ color: colors.text.primary }}>
+                        <AppText variant="caption" style={{ color: mark?.outWas !== undefined || mark?.added ? EDIT_COLOR : colors.text.primary }}>
                           {moment(session.checkOut).format("h:mm A")}
                         </AppText>
                       ) : session.autoClosed ? (
@@ -288,6 +294,8 @@ function DayRow({
                       )}
                     </View>
                   </View>
+
+                  <SessionEditNote mark={mark} indent={108 + spacing[2]} />
 
                   {gapAfter && idx < day.sessions.length - 1 && (
                     <View style={sharedStyles.timelineRow}>
@@ -315,6 +323,7 @@ function DayRow({
             {day.notes && (
               <AppText variant="caption" style={{ color: palette.warning.default }}>{day.notes}</AppText>
             )}
+            <EditedFooter record={record} />
           </View>
         </Collapsible>
       )}
