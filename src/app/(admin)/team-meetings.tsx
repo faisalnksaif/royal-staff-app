@@ -15,6 +15,7 @@ import Toast from "react-native-toast-message"
 import BackButton from "../../components/shared/BackButton"
 import AnimatedListItem from "../../components/shared/AnimatedListItem"
 import DatePickerField from "../../components/shared/DatePickerField"
+import TimeInput from "../../components/shared/TimeInput"
 import Popup from "../../components/shared/Popup"
 import ListRow, { ListRowPill } from "../../components/shared/ListRow"
 import moment from "moment"
@@ -28,6 +29,25 @@ import type { Meeting, MeetingAttendanceEntry, MeetingAttendanceStatus } from ".
 
 function meetingErrorMessage(e: unknown, fallback: string): string {
   return (e as Error)?.message ?? fallback
+}
+
+/** "30 Sep 2026, 3:00 PM - 4:00 PM" */
+function formatMeetingTime(meeting: Meeting): string {
+  const start = moment(meeting.date).format("D MMM YYYY, h:mm A")
+  return meeting.endTime ? `${start} - ${moment(meeting.endTime).format("h:mm A")}` : start
+}
+
+/** Combines a calendar date with an "HH:mm" time into a local Date. */
+function atTime(date: Date, hhmm: string): Date {
+  const [h, m] = hhmm.split(":").map(Number)
+  const d = new Date(date)
+  d.setHours(h || 0, m || 0, 0, 0)
+  return d
+}
+
+function defaultTimes(): { start: string; end: string } {
+  const start = moment().add(1, "hour").startOf("hour")
+  return { start: start.format("HH:mm"), end: start.clone().add(1, "hour").format("HH:mm") }
 }
 
 const STATUS_CONFIG: Record<MeetingAttendanceStatus, { label: string; color: string }> = {
@@ -49,14 +69,17 @@ function CreateMeetingModal({
 }) {
   const { colors } = useTheme()
   const [title, setTitle] = useState("")
-  const [date, setDate] = useState<Date | null>(null)
+  const [date, setDate] = useState<Date>(() => new Date())
+  const [startTime, setStartTime] = useState(() => defaultTimes().start)
+  const [endTime, setEndTime] = useState(() => defaultTimes().end)
   const [notes, setNotes] = useState("")
   const [error, setError] = useState("")
 
   const mutation = useMutation({
     mutationFn: () => meetingService.createMeeting({
       title: title.trim(),
-      ...(date ? { date: moment(date).toISOString() } : {}),
+      date: atTime(date, startTime).toISOString(),
+      endTime: atTime(date, endTime).toISOString(),
       ...(notes.trim() ? { notes: notes.trim() } : {}),
     }),
     onSuccess: (res) => { onSuccess(res.data._id); onClose(); reset() },
@@ -64,11 +87,13 @@ function CreateMeetingModal({
   })
 
   function reset() {
-    setTitle(""); setDate(null); setNotes(""); setError("")
+    const times = defaultTimes()
+    setTitle(""); setDate(new Date()); setStartTime(times.start); setEndTime(times.end); setNotes(""); setError("")
   }
 
   function handleSubmit() {
     if (!title.trim()) { setError("Please enter a meeting title"); return }
+    if (atTime(date, endTime) <= atTime(date, startTime)) { setError("End time must be after start time"); return }
     setError("")
     mutation.mutate()
   }
@@ -88,7 +113,12 @@ function CreateMeetingModal({
         />
 
         <View style={styles.fieldLabel}>
-          <DatePickerField label="Date & Time (optional)" value={date} onChange={setDate} placeholder="Defaults to now" />
+          <DatePickerField label="Date" value={date} onChange={setDate} />
+        </View>
+
+        <View style={[styles.fieldLabel, styles.timeRow]}>
+          <TimeInput label="From" value={startTime} onChange={setStartTime} />
+          <TimeInput label="To" value={endTime} onChange={setEndTime} />
         </View>
 
         <AppText variant="caption" color="tertiary" style={styles.fieldLabel}>Notes (optional)</AppText>
@@ -102,6 +132,9 @@ function CreateMeetingModal({
           numberOfLines={3}
           textAlignVertical="top"
         />
+        <AppText variant="caption" color="tertiary">
+          All staff get a notification with the time and notes, plus a reminder 30 min before.
+        </AppText>
 
         {error ? (
           <AppText variant="caption" style={{ color: palette.error.default, marginBottom: spacing[3] }}>
@@ -268,7 +301,7 @@ function MeetingDetail({ meetingId, onBack }: { meetingId: string; onBack: () =>
         <View style={{ flex: 1 }}>
           <AppText variant="heading3" numberOfLines={1}>{meeting?.title ?? "Meeting"}</AppText>
           <AppText variant="caption" color="tertiary">
-            {meeting ? moment(meeting.date).format("D MMM YYYY, h:mm A") : ""}
+            {meeting ? formatMeetingTime(meeting) : ""}
           </AppText>
         </View>
       </View>
@@ -363,7 +396,7 @@ function MeetingCard({ item, onPress }: { item: Meeting; onPress: () => void }) 
         trailing={<ChevronRight size={18} color={colors.text.tertiary} strokeWidth={1.75} />}
         metaLines={[
           <AppText key="date" variant="body" style={{ color: colors.text.secondary as string }}>
-            {moment(item.date).format("D MMM YYYY, h:mm A")}
+            {formatMeetingTime(item)}
           </AppText>,
           ...(item.notes ? [
             <AppText key="notes" variant="bodySmall" numberOfLines={2} color="tertiary">
@@ -518,6 +551,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing[1],
   },
   textArea: { minHeight: 80, textAlignVertical: "top" },
+  timeRow: { flexDirection: "row", gap: spacing[3] },
   modalActions: {
     flexDirection: "row",
     justifyContent: "flex-end",

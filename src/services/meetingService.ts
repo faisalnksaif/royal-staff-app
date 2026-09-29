@@ -4,6 +4,7 @@ import type { Meeting, MeetingAttendanceEntry, MeetingAttendanceStatus, MeetingH
 interface CreateMeetingPayload {
   title: string
   date?: string
+  endTime?: string
   notes?: string
 }
 

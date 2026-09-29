@@ -435,7 +435,14 @@ export interface AppNotification {
   _id: string
   staffId: number
   userId: number
-  type: "new_transaction" | "leave_requested" | "leave_approved" | "work_status_updated" | "work_note_added"
+  type:
+    | "new_transaction"
+    | "leave_requested"
+    | "leave_approved"
+    | "work_status_updated"
+    | "work_note_added"
+    | "meeting_scheduled"
+    | "meeting_reminder"
   title: string
   message: string
   ledgerId: number | null
@@ -868,6 +875,7 @@ export interface Meeting {
   _id: string
   title: string
   date: string
+  endTime?: string | null
   notes?: string | null
   createdBy: string
   createdAt: string
