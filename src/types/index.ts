@@ -435,7 +435,7 @@ export interface AppNotification {
   _id: string
   staffId: number
   userId: number
-  type: "new_transaction" | "leave_requested" | "leave_approved"
+  type: "new_transaction" | "leave_requested" | "leave_approved" | "work_status_updated" | "work_note_added"
   title: string
   message: string
   ledgerId: number | null
@@ -786,7 +786,7 @@ export interface DashboardOverviewResponse {
   data: DashboardOverviewData
 }
 
-export type LeaveStatus = "pending" | "approved" | "rejected"
+export type LeaveStatus = "pending" | "approved" | "rejected" | "cancelled"
 // "Attendance" is never user-requested - it is stamped on auto-generated
 // half-day leaves by AttendanceRuleFinalizer (see the request-form pickers,
 // which offer only Personal/Medical).
@@ -808,6 +808,10 @@ export interface LeaveRequest {
   approvedBy?: string | null
   approvedByName?: string | null
   rejectionReason?: string | null
+  cancelledAt?: string | null
+  cancellationReason?: string | null
+  /** Server-computed: the caller may cancel this approved leave now (it hasn't started yet). */
+  canCancel?: boolean
   delegatedTo?: number | null
   delegatedAt?: string | null
   canApprove: boolean
@@ -821,7 +825,7 @@ export interface LeaveRequest {
 
 export interface LeaveStatsOverview {
   total: number
-  byStatus: { pending: number; approved: number; rejected: number }
+  byStatus: { pending: number; approved: number; rejected: number; cancelled?: number }
   byType: { personal: number; medical: number }
   currentMonth: number
 }
@@ -1630,6 +1634,17 @@ export interface WorkStatusEvent {
   status: WorkStatus
   note: string | null
   byStaffId: number
+  /** Resolved server-side; null when the staff row is gone. */
+  byName?: string | null
+  at: string
+}
+
+/** A progress note the assignee posted while the work was open. */
+export interface WorkNote {
+  _id: string
+  text: string
+  byStaffId: number
+  byName?: string | null
   at: string
 }
 
@@ -1653,6 +1668,8 @@ export interface WorkAssignment {
   deadline: string
   status: WorkStatus
   statusHistory: WorkStatusEvent[]
+  /** Absent on payloads from before notes existed. */
+  notes?: WorkNote[]
   completionNote: string | null
   startedAt: string | null
   completedAt: string | null

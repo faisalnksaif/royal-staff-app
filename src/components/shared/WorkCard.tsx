@@ -1,5 +1,5 @@
-import { View, StyleSheet } from "react-native"
-import { Clock, Repeat, AlertTriangle, CheckCircle2 } from "lucide-react-native"
+import { View, Pressable, StyleSheet } from "react-native"
+import { Clock, Repeat, AlertTriangle, CheckCircle2, MessageSquare } from "lucide-react-native"
 import moment from "moment"
 import AppText from "../ui/AppText"
 import StaffAvatar from "./StaffAvatar"
@@ -28,6 +28,7 @@ export default function WorkCard({
   dueTime,
   menuItems = [],
   isBusy,
+  onPress,
 }: {
   item: WorkAssignment
   index?: number
@@ -36,6 +37,8 @@ export default function WorkCard({
   dueTime?: string | null
   menuItems?: ActionMenuItem[]
   isBusy?: boolean
+  /** Opens the details/activity sheet. */
+  onPress?: () => void
 }) {
   const { colors, isDark } = useTheme()
 
@@ -132,6 +135,28 @@ export default function WorkCard({
     )
   }
 
+  // Latest progress note, so the assigner can see where things stand without
+  // opening the work - the full history lives in the details sheet.
+  const notes = item.notes ?? []
+  const latestNote = notes[notes.length - 1]
+  if (latestNote && item.status !== "completed") {
+    metaLines.push(
+      <View key="latest-note" style={styles.metaRow}>
+        <MessageSquare size={13} color={palette.info.default} strokeWidth={1.75} />
+        <AppText
+          variant="bodySmall"
+          numberOfLines={1}
+          style={{ color: colors.text.secondary as string, flex: 1 }}
+        >
+          {latestNote.text}
+        </AppText>
+        {notes.length > 1 && (
+          <AppText variant="caption" color="tertiary">{notes.length} notes</AppText>
+        )}
+      </View>
+    )
+  }
+
   // Completion note is the payoff for the assigner - show it prominently.
   if (item.status === "completed" && item.completionNote) {
     metaLines.push(
@@ -140,6 +165,11 @@ export default function WorkCard({
         <AppText variant="bodySmall" style={{ color: colors.text.secondary as string, flex: 1 }}>
           {item.completionNote}
         </AppText>
+        {notes.length > 0 && (
+          <AppText variant="caption" color="tertiary">
+            +{notes.length} {notes.length === 1 ? "note" : "notes"}
+          </AppText>
+        )}
       </View>
     )
   }
@@ -155,7 +185,7 @@ export default function WorkCard({
     )
   }
 
-  return (
+  const row = (
     <ListRow
       number={(index ?? 0) + 1}
       avatarColor={avatarColor}
@@ -173,6 +203,15 @@ export default function WorkCard({
       isBusy={isBusy}
       metaLines={metaLines}
     />
+  )
+
+  if (!onPress) return row
+
+  // The ⋮ menu is its own Pressable inside, so it still claims its own taps.
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => pressed && { opacity: 0.7 }}>
+      {row}
+    </Pressable>
   )
 }
 

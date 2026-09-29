@@ -172,6 +172,19 @@ async function updateStatus(id: string, status: WorkStatus, note?: string): Prom
   return data.data
 }
 
+/** Progress note from the assignee. Returns the work with names resolved. */
+async function addNote(id: string, text: string): Promise<WorkAssignment> {
+  const { data } = await api.http.request<{ success: boolean; data: WorkAssignment }>({
+    path: `/work-schedule/${id}/notes`,
+    method: "POST",
+    body: { text },
+    type: ContentType.Json,
+    secure: true,
+    format: "json",
+  })
+  return data.data
+}
+
 export const workScheduleService = {
   getAssignableStaff,
   getMyWork,
@@ -182,4 +195,5 @@ export const workScheduleService = {
   updateSchedule,
   cancelSchedule,
   updateStatus,
+  addNote,
 }

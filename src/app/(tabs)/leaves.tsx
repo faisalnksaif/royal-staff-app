@@ -13,10 +13,12 @@ import {
   UIManager,
 } from "react-native"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { Plus, Calendar, Trash2, ClipboardList, Share, UserCheck, XCircle } from "lucide-react-native"
+import { Plus, Calendar, CalendarX, Trash2, ClipboardList, Share, UserCheck, XCircle } from "lucide-react-native"
+import Toast from "react-native-toast-message"
 import BackButton from "../../components/shared/BackButton"
 import AnimatedListItem from "../../components/shared/AnimatedListItem"
 import DatePickerField from "../../components/shared/DatePickerField"
+import CancelLeaveModal from "../../components/leaves/CancelLeaveModal"
 import Popup from "../../components/shared/Popup"
 import ListRow, { ListRowPill } from "../../components/shared/ListRow"
 import FollowUpTimeline, { TimelineEvent } from "../../components/shared/FollowUpTimeline"
@@ -37,6 +39,7 @@ const STATUS_CONFIG: Record<LeaveStatus, { label: string; color: string }> = {
   pending:  { label: "Pending",  color: palette.warning.default },
   approved: { label: "Approved", color: palette.success.default },
   rejected: { label: "Rejected", color: palette.error.default },
+  cancelled: { label: "Cancelled", color: palette.neutral[500] },
 }
 
 const FILTERS: Array<{ label: string; value: LeaveStatus | "all" }> = [
@@ -307,6 +310,12 @@ function buildLeaveEvents(item: LeaveRequest): TimelineEvent[] {
       text: item.rejectionReason ? `Rejected · ${item.rejectionReason}` : "Rejected",
       color: palette.error.default,
     })
+  } else if (item.status === "cancelled") {
+    events.push({
+      icon: <CalendarX size={11} color={palette.neutral[500]} strokeWidth={1.75} />,
+      text: `Cancelled${item.cancelledAt ? ` ${moment(item.cancelledAt).format("D MMM, h:mm A")}` : ""}${item.cancellationReason ? ` · ${item.cancellationReason}` : ""}`,
+      color: palette.neutral[500],
+    })
   }
 
   return events
@@ -318,11 +327,13 @@ function LeaveCard({
   item,
   index,
   onDelete,
+  onCancelApproved,
   isDeleting,
 }: {
   item: LeaveRequest
   index?: number
   onDelete?: () => void
+  onCancelApproved?: () => void
   isDeleting?: boolean
 }) {
   const { colors, isDark } = useTheme()
@@ -337,6 +348,8 @@ function LeaveCard({
 
   const menuItems: ActionMenuItem[] = item.status === "pending" && onDelete
     ? [{ label: "Cancel", icon: <Trash2 size={16} color={palette.error.default} strokeWidth={1.75} />, color: palette.error.default, onPress: onDelete }]
+    : item.status === "approved" && item.canCancel && onCancelApproved
+    ? [{ label: "Cancel leave", icon: <CalendarX size={16} color={palette.error.default} strokeWidth={1.75} />, color: palette.error.default, onPress: onCancelApproved }]
     : []
 
   return (
@@ -384,6 +397,7 @@ export default function LeavesScreen() {
   const user = useAuthStore((s) => s.user)
   const [filter, setFilter] = useState<LeaveStatus | "all">("all")
   const [requestOpen, setRequestOpen] = useState(false)
+  const [cancelTarget, setCancelTarget] = useState<LeaveRequest | null>(null)
 
   const { data, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ["my-leaves", filter],
@@ -404,6 +418,17 @@ export default function LeavesScreen() {
       queryClient.invalidateQueries({ queryKey: ["my-leaves"] })
       queryClient.invalidateQueries({ queryKey: ["leave-balance"] })
     },
+  })
+
+  const cancelMutation = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) => leaveService.cancelLeave(id, reason),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["my-leaves"] })
+      queryClient.invalidateQueries({ queryKey: ["leave-balance"] })
+      Toast.show({ type: "success", text1: "Leave cancelled" })
+      setCancelTarget(null)
+    },
+    onError: (e) => Toast.show({ type: "error", text1: (e as Error)?.message ?? "Failed to cancel leave" }),
   })
 
   function onRequestSuccess() {
@@ -461,7 +486,11 @@ export default function LeavesScreen() {
               item={item}
               index={index}
               onDelete={() => deleteMutation.mutate(item.id)}
-              isDeleting={deleteMutation.isPending && deleteMutation.variables === item.id}
+              onCancelApproved={() => setCancelTarget(item)}
+              isDeleting={
+                (deleteMutation.isPending && deleteMutation.variables === item.id) ||
+                (cancelMutation.isPending && cancelMutation.variables?.id === item.id)
+              }
             />
           </AnimatedListItem>
         )}
@@ -483,6 +512,13 @@ export default function LeavesScreen() {
         visible={requestOpen}
         onClose={() => setRequestOpen(false)}
         onSuccess={onRequestSuccess}
+      />
+
+      <CancelLeaveModal
+        leave={cancelTarget}
+        onClose={() => setCancelTarget(null)}
+        onConfirm={(reason) => cancelTarget && cancelMutation.mutate({ id: cancelTarget.id, reason })}
+        isLoading={cancelMutation.isPending}
       />
       </View>
     </View>

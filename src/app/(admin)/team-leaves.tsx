@@ -11,12 +11,13 @@ import {
   ScrollView,
 } from "react-native"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { Check, X, Calendar, RefreshCw, Plus, Trash2, Share2, UserCheck, ClipboardList, XCircle, Share, ShieldCheck, AlertCircle } from "lucide-react-native"
+import { Check, X, Calendar, CalendarX, RefreshCw, Plus, Trash2, Share2, UserCheck, ClipboardList, XCircle, Share, ShieldCheck, AlertCircle } from "lucide-react-native"
 import Toast from "react-native-toast-message"
 import BackButton from "../../components/shared/BackButton"
 import StaffAvatar from "../../components/shared/StaffAvatar"
 import AnimatedListItem from "../../components/shared/AnimatedListItem"
 import DatePickerField from "../../components/shared/DatePickerField"
+import CancelLeaveModal from "../../components/leaves/CancelLeaveModal"
 import Popup from "../../components/shared/Popup"
 import ListRow, { ListRowPill } from "../../components/shared/ListRow"
 import FollowUpTimeline, { TimelineEvent } from "../../components/shared/FollowUpTimeline"
@@ -43,6 +44,7 @@ const STATUS_CONFIG: Record<LeaveStatus, { label: string; color: string }> = {
   pending:  { label: "Pending",  color: palette.warning.default },
   approved: { label: "Approved", color: palette.success.default },
   rejected: { label: "Rejected", color: palette.error.default },
+  cancelled: { label: "Cancelled", color: palette.neutral[500] },
 }
 
 const TYPE_CONFIG = {
@@ -347,6 +349,12 @@ function buildLeaveEvents(item: LeaveRequest): TimelineEvent[] {
       text: item.rejectionReason ? `Rejected · ${item.rejectionReason}` : "Rejected",
       color: palette.error.default,
     })
+  } else if (item.status === "cancelled") {
+    events.push({
+      icon: <CalendarX size={11} color={palette.neutral[500]} strokeWidth={1.75} />,
+      text: `Cancelled${item.cancelledAt ? ` ${moment(item.cancelledAt).format("D MMM, h:mm A")}` : ""}${item.cancellationReason ? ` · ${item.cancellationReason}` : ""}`,
+      color: palette.neutral[500],
+    })
   }
 
   if (item.isExempted) {
@@ -373,11 +381,13 @@ function LeaveCard({
   index,
   onApprove,
   onReject,
+  onCancelApproved,
   onDelegate,
   onToggleExemption,
   onDeleteHalfDay,
   isApproving,
   isRejecting,
+  isCancelling,
   isTogglingExemption,
   isDeletingHalfDay,
   canDelegate,
@@ -388,11 +398,13 @@ function LeaveCard({
   index?: number
   onApprove: () => void
   onReject: () => void
+  onCancelApproved?: () => void
   onDelegate?: () => void
   onToggleExemption?: () => void
   onDeleteHalfDay?: () => void
   isApproving: boolean
   isRejecting: boolean
+  isCancelling?: boolean
   isTogglingExemption?: boolean
   isDeletingHalfDay?: boolean
   canDelegate?: boolean
@@ -404,7 +416,7 @@ function LeaveCard({
   const typeColor = TYPE_CONFIG[item.leaveType]?.color ?? colors.accent
   const avatarColor = isDark ? colors.accent : palette.primary[700]
   const avatarBgColor = isDark ? colors.accentSubtle : palette.primary[100]
-  const isBusy = isApproving || isRejecting || isTogglingExemption || isDeletingHalfDay
+  const isBusy = isApproving || isRejecting || isCancelling || isTogglingExemption || isDeletingHalfDay
 
   const menuItems: ActionMenuItem[] = [
     ...(item.status === "pending" && item.canApprove
@@ -412,6 +424,9 @@ function LeaveCard({
           { label: "Approve", icon: <Check size={16} color={palette.success.default} strokeWidth={2.5} />, color: palette.success.default, onPress: onApprove },
           { label: "Reject", icon: <X size={16} color={palette.error.default} strokeWidth={2} />, color: palette.error.default, onPress: onReject },
         ]
+      : []),
+    ...(item.status === "approved" && item.canCancel && onCancelApproved
+      ? [{ label: "Cancel leave", icon: <CalendarX size={16} color={palette.error.default} strokeWidth={1.75} />, color: palette.error.default, onPress: onCancelApproved }]
       : []),
     ...(item.status === "pending" && canDelegate && onDelegate
       ? [{ label: "Delegate", icon: <Share2 size={16} color={colors.accent} strokeWidth={1.75} />, color: colors.accent, onPress: onDelegate }]
@@ -726,11 +741,13 @@ function MyLeaveCard({
   item,
   index,
   onDelete,
+  onCancelApproved,
   isDeleting,
 }: {
   item: LeaveRequest
   index?: number
   onDelete: () => void
+  onCancelApproved: () => void
   isDeleting: boolean
 }) {
   const { colors, isDark } = useTheme()
@@ -744,6 +761,8 @@ function MyLeaveCard({
 
   const menuItems: ActionMenuItem[] = item.status === "pending"
     ? [{ label: "Cancel", icon: <Trash2 size={16} color={palette.error.default} strokeWidth={1.75} />, color: palette.error.default, onPress: onDelete }]
+    : item.status === "approved" && item.canCancel
+    ? [{ label: "Cancel leave", icon: <CalendarX size={16} color={palette.error.default} strokeWidth={1.75} />, color: palette.error.default, onPress: onCancelApproved }]
     : []
 
   return (
@@ -790,6 +809,7 @@ function MyLeavesTab() {
   const user = useAuthStore((s) => s.user)
   const [filter, setFilter] = useState<LeaveStatus | "all">("all")
   const [requestOpen, setRequestOpen] = useState(false)
+  const [cancelTarget, setCancelTarget] = useState<LeaveRequest | null>(null)
 
   const { data, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ["my-leaves", filter],
@@ -804,6 +824,19 @@ function MyLeavesTab() {
       queryClient.invalidateQueries({ queryKey: ["my-leaves"] })
       queryClient.invalidateQueries({ queryKey: ["leave-balance"] })
     },
+  })
+
+  const cancelMutation = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) => leaveService.cancelLeave(id, reason),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["my-leaves"] })
+      queryClient.invalidateQueries({ queryKey: ["leave-balance"] })
+      queryClient.invalidateQueries({ queryKey: ["leaves"] })
+      queryClient.invalidateQueries({ queryKey: ["leave-stats"] })
+      Toast.show({ type: "success", text1: "Leave cancelled" })
+      setCancelTarget(null)
+    },
+    onError: (e) => Toast.show({ type: "error", text1: leaveErrorMessage(e, "Failed to cancel leave") }),
   })
 
   function onRequestSuccess() {
@@ -836,7 +869,11 @@ function MyLeavesTab() {
               item={item}
               index={index}
               onDelete={() => deleteMutation.mutate(item.id)}
-              isDeleting={deleteMutation.isPending && deleteMutation.variables === item.id}
+              onCancelApproved={() => setCancelTarget(item)}
+              isDeleting={
+                (deleteMutation.isPending && deleteMutation.variables === item.id) ||
+                (cancelMutation.isPending && cancelMutation.variables?.id === item.id)
+              }
             />
           </AnimatedListItem>
         )}
@@ -859,6 +896,13 @@ function MyLeavesTab() {
         onClose={() => setRequestOpen(false)}
         onSuccess={onRequestSuccess}
       />
+
+      <CancelLeaveModal
+        leave={cancelTarget}
+        onClose={() => setCancelTarget(null)}
+        onConfirm={(reason) => cancelTarget && cancelMutation.mutate({ id: cancelTarget.id, reason })}
+        isLoading={cancelMutation.isPending}
+      />
     </View>
   )
 }
@@ -872,6 +916,7 @@ function TeamLeavesTab({ delegatedOnly }: { delegatedOnly?: boolean }) {
   const isHr = user?.role === "hr"
   const [filter, setFilter] = useState<LeaveStatus | "all">("all")
   const [rejectTarget, setRejectTarget] = useState<string | null>(null)
+  const [cancelTarget, setCancelTarget] = useState<LeaveRequest | null>(null)
   const [delegateTarget, setDelegateTarget] = useState<string | null>(null)
   const [deleteHalfDayTarget, setDeleteHalfDayTarget] = useState<string | null>(null)
   const [actionId, setActionId] = useState<string | null>(null)
@@ -911,6 +956,22 @@ function TeamLeavesTab({ delegatedOnly }: { delegatedOnly?: boolean }) {
     },
     onError: (e) => {
       Toast.show({ type: "error", text1: leaveErrorMessage(e, "Failed to reject leave") })
+      setActionId(null)
+    },
+  })
+
+  const cancelMutation = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      leaveService.cancelLeave(id, reason),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["leaves"] })
+      queryClient.invalidateQueries({ queryKey: ["leave-stats"] })
+      Toast.show({ type: "success", text1: "Leave cancelled" })
+      setCancelTarget(null)
+      setActionId(null)
+    },
+    onError: (e) => {
+      Toast.show({ type: "error", text1: leaveErrorMessage(e, "Failed to cancel leave") })
       setActionId(null)
     },
   })
@@ -1010,6 +1071,10 @@ function TeamLeavesTab({ delegatedOnly }: { delegatedOnly?: boolean }) {
                 setActionId(item.id)
                 setRejectTarget(item.id)
               }}
+              onCancelApproved={() => {
+                setActionId(item.id)
+                setCancelTarget(item)
+              }}
               onDelegate={() => setDelegateTarget(item.id)}
               onToggleExemption={() => {
                 setActionId(item.id)
@@ -1024,6 +1089,7 @@ function TeamLeavesTab({ delegatedOnly }: { delegatedOnly?: boolean }) {
               canDeleteHalfDay={canDeleteHalfDay}
               isApproving={approveMutation.isPending && actionId === item.id}
               isRejecting={rejectMutation.isPending && actionId === item.id}
+              isCancelling={cancelMutation.isPending && actionId === item.id}
               isTogglingExemption={exemptionMutation.isPending && actionId === item.id}
               isDeletingHalfDay={deleteHalfDayMutation.isPending && actionId === item.id}
             />
@@ -1053,6 +1119,15 @@ function TeamLeavesTab({ delegatedOnly }: { delegatedOnly?: boolean }) {
           if (rejectTarget) rejectMutation.mutate({ id: rejectTarget, reason })
         }}
         isLoading={rejectMutation.isPending}
+      />
+
+      <CancelLeaveModal
+        leave={cancelTarget}
+        onClose={() => { setCancelTarget(null); setActionId(null) }}
+        onConfirm={(reason) => {
+          if (cancelTarget) cancelMutation.mutate({ id: cancelTarget.id, reason })
+        }}
+        isLoading={cancelMutation.isPending}
       />
 
       {/* Delete half-day leave modal */}

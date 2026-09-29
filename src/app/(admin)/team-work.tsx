@@ -2,13 +2,14 @@ import { useMemo, useState } from "react"
 import { View, FlatList, ActivityIndicator, Pressable, StyleSheet } from "react-native"
 import { useQueryClient, useMutation } from "@tanstack/react-query"
 import { useLocalSearchParams } from "expo-router"
-import { Plus, XCircle, Repeat, ClipboardList, StopCircle, Play, CheckCircle2 } from "lucide-react-native"
+import { Plus, XCircle, Repeat, ClipboardList, StopCircle, Play, CheckCircle2, MessageSquarePlus } from "lucide-react-native"
 import moment from "moment"
 import BackButton from "../../components/shared/BackButton"
 import AnimatedListItem from "../../components/shared/AnimatedListItem"
 import WorkCard from "../../components/shared/WorkCard"
 import AssignWorkModal from "../../components/shared/AssignWorkModal"
 import WorkStatusModal from "../../components/shared/WorkStatusModal"
+import WorkDetailModal from "../../components/shared/WorkDetailModal"
 import ConfirmModal from "../../components/shared/ConfirmModal"
 import ListRow from "../../components/shared/ListRow"
 import type { ActionMenuItem } from "../../components/shared/ActionMenu"
@@ -79,6 +80,9 @@ export default function TeamWorkScreen() {
     work: WorkAssignment
     intent: "in_progress" | "completed"
   } | null>(null)
+  // Details/activity sheet. Notes can only be added from "My Work" - that's
+  // the side where this admin is the assignee.
+  const [detailTarget, setDetailTarget] = useState<{ work: WorkAssignment; canAddNote: boolean } | null>(null)
   const [filter, setFilter] = useState<WorkStatus | "all" | "open">("open")
   const [assignOpen, setAssignOpen] = useState(false)
   const [cancelTarget, setCancelTarget] = useState<WorkAssignment | null>(null)
@@ -166,7 +170,14 @@ export default function TeamWorkScreen() {
   function myMenuFor(work: WorkAssignment): ActionMenuItem[] {
     if (work.status === "completed" || work.status === "cancelled") return []
 
-    const menu: ActionMenuItem[] = []
+    const menu: ActionMenuItem[] = [
+      {
+        label: "Add Note",
+        icon: <MessageSquarePlus size={16} color={colors.accent} strokeWidth={2} />,
+        color: colors.accent as string,
+        onPress: () => setDetailTarget({ work, canAddNote: true }),
+      },
+    ]
     if (work.status === "pending") {
       menu.push({
         label: "Start Work",
@@ -291,6 +302,7 @@ export default function TeamWorkScreen() {
                     dueTime={schedule?.dueTime}
                     menuItems={tab === "mine" ? myMenuFor(item) : menuFor(item)}
                     isBusy={cancelMutation.isPending && cancelTarget?._id === item._id}
+                    onPress={() => setDetailTarget({ work: item, canAddNote: tab === "mine" })}
                   />
                 </AnimatedListItem>
               )
@@ -385,6 +397,15 @@ export default function TeamWorkScreen() {
           work={statusTarget.work}
           intent={statusTarget.intent}
           onClose={() => setStatusTarget(null)}
+          onUpdated={invalidate}
+        />
+      )}
+
+      {detailTarget && (
+        <WorkDetailModal
+          work={detailTarget.work}
+          canAddNote={detailTarget.canAddNote}
+          onClose={() => setDetailTarget(null)}
           onUpdated={invalidate}
         />
       )}

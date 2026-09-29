@@ -2,7 +2,7 @@ import { useCallback, useMemo } from "react"
 import { View, FlatList, ActivityIndicator, StyleSheet, TouchableOpacity } from "react-native"
 import { useRouter } from "expo-router"
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { ChevronLeft, Bell, CheckCheck, CalendarClock, User } from "lucide-react-native"
+import { ChevronLeft, Bell, CheckCheck, CalendarClock, User, ClipboardList } from "lucide-react-native"
 import AppText from "../components/ui/AppText"
 import { useTheme } from "../providers/ThemeProvider"
 import { spacing, colors as palette, radii } from "../constants/theme"
@@ -12,6 +12,7 @@ import type { AppNotification, NotificationsResponse } from "../types"
 import moment from "moment"
 import RefreshButton from "../components/shared/RefreshButton"
 import AnimatedListItem from "../components/shared/AnimatedListItem"
+import { isWorkNotification, workRouteFor } from "../hooks/usePushNotifications"
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -58,6 +59,13 @@ function NotificationIcon({ type, colors }: { type: string; colors: any }) {
     return (
       <View style={[styles.iconWrap, { backgroundColor: palette.warning.default + "22" }]}>
         <CalendarClock size={16} color={palette.warning.default} strokeWidth={1.75} />
+      </View>
+    )
+  }
+  if (isWorkNotification({ type })) {
+    return (
+      <View style={[styles.iconWrap, { backgroundColor: palette.success.default + "22" }]}>
+        <ClipboardList size={16} color={palette.success.default} strokeWidth={1.75} />
       </View>
     )
   }
@@ -162,6 +170,9 @@ export default function NotificationsScreen() {
       if (item.type === "leave_requested" || item.type === "leave_approved") {
         const role = useAuthStore.getState().user?.role
         router.push(role === "staff" ? "/(tabs)/leaves" : "/(admin)/team-leaves")
+      } else if (isWorkNotification(item)) {
+        const role = useAuthStore.getState().user?.role
+        router.push(workRouteFor({ type: item.type, ...(item.metadata ?? {}) }, role))
       } else if (item.ledgerName) {
         router.push({
           pathname: "/customer/[name]",

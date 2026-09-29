@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react"
 import { View, SectionList, ActivityIndicator, Pressable, StyleSheet } from "react-native"
 import { useQueryClient } from "@tanstack/react-query"
-import { Play, CheckCircle2, ClipboardList } from "lucide-react-native"
+import { Play, CheckCircle2, ClipboardList, MessageSquarePlus } from "lucide-react-native"
 import BackButton from "../../components/shared/BackButton"
 import AnimatedListItem from "../../components/shared/AnimatedListItem"
 import WorkCard from "../../components/shared/WorkCard"
 import WorkStatusModal from "../../components/shared/WorkStatusModal"
+import WorkDetailModal from "../../components/shared/WorkDetailModal"
 import type { ActionMenuItem } from "../../components/shared/ActionMenu"
 import AppText from "../../components/ui/AppText"
 import { useTheme } from "../../providers/ThemeProvider"
@@ -63,6 +64,7 @@ export default function MyWorkScreen() {
     work: WorkAssignment
     intent: "in_progress" | "completed"
   } | null>(null)
+  const [detailTarget, setDetailTarget] = useState<WorkAssignment | null>(null)
 
   // "Open" spans two statuses, so it's filtered client-side off the full list;
   // the others map straight to a server-side status filter.
@@ -84,7 +86,14 @@ export default function MyWorkScreen() {
   function menuFor(work: WorkAssignment): ActionMenuItem[] {
     if (work.status === "completed" || work.status === "cancelled") return []
 
-    const items: ActionMenuItem[] = []
+    const items: ActionMenuItem[] = [
+      {
+        label: "Add Note",
+        icon: <MessageSquarePlus size={16} color={colors.accent} strokeWidth={2} />,
+        color: colors.accent as string,
+        onPress: () => setDetailTarget(work),
+      },
+    ]
     if (work.status === "pending") {
       items.push({
         label: "Start Work",
@@ -158,7 +167,7 @@ export default function MyWorkScreen() {
         )}
         renderItem={({ item, index }) => (
           <AnimatedListItem index={index}>
-            <WorkCard item={item} index={index} menuItems={menuFor(item)} />
+            <WorkCard item={item} index={index} menuItems={menuFor(item)} onPress={() => setDetailTarget(item)} />
           </AnimatedListItem>
         )}
         contentContainerStyle={styles.list}
@@ -185,6 +194,15 @@ export default function MyWorkScreen() {
           work={statusTarget.work}
           intent={statusTarget.intent}
           onClose={() => setStatusTarget(null)}
+          onUpdated={invalidate}
+        />
+      )}
+
+      {detailTarget && (
+        <WorkDetailModal
+          work={detailTarget}
+          canAddNote
+          onClose={() => setDetailTarget(null)}
           onUpdated={invalidate}
         />
       )}

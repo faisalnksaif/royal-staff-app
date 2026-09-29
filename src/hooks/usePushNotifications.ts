@@ -16,16 +16,25 @@ type NotificationData = {
   workAssignmentId?: string
   scheduleId?: string
   status?: string
+  /** Which end of the work the recipient is - sent on status/note pushes. */
+  audience?: "assignee" | "assigner"
 }
 
 // Work pushes sent to the assignee ("you've been given work") vs to the
 // assigner ("your assignee moved/missed it") - they land on different screens.
+// Status and note pushes can go either way, so they carry `audience` instead.
 const ASSIGNEE_WORK_TYPES = ["work_assigned", "work_due"]
-const ASSIGNER_WORK_TYPES = ["work_status_updated", "work_overdue"]
+const ASSIGNER_WORK_TYPES = ["work_overdue"]
+const EITHER_WAY_WORK_TYPES = ["work_status_updated", "work_note_added"]
 
-function isWorkNotification(data?: NotificationData): boolean {
+export function isWorkNotification(data?: { type?: string } | null): boolean {
   const type = data?.type
-  return !!type && (ASSIGNEE_WORK_TYPES.includes(type) || ASSIGNER_WORK_TYPES.includes(type))
+  return (
+    !!type &&
+    (ASSIGNEE_WORK_TYPES.includes(type) ||
+      ASSIGNER_WORK_TYPES.includes(type) ||
+      EITHER_WAY_WORK_TYPES.includes(type))
+  )
 }
 
 /**
@@ -33,12 +42,15 @@ function isWorkNotification(data?: NotificationData): boolean {
  * blocked from that route entirely, so they always go to the admin screen -
  * opened on the tab matching the notification's direction.
  */
-function workRouteFor(data: NotificationData, role?: string): any {
+export function workRouteFor(data: NotificationData, role?: string): any {
   const isStaff = !role || role === "staff"
   if (isStaff) return "/(tabs)/work"
 
-  const tab = ASSIGNER_WORK_TYPES.includes(data.type ?? "") ? "assigned" : "mine"
-  return { pathname: "/(admin)/team-work", params: { tab } }
+  // Older status pushes predate `audience` and only ever went to the assigner.
+  const toAssigner = data.audience
+    ? data.audience === "assigner"
+    : ASSIGNER_WORK_TYPES.includes(data.type ?? "") || EITHER_WAY_WORK_TYPES.includes(data.type ?? "")
+  return { pathname: "/(admin)/team-work", params: { tab: toAssigner ? "assigned" : "mine" } }
 }
 
 // expo-notifications is Android/iOS only - every entry point below has to be
