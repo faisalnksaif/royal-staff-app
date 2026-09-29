@@ -12,12 +12,14 @@ export default function StaffPickerModal({
   current,
   onSelect,
   onClose,
+  title = "Assign Staff",
 }: {
   visible: boolean
   staff: StaffOption[]
   current: number | null
   onSelect: (s: StaffOption) => void
   onClose: () => void
+  title?: string
 }) {
   const { colors } = useTheme()
   const [q, setQ] = useState("")
@@ -30,7 +32,7 @@ export default function StaffPickerModal({
       <Pressable style={styles.modalOverlay} onPress={onClose}>
         <Pressable style={[styles.modalBox, { backgroundColor: colors.background.primary, borderColor: colors.border as string }]}>
           <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-            <AppText variant="bodyMedium">Assign Staff</AppText>
+            <AppText variant="bodyMedium">{title}</AppText>
             <TouchableOpacity onPress={onClose} hitSlop={8}>
               <X size={18} color={colors.text.tertiary} strokeWidth={1.75} />
             </TouchableOpacity>

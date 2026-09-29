@@ -12,16 +12,18 @@ import {
   UIManager,
 } from "react-native"
 import { useQuery } from "@tanstack/react-query"
-import { ChevronDown, Check, X, Flag, MessageSquareQuote, Clock, CircleCheck } from "lucide-react-native"
+import { ChevronDown, Check, X, Flag, MessageSquareQuote, Clock, CircleCheck, User } from "lucide-react-native"
 import moment from "moment"
 import BackButton from "../../components/shared/BackButton"
 import AnimatedListItem from "../../components/shared/AnimatedListItem"
+import StaffPickerModal from "../../components/shared/StaffPickerModal"
 import AppText from "../../components/ui/AppText"
 import AppInput from "../../components/ui/AppInput"
 import { useTheme } from "../../providers/ThemeProvider"
 import { useTablet } from "../../hooks/useTablet"
 import { spacing, radii, colors as palette } from "../../constants/theme"
 import { feedbackService } from "../../services/feedbackService"
+import { staffService } from "../../services/staffService"
 import { toTitleCase } from "../../utils/helpers"
 import type { FeedbackRequest, FeedbackRequestStatus } from "../../types"
 
@@ -146,14 +148,25 @@ export default function TeamFeedbackRepliesScreen() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("completed")
   const [search, setSearch] = useState("")
   const [page, setPage] = useState(1)
+  // Staff.id (not user_id) — FeedbackRequest.staffId stores Staff.id
+  const [staffId, setStaffId] = useState<number | null>(null)
+  const [staffPickerOpen, setStaffPickerOpen] = useState(false)
+
+  const { data: staffOptions } = useQuery({
+    queryKey: ["staff-options"],
+    queryFn: () => staffService.getStaffOptions(),
+  })
+  const staffList = staffOptions?.data ?? []
+  const selectedStaffName = staffList.find((s) => s.id === staffId)?.name
 
   const { data, isLoading, isFetching, refetch } = useQuery({
-    queryKey: ["feedback-requests", statusFilter, page],
+    queryKey: ["feedback-requests", statusFilter, staffId, page],
     queryFn: () =>
       feedbackService.getAllFeedbackRequests({
         page,
         limit: 30,
         status: statusFilter === "all" ? undefined : statusFilter,
+        staffId: staffId ?? undefined,
       }),
   })
 
@@ -208,6 +221,39 @@ export default function TeamFeedbackRepliesScreen() {
           )
         })}
       </View>
+
+      {/* Staff filter */}
+      <View style={[styles.filterRow, { borderBottomColor: colors.border }]}>
+        <Pressable
+          onPress={() => setStaffPickerOpen(true)}
+          style={[
+            styles.filterChip,
+            styles.staffChip,
+            { backgroundColor: staffId != null ? colors.accent + "18" : colors.background.secondary, borderColor: staffId != null ? colors.accent : colors.border },
+          ]}
+        >
+          <User size={12} color={staffId != null ? colors.accent : colors.text.secondary} strokeWidth={2} />
+          <AppText variant="caption" numberOfLines={1} style={{ color: staffId != null ? colors.accent : colors.text.secondary }}>
+            {staffId != null ? toTitleCase(selectedStaffName ?? "Staff") : "All staff"}
+          </AppText>
+          {staffId != null ? (
+            <Pressable onPress={() => { setStaffId(null); setPage(1) }} hitSlop={8}>
+              <X size={12} color={colors.accent} strokeWidth={2.5} />
+            </Pressable>
+          ) : (
+            <ChevronDown size={12} color={colors.text.secondary} strokeWidth={2} />
+          )}
+        </Pressable>
+      </View>
+
+      <StaffPickerModal
+        visible={staffPickerOpen}
+        title="Filter by Staff"
+        staff={staffList.map((s) => ({ staff_id: s.id, name: toTitleCase(s.name) }))}
+        current={staffId}
+        onSelect={(s) => { setStaffId(s.staff_id); setPage(1); setStaffPickerOpen(false) }}
+        onClose={() => setStaffPickerOpen(false)}
+      />
 
       <FlatList
         data={items}
@@ -272,6 +318,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.full,
     borderWidth: 1,
   },
+  staffChip: { flexDirection: "row", alignItems: "center", gap: spacing[1], maxWidth: 240 },
   list: { padding: spacing[4], paddingBottom: spacing[16], gap: spacing[3] },
   center: { alignItems: "center", justifyContent: "center", paddingVertical: spacing[16] },
   card: {
