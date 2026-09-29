@@ -20,9 +20,10 @@ import { useTheme } from "../../../providers/ThemeProvider"
 import { useTablet } from "../../../hooks/useTablet"
 import { spacing, radii } from "../../../constants/theme"
 import { scoreService } from "../../../services/scoreService"
-import type { ScoringConfig, ScoringConfigUpdatePayload, ScoringRubricRule } from "../../../types"
+import type { ScoringConfig, ScoringConfigUpdatePayload, ScoringRole, ScoringRubricRule } from "../../../types"
+import { SCORING_ROLE_LABELS } from "../../../constants/scoringRoles"
 
-const DEPARTMENTS = ["Store", "Plywood Godown", "Glass Godown"] as const
+const DEPARTMENTS = ["Store", "Plywood Godown", "Glass Godown", "Hardware"] as const
 
 // The rubric's ruleKeys map 1:1 to ScoringConfig keys now (timeKeeping, attendanceLeave
 // replaced the legacy attendance/leaves keys as the editable rule sections).
@@ -62,11 +63,25 @@ const MODE_KEYS = new Set([
   "wastage",
   "stockTaking",
   "workflowStatus",
+  "packingBillCrossCheck",
+  "displayShuffling",
+  "deadStockSales",
+  "hardwareReportSubmission",
+  "showroomCleanliness",
+  "productKnowledgeTraining",
+  "customerExperience",
+  "dailyReportCollection",
+  "quotationMonitoring",
 ])
 
 // attendanceLeave has a nested casual/medical shape and is rendered by its own
 // dedicated section rather than the generic flat field list.
 const NESTED_LEAVE_KEY = "attendanceLeave"
+
+const DAILY_CHECK_FIELDS: FieldDef[] = [
+  { key: "maxPoints", label: "Max points" },
+  { key: "pointsPerBadDay", label: "Points per bad day", hint: "Deducted per the mode below" },
+]
 
 // Which numeric/boolean fields to expose per config key, in display order.
 // "mode" fields are rendered separately as a Flat/Daily toggle, not a text input.
@@ -135,6 +150,16 @@ const FIELDS_BY_CONFIG_KEY: Record<string, FieldDef[]> = {
     { key: "maxPoints", label: "Max points" },
     { key: "pointsPerBadDay", label: "Points per bad day", hint: "Deducted per the mode below" },
   ],
+  packingBillCrossCheck: DAILY_CHECK_FIELDS,
+  // Store leader-rubric criteria - all flat daily checks with the same fields
+  displayShuffling: DAILY_CHECK_FIELDS,
+  deadStockSales: DAILY_CHECK_FIELDS,
+  hardwareReportSubmission: DAILY_CHECK_FIELDS,
+  showroomCleanliness: DAILY_CHECK_FIELDS,
+  productKnowledgeTraining: DAILY_CHECK_FIELDS,
+  customerExperience: DAILY_CHECK_FIELDS,
+  dailyReportCollection: DAILY_CHECK_FIELDS,
+  quotationMonitoring: DAILY_CHECK_FIELDS,
 }
 
 // Matches each config key's documented `mode` default in swagger.yaml. The "recurring"
@@ -152,6 +177,15 @@ const DEFAULT_MODE_BY_CONFIG_KEY: Record<string, string> = {
   wastage: "flat",
   stockTaking: "flat",
   workflowStatus: "flat",
+  packingBillCrossCheck: "perDay",
+  displayShuffling: "flat",
+  deadStockSales: "flat",
+  hardwareReportSubmission: "flat",
+  showroomCleanliness: "flat",
+  productKnowledgeTraining: "flat",
+  customerExperience: "flat",
+  dailyReportCollection: "flat",
+  quotationMonitoring: "flat",
 }
 
 const RECURRING_MODE_BY_CONFIG_KEY: Record<string, string> = {
@@ -167,6 +201,15 @@ const RECURRING_MODE_BY_CONFIG_KEY: Record<string, string> = {
   wastage: "perDay",
   stockTaking: "perDay",
   workflowStatus: "perDay",
+  packingBillCrossCheck: "perDay",
+  displayShuffling: "perDay",
+  deadStockSales: "perDay",
+  hardwareReportSubmission: "perDay",
+  showroomCleanliness: "perDay",
+  productKnowledgeTraining: "perDay",
+  customerExperience: "perDay",
+  dailyReportCollection: "perDay",
+  quotationMonitoring: "perDay",
 }
 
 type DraftValues = Record<string, Record<string, string>>
@@ -223,8 +266,8 @@ function buildDraftFromConfig(
   return draft
 }
 
-function buildPayload(month: string, department: string, draft: DraftValues): ScoringConfigUpdatePayload {
-  const payload: any = { month, department }
+function buildPayload(month: string, department: string, role: ScoringRole, draft: DraftValues): ScoringConfigUpdatePayload {
+  const payload: any = { month, department, role }
   Object.entries(draft).forEach(([configKey, fields]) => {
     if (configKey === NESTED_LEAVE_KEY) {
       const section: any = { casual: {}, medical: {} }
@@ -427,6 +470,7 @@ export default function ScoringDepartmentsScreen() {
   const queryClient = useQueryClient()
 
   const [department, setDepartment] = useState<(typeof DEPARTMENTS)[number]>("Store")
+  const [role, setRole] = useState<ScoringRole>("executive")
   const [month, setMonth] = useState(() => moment().startOf("month"))
   const [draft, setDraft] = useState<DraftValues | null>(null)
 
@@ -434,17 +478,19 @@ export default function ScoringDepartmentsScreen() {
   const isCurrentMonth = month.isSame(moment(), "month")
 
   const { data: rubricData, isLoading: rubricLoading } = useQuery({
-    queryKey: ["scoring-rubrics"],
-    queryFn: () => scoreService.getDepartmentRubrics(),
+    queryKey: ["scoring-rubrics-by-role"],
+    queryFn: () => scoreService.getRubricsByRole(),
   })
 
   const { data: configData, isLoading: configLoading } = useQuery({
-    queryKey: ["scoring-config", monthParam, department],
-    queryFn: () => scoreService.getScoringConfig(monthParam, department),
+    queryKey: ["scoring-config", monthParam, department, role],
+    queryFn: () => scoreService.getScoringConfig(monthParam, department, role),
     retry: false,
   })
 
-  const rules = useMemo(() => rubricData?.data?.[department] ?? [], [rubricData, department])
+  const rubricsByRole = rubricData?.data?.[department]
+  const roles = useMemo(() => Object.keys(rubricsByRole ?? {}) as ScoringRole[], [rubricsByRole])
+  const rules = useMemo(() => rubricsByRole?.[role] ?? [], [rubricsByRole, role])
   const config = configData?.data
 
   const currentDraft = useMemo(() => {
@@ -457,13 +503,19 @@ export default function ScoringDepartmentsScreen() {
   const saveMutation = useMutation({
     mutationFn: (payload: ScoringConfigUpdatePayload) => scoreService.updateScoringConfig(payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["scoring-config", monthParam, department] })
+      queryClient.invalidateQueries({ queryKey: ["scoring-config", monthParam, department, role] })
       setDraft(null)
     },
   })
 
   function selectDepartment(dept: (typeof DEPARTMENTS)[number]) {
     setDepartment(dept)
+    setRole("executive")
+    setDraft(null)
+  }
+
+  function selectRole(nextRole: ScoringRole) {
+    setRole(nextRole)
     setDraft(null)
   }
 
@@ -482,7 +534,7 @@ export default function ScoringDepartmentsScreen() {
   }
 
   function handleSave() {
-    const payload = buildPayload(monthParam, department, currentDraft)
+    const payload = buildPayload(monthParam, department, role, currentDraft)
     saveMutation.mutate(payload)
   }
 
@@ -498,7 +550,7 @@ export default function ScoringDepartmentsScreen() {
           <View>
             <AppText variant="heading3">Scoring Rules</AppText>
             <AppText variant="caption" color="tertiary">
-              Configure the rubric per department
+              Configure the rubric per department and role
             </AppText>
           </View>
         </View>
@@ -559,6 +611,33 @@ export default function ScoringDepartmentsScreen() {
         })}
       </View>
 
+      {/* Role tabs - only for departments with leader rubrics (Store) */}
+      {roles.length > 1 && (
+        <View style={[styles.tabsRow, { borderBottomColor: colors.border }]}>
+          {roles.map((r) => {
+            const active = r === role
+            return (
+              <Pressable
+                key={r}
+                onPress={() => selectRole(r)}
+                style={[
+                  styles.tab,
+                  active && { backgroundColor: colors.accent + "18", borderColor: colors.accent },
+                  !active && { borderColor: colors.border },
+                ]}
+              >
+                <AppText
+                  variant={active ? "bodyMedium" : "body"}
+                  style={{ color: active ? colors.accent : colors.text.secondary, fontSize: 13 }}
+                >
+                  {SCORING_ROLE_LABELS[r]}
+                </AppText>
+              </Pressable>
+            )
+          })}
+        </View>
+      )}
+
       {/* Summary strip */}
       <View style={[styles.summaryStrip, { backgroundColor: colors.background.secondary, borderBottomColor: colors.border }]}>
         <Settings2 size={14} color={colors.text.tertiary} strokeWidth={1.75} />
@@ -579,7 +658,10 @@ export default function ScoringDepartmentsScreen() {
         <ActivityIndicator size="large" color={colors.accent} style={styles.center} />
       ) : rules.length === 0 ? (
         <View style={styles.emptyState}>
-          <AppText color="tertiary">No rubric defined for {department}.</AppText>
+          <AppText color="tertiary">
+            No rubric defined for {department}
+            {role !== "executive" ? ` (${SCORING_ROLE_LABELS[role]})` : ""}.
+          </AppText>
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>

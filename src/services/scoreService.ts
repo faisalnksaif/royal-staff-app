@@ -4,6 +4,8 @@ import type {
   ScoringConfig,
   ScoringConfigUpdatePayload,
   ScoringRubricByDepartment,
+  ScoringRubricByRole,
+  ScoringRole,
   StaffScore,
 } from "../types"
 
@@ -21,11 +23,13 @@ async function getMonthlyOverview(
 
 async function getScoringConfig(
   month: string,
-  department?: string
+  department?: string,
+  role?: ScoringRole
 ): Promise<{ success: boolean; data: ScoringConfig }> {
-  const query = department
-    ? `?month=${month}&department=${encodeURIComponent(department)}`
-    : `?month=${month}`
+  const query =
+    `?month=${month}` +
+    (department ? `&department=${encodeURIComponent(department)}` : "") +
+    (role ? `&role=${role}` : "")
   const { data } = await api.http.request({
     path: `/scoring-config${query}`,
     method: "GET",
@@ -61,6 +65,19 @@ async function getDepartmentRubrics(): Promise<{
   return data as { success: boolean; data: ScoringRubricByDepartment }
 }
 
+async function getRubricsByRole(): Promise<{
+  success: boolean
+  data: ScoringRubricByRole
+}> {
+  const { data } = await api.http.request({
+    path: "/scoring-config/rubrics",
+    method: "GET",
+    secure: true,
+    format: "json",
+  })
+  return data as { success: boolean; data: ScoringRubricByRole }
+}
+
 async function calculateMonthly(month: string): Promise<{
   success: boolean
   data: { month: string; calculatedCount: number; totalStaff: number; scores: StaffScore[] }
@@ -83,5 +100,6 @@ export const scoreService = {
   getScoringConfig,
   updateScoringConfig,
   getDepartmentRubrics,
+  getRubricsByRole,
   calculateMonthly,
 }

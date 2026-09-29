@@ -665,19 +665,22 @@ export default function DailyCheckScreen() {
   const { data: departmentsData } = useDepartments()
 
   const { data: categoriesData, isLoading: isLoadingCategories } = useQuery({
-    queryKey: ["daily-check-categories"],
-    queryFn: () => dailyCheckCategoryService.getCategoriesByDepartment(),
+    queryKey: ["daily-check-categories-by-rubric"],
+    queryFn: () => dailyCheckCategoryService.getCategoriesByRubric(),
   })
 
-  const categoriesByDepartment = categoriesData?.data ?? {}
+  // department -> scoring role -> categories; leader roles (Store) get their own set
+  const categoriesByRubric = categoriesData?.data ?? {}
 
   const allCategories = useMemo(() => {
     const byKey = new Map<string, DailyCheckCategoryDef>()
-    Object.values(categoriesByDepartment).forEach((defs) => {
-      defs.forEach((def) => byKey.set(def.category, def))
+    Object.values(categoriesByRubric).forEach((byRole) => {
+      Object.values(byRole).forEach((defs) => {
+        defs?.forEach((def) => byKey.set(def.category, def))
+      })
     })
     return [...byKey.values()]
-  }, [categoriesByDepartment])
+  }, [categoriesByRubric])
 
   const categoryQueries = useQueries({
     queries: allCategories.map((def) => ({
@@ -733,7 +736,8 @@ export default function DailyCheckScreen() {
     () =>
       (staffData?.data ?? []).map((s) => {
         const deptName = departmentById.get(s.id) ?? UNASSIGNED_DEPARTMENT
-        const categories = categoriesByDepartment[deptName] ?? []
+        const byRole = categoriesByRubric[deptName]
+        const categories = byRole?.[s.scoringRole ?? "executive"] ?? byRole?.executive ?? []
         const violationsByCategory: Record<string, string[]> = {}
         const remarksByCategory: Record<string, string> = {}
         categories.forEach((c) => {
@@ -748,7 +752,7 @@ export default function DailyCheckScreen() {
           remarksByCategory,
         }
       }),
-    [staffData, departmentById, categoriesByDepartment, violationsByCategoryByStaff, remarksByCategoryByStaff]
+    [staffData, departmentById, categoriesByRubric, violationsByCategoryByStaff, remarksByCategoryByStaff]
   )
 
   const categoryMutation = useMutation({

@@ -27,9 +27,14 @@ export interface StaffResponse {
   hasPhoto?: boolean
   photoCount?: number
   role?: UserRole
+  scoringRole?: ScoringRole
   createdAt: string
   updatedAt: string
 }
+
+// Which scoring rubric a staff member gets within their department - leader
+// roles only exist for Store.
+export type ScoringRole = "executive" | "sales_team_leader" | "sales_manager"
 
 export interface StaffListResponse {
   success: boolean
@@ -973,6 +978,9 @@ export interface DailyCheckCategoryDef {
 
 export type DailyCheckCategoriesByDepartment = Record<string, DailyCheckCategoryDef[]>
 
+// department -> scoring role -> categories (leader roles only listed for departments that have them)
+export type DailyCheckCategoriesByRubric = Record<string, Partial<Record<ScoringRole, DailyCheckCategoryDef[]>>>
+
 export interface DailyCheckCategoryRecord {
   staffId: number
   staffName: string
@@ -1023,9 +1031,18 @@ export interface MonthlyScoresData {
   scores: StaffScore[]
 }
 
+// Shared shape of the Store leader-rubric criteria (all flat daily checks)
+export interface DailyCheckRuleConfig {
+  enabled: boolean
+  maxPoints: number
+  mode?: ScoringRuleMode
+  pointsPerBadDay?: number
+}
+
 export interface ScoringConfig {
   _id: string
   month: string
+  role?: ScoringRole
   year: number
   monthNumber: number
   /** @deprecated superseded by timeKeeping, kept for older config documents */
@@ -1137,12 +1154,21 @@ export interface ScoringConfig {
     mode?: ScoringRuleMode
     pointsPerBadDay?: number
   }
+  displayShuffling?: DailyCheckRuleConfig
+  deadStockSales?: DailyCheckRuleConfig
+  hardwareReportSubmission?: DailyCheckRuleConfig
+  showroomCleanliness?: DailyCheckRuleConfig
+  productKnowledgeTraining?: DailyCheckRuleConfig
+  customerExperience?: DailyCheckRuleConfig
+  dailyReportCollection?: DailyCheckRuleConfig
+  quotationMonitoring?: DailyCheckRuleConfig
+  packingBillCrossCheck?: DailyCheckRuleConfig
   isActive: boolean
 }
 
 export type ScoringRuleMode = "flat" | "perDay"
 
-export type ScoringDepartmentName = "Store" | "Plywood Godown" | "Glass Godown"
+export type ScoringDepartmentName = "Store" | "Plywood Godown" | "Glass Godown" | "Hardware"
 
 export interface ScoringRubricRule {
   ruleKey: string
@@ -1152,8 +1178,11 @@ export interface ScoringRubricRule {
 
 export type ScoringRubricByDepartment = Record<string, ScoringRubricRule[]>
 
-export type ScoringConfigUpdatePayload = { month: string; department: string } & Partial<
-  Omit<ScoringConfig, "_id" | "year" | "monthNumber" | "isActive" | "month">
+// department -> scoring role -> rubric
+export type ScoringRubricByRole = Record<string, Partial<Record<ScoringRole, ScoringRubricRule[]>>>
+
+export type ScoringConfigUpdatePayload = { month: string; department: string; role?: ScoringRole } & Partial<
+  Omit<ScoringConfig, "_id" | "year" | "monthNumber" | "isActive" | "month" | "role">
 >
 
 export type ExtraPerformanceStatus = "pending" | "approved" | "rejected"

@@ -29,7 +29,8 @@ import { staffService } from "../../services/staffService"
 import { shiftService } from "../../services/shiftService"
 import { departmentService } from "../../services/departmentService"
 import { useQueryClient } from "@tanstack/react-query"
-import type { StaffResponse, ShiftResponse, DepartmentResponse } from "../../types"
+import type { StaffResponse, ShiftResponse, DepartmentResponse, ScoringRole } from "../../types"
+import { SCORING_ROLE_LABELS, scoringRolesFor } from "../../constants/scoringRoles"
 
 // ─── StaffCard ────────────────────────────────────────────────────────────────
 
@@ -58,6 +59,11 @@ function StaffRow({
           <AppText variant="caption" color="tertiary">
             {"  ·  "}{shift ? shift.name : "Default shift"}
           </AppText>
+          {staff.scoringRole && staff.scoringRole !== "executive" && (
+            <AppText variant="caption" style={{ color: colors.accent }}>
+              {"  ·  "}{SCORING_ROLE_LABELS[staff.scoringRole]}
+            </AppText>
+          )}
         </View>
       </View>
       <Pressable onPress={onEdit} hitSlop={8} style={styles.editBtn}>
@@ -83,17 +89,22 @@ function EditStaffModal({
   const [deptPickerOpen, setDeptPickerOpen] = useState(false)
   const [shiftId, setShiftId] = useState<string | undefined>(staff.shiftId ?? undefined)
   const [shiftPickerOpen, setShiftPickerOpen] = useState(false)
+  const [scoringRole, setScoringRole] = useState<ScoringRole>(staff.scoringRole ?? "executive")
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState("")
 
   const selectedShift = shifts.find((s) => s._id === shiftId) ?? null
   const selectedDepartment = departments.find((d) => d._id === departmentId) ?? null
+  // Leader roles only exist for some departments (Store) - fall back to
+  // executive when the chosen department doesn't offer the current role.
+  const availableRoles = scoringRolesFor(selectedDepartment?.name)
+  const effectiveRole = availableRoles.includes(scoringRole) ? scoringRole : "executive"
 
   async function handleSave() {
     setIsSaving(true)
     setError("")
     try {
-      await staffService.updateStaff(staff.id, { departmentId, shiftId })
+      await staffService.updateStaff(staff.id, { departmentId, shiftId, scoringRole: effectiveRole })
       onSaved()
       onClose()
     } catch (e) {
@@ -143,6 +154,22 @@ function EditStaffModal({
             ))}
           </ScrollView>
         </View>
+      )}
+
+      {availableRoles.length > 1 && (
+        <>
+          <AppText variant="caption" color="tertiary" style={{ marginTop: spacing[4], marginBottom: spacing[2] }}>
+            Scoring role
+          </AppText>
+          <View style={[styles.shiftOptions, { borderColor: colors.border as string }]}>
+            {availableRoles.map((r) => (
+              <Pressable key={r} onPress={() => setScoringRole(r)} style={styles.shiftOption}>
+                <AppText variant="body">{SCORING_ROLE_LABELS[r]}</AppText>
+                {effectiveRole === r && <Check size={16} color={colors.accent} strokeWidth={2} />}
+              </Pressable>
+            ))}
+          </View>
+        </>
       )}
 
       <AppText variant="caption" color="tertiary" style={{ marginTop: spacing[4], marginBottom: spacing[2] }}>Shift</AppText>

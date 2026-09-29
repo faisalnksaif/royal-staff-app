@@ -1,5 +1,5 @@
 import api from "./apiClient"
-import type { DailyCheckCategoriesByDepartment, TodayDailyCheckCategory } from "../types"
+import type { DailyCheckCategoriesByDepartment, DailyCheckCategoriesByRubric, TodayDailyCheckCategory } from "../types"
 
 async function getCategoriesByDepartment(): Promise<{ success: boolean; data: DailyCheckCategoriesByDepartment }> {
   const { data } = await api.http.request({
@@ -11,7 +11,17 @@ async function getCategoriesByDepartment(): Promise<{ success: boolean; data: Da
   return data as { success: boolean; data: DailyCheckCategoriesByDepartment }
 }
 
-export const dailyCheckCategoryService = { getCategoriesByDepartment }
+async function getCategoriesByRubric(): Promise<{ success: boolean; data: DailyCheckCategoriesByRubric }> {
+  const { data } = await api.http.request({
+    path: "/daily-check/categories-by-rubric",
+    method: "GET",
+    secure: true,
+    format: "json",
+  })
+  return data as { success: boolean; data: DailyCheckCategoriesByRubric }
+}
+
+export const dailyCheckCategoryService = { getCategoriesByDepartment, getCategoriesByRubric }
 
 function normalizePath(apiBasePath: string): string {
   return apiBasePath.replace(/^\/api/, "")

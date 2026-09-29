@@ -1,6 +1,6 @@
 import api from "./apiClient"
 import { ContentType } from "./generated/Api"
-import type { StaffListResponse, StaffOption, StaffResponse } from "../types"
+import type { ScoringRole, StaffListResponse, StaffOption, StaffResponse } from "../types"
 
 async function getStaff(): Promise<StaffListResponse> {
   const { data } = await api.http.request<StaffListResponse>({
@@ -24,7 +24,7 @@ async function getStaffOptions(): Promise<{ success: boolean; data: StaffOption[
 
 async function updateStaff(
   id: number,
-  updates: { departmentId?: string; shiftId?: string }
+  updates: { departmentId?: string; shiftId?: string; scoringRole?: ScoringRole }
 ): Promise<{ success: boolean; data: Partial<StaffResponse> }> {
   const { data } = await api.http.request<{ success: boolean; data: Partial<StaffResponse> }>({
     path: `/staff/${id}`,
