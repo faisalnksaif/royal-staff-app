@@ -1,4 +1,4 @@
-import { View, StyleSheet } from "react-native"
+import { View, StyleSheet, Pressable } from "react-native"
 import moment from "moment"
 import AppText from "../ui/AppText"
 import { useTheme } from "../../providers/ThemeProvider"
@@ -10,6 +10,7 @@ import type {
   PayslipDeductionDetail,
   PayslipOvertimeDetail,
   PayslipBreakExcessDetail,
+  PayslipEarlyCheckoutDetail,
 } from "../../types"
 
 /**
@@ -20,7 +21,8 @@ import type {
  * Deliberately mirrors the arithmetic in SalaryService.computePayroll:
  *
  *   basicPayEarned = basicPay - attendance deductions
- *   grossPay       = basicPayEarned + overtimePay - breakExcessDeduction + incentives
+ *   grossPay       = basicPayEarned + overtimePay - breakExcessDeduction
+ *                    - earlyCheckoutDeduction + incentives
  *   netPay         = grossPay - penalties - advances
  *
  * Basic and incentives are shown as separate strands because they behave
@@ -28,7 +30,8 @@ import type {
  * already earned in the month. Overtime is its own strand too: only approved
  * minutes are paid, and pending minutes are shown so they aren't missed.
  * Break excess sits right under overtime because it comes out of overtime
- * first (then basic); waived minutes are shown but not charged.
+ * first (then basic); waived minutes are shown but not charged. Early
+ * checkout follows it, charged the same way.
  */
 
 /** "2026-09-02" -> "Wed, 2 Sep"; anything that isn't an ISO date passes through. */
@@ -60,6 +63,9 @@ export interface PayBreakdownProps {
   breakExcessMinutes?: number
   breakExcessDetails?: PayslipBreakExcessDetail[]
   waivedBreakExcessMinutes?: number
+  earlyCheckoutDeduction?: number
+  earlyCheckoutMinutes?: number
+  earlyCheckoutDetails?: PayslipEarlyCheckoutDetail[]
   penaltyAmount: number
   penaltyDetails?: PayslipPenaltyDetail[]
   advanceDeducted: number
@@ -67,6 +73,8 @@ export interface PayBreakdownProps {
   netPay: number
   /** Show every contributing line, not just the totals. */
   expanded?: boolean
+  /** Makes the pending-overtime note a link, e.g. to where it can be approved. */
+  onPendingOvertimePress?: () => void
 }
 
 function Row({
@@ -119,14 +127,20 @@ function Row({
 }
 
 /** A caption line inside the table (pending overtime, waived break). */
-function Note({ children, color }: { children: React.ReactNode; color?: string }) {
+function Note({ children, color, onPress }: { children: React.ReactNode; color?: string; onPress?: () => void }) {
   const { colors } = useTheme()
-  return (
-    <View style={[styles.note, { borderBottomColor: colors.border as string }]}>
-      <AppText variant="caption" color={color ? undefined : "tertiary"} style={color ? { color } : undefined}>
-        {children}
-      </AppText>
-    </View>
+  const text = (
+    <AppText variant="caption" color={color ? undefined : "tertiary"} style={color ? { color } : undefined}>
+      {children}
+    </AppText>
+  )
+  const style = [styles.note, { borderBottomColor: colors.border as string }]
+  return onPress ? (
+    <Pressable onPress={onPress} hitSlop={4} style={style}>
+      {text}
+    </Pressable>
+  ) : (
+    <View style={style}>{text}</View>
   )
 }
 
@@ -146,12 +160,16 @@ export default function PayBreakdown({
   breakExcessMinutes = 0,
   breakExcessDetails = [],
   waivedBreakExcessMinutes = 0,
+  earlyCheckoutDeduction = 0,
+  earlyCheckoutMinutes = 0,
+  earlyCheckoutDetails = [],
   penaltyAmount,
   penaltyDetails = [],
   advanceDeducted,
   grossPay,
   netPay,
   expanded = false,
+  onPendingOvertimePress,
 }: PayBreakdownProps) {
   const { colors } = useTheme()
 
@@ -213,8 +231,9 @@ export default function PayBreakdown({
               />
             ))}
           {pendingOvertimeMinutes > 0 && (
-            <Note color={palette.warning.default}>
+            <Note color={palette.warning.default} onPress={onPendingOvertimePress}>
               {formatMinutes(pendingOvertimeMinutes)} overtime awaiting approval - not paid
+              {onPendingOvertimePress ? "  ·  Review ›" : ""}
             </Note>
           )}
         </>
@@ -242,6 +261,25 @@ export default function PayBreakdown({
               {formatMinutes(waivedBreakExcessMinutes)} excess break waived - not charged
             </Note>
           )}
+        </>
+      )}
+
+      {/* Early checkout - off whatever basic + overtime break excess left */}
+      {earlyCheckoutDeduction > 0 && (
+        <>
+          {overtimePay <= 0 &&
+            pendingOvertimeMinutes <= 0 &&
+            breakExcessDeduction <= 0 &&
+            waivedBreakExcessMinutes <= 0 && <View style={styles.sectionGap} />}
+          <Row
+            label={`Early checkout · ${formatMinutes(earlyCheckoutMinutes)}`}
+            amount={earlyCheckoutDeduction}
+            sign="minus"
+          />
+          {expanded &&
+            earlyCheckoutDetails.map((e) => (
+              <Row key={e.date} label={`${formatDay(e.date)} · ${formatMinutes(e.minutes)} early`} amount={e.amount} indent />
+            ))}
         </>
       )}
 

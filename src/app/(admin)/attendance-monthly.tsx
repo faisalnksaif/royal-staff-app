@@ -1,7 +1,8 @@
 import { useState, useMemo, useCallback } from "react"
 import { View, FlatList, StyleSheet, Pressable, Modal, TextInput, ScrollView } from "react-native"
 import { useLocalSearchParams } from "expo-router"
-import { ChevronLeft, ChevronRight, ChevronDown, Search, X, Users, AlertTriangle, Pencil } from "lucide-react-native"
+import { useQueryClient } from "@tanstack/react-query"
+import { ChevronLeft, ChevronRight, ChevronDown, Search, X, Users, AlertTriangle, Pencil, Clock, LogOut } from "lucide-react-native"
 import moment from "moment"
 import BackButton from "../../components/shared/BackButton"
 import DrawerMenuButton from "../../components/shared/DrawerMenuButton"
@@ -103,6 +104,8 @@ function MonthSummary({ summary }: { summary: MonthlyAttendanceSummary }) {
     flags.push({ key: "otPending", label: `${formatWorkHours(summary.totalPendingOvertimeMinutes / 60)} OT pending`, color: palette.warning.default })
   if (summary.totalBreakExcessMinutes > 0)
     flags.push({ key: "break", label: `${summary.totalBreakExcessMinutes}m over break`, color: palette.warning.default })
+  if (summary.totalEarlyCheckoutMinutes > 0)
+    flags.push({ key: "early", label: `${formatWorkHours(summary.totalEarlyCheckoutMinutes / 60)} early checkout`, color: palette.warning.default })
   if (summary.totalLateMinutes > 0)
     flags.push({ key: "late", label: `${formatWorkHours(summary.totalLateMinutes / 60)} late total`, color: palette.warning.default })
 
@@ -229,6 +232,12 @@ function DayRow({
               }}
             >
               {day.breakExcessMinutes}m over break
+            </AppText>
+          )}
+          {/* Deducted from pay; no waiver - a valid reason is handled by editing the session. */}
+          {day.earlyCheckoutMinutes > 0 && (
+            <AppText variant="caption" style={{ color: palette.warning.default, fontSize: 10 }}>
+              {day.earlyCheckoutMinutes}m early out
             </AppText>
           )}
           <EditedFlag record={record} small />
@@ -396,13 +405,66 @@ function StaffPicker({
   )
 }
 
+// ─── filters ────────────────────────────────────────────────────────────────
+
+type DayFilter = "pendingOvertime" | "missedCheckout"
+
+/**
+ * A previous day someone didn't check out of: either the stale-session job
+ * already force-closed it (hasMissedCheckout), or a session is still open
+ * because the job hasn't run yet. Today is excluded - an open session there
+ * just means they're still in.
+ */
+function isMissedCheckout(day: MonthlyAttendanceDay): boolean {
+  if (day.date >= moment().format("YYYY-MM-DD")) return false
+  return day.hasMissedCheckout || day.sessions.some((s) => !s.checkOut)
+}
+
+/** Toggle chip for the day list; hidden while there's nothing to filter to, unless already active. */
+function FilterChip({
+  label,
+  count,
+  icon: Icon,
+  tone,
+  active,
+  onPress,
+}: {
+  label: string
+  count: number
+  icon: React.ComponentType<any>
+  tone: string
+  active: boolean
+  onPress: () => void
+}) {
+  const { colors } = useTheme()
+  if (!active && count === 0) return null
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[
+        styles.filterChip,
+        active
+          ? { backgroundColor: tone + "22", borderColor: tone }
+          : { backgroundColor: colors.background.secondary, borderColor: colors.border as string },
+      ]}
+    >
+      <Icon size={14} color={active ? tone : colors.text.tertiary} strokeWidth={2} />
+      <AppText variant="caption" style={{ color: active ? tone : colors.text.secondary }}>
+        {label} · {count}
+      </AppText>
+      {active && <X size={12} color={tone} strokeWidth={2.5} />}
+    </Pressable>
+  )
+}
+
 // ─── screen ─────────────────────────────────────────────────────────────────
 
 export default function MonthlyAttendanceScreen() {
   const { colors } = useTheme()
   const { isTablet } = useTablet()
   const { isHR, isAdmin } = useRole()
-  const params = useLocalSearchParams<{ staffId?: string }>()
+  // staffId is Staff.id; userId (Users.user_id) is what salary pages link with.
+  const params = useLocalSearchParams<{ staffId?: string; userId?: string; month?: string; filter?: string }>()
 
   const { currentStaff } = useCurrentStaff()
   const { data: staffData } = useStaff()
@@ -417,18 +479,46 @@ export default function MonthlyAttendanceScreen() {
   const [selectedStaffId, setSelectedStaffId] = useState<number | null>(
     params.staffId != null ? Number(params.staffId) : null,
   )
-  const [month, setMonth] = useState(CURRENT_MONTH)
+  const [month, setMonth] = useState(() =>
+    params.month && moment(params.month, "YYYY-MM", true).isValid() && params.month <= CURRENT_MONTH
+      ? params.month
+      : CURRENT_MONTH,
+  )
   const [editMode, setEditMode] = useState(false)
+  const [dayFilter, setDayFilter] = useState<DayFilter | null>(
+    params.filter === "pendingOvertime" || params.filter === "missedCheckout" ? params.filter : null,
+  )
   const [editTarget, setEditTarget] = useState<MonthlyAttendanceDay | null>(null)
   const [otApprovalTarget, setOtApprovalTarget] = useState<MonthlyAttendanceDay | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
 
   // Default to the first eligible staff member so the page isn't empty on open.
-  const activeStaffId = selectedStaffId ?? eligibleStaff[0]?.id ?? null
+  const linkedStaffId = params.userId != null
+    ? eligibleStaff.find((s) => s.user_id === Number(params.userId))?.id ?? null
+    : null
+  const activeStaffId = selectedStaffId ?? linkedStaffId ?? eligibleStaff[0]?.id ?? null
   const activeStaff = eligibleStaff.find((s) => s.id === activeStaffId) ?? null
 
   const { data, isLoading, isError, refetch, isRefetching } = useMonthlyAttendance(activeStaffId, month)
   const monthly = data?.data
+
+  // Session edits and overtime decisions change what the salary screens show
+  // (missed checkouts, pending overtime), so refresh those too, not just this list.
+  const queryClient = useQueryClient()
+  const handleSaved = useCallback(() => {
+    refetch()
+    queryClient.invalidateQueries({ queryKey: ["salary-missed-checkouts"] })
+    queryClient.invalidateQueries({ queryKey: ["salary-preview"] })
+  }, [refetch, queryClient])
+  // Same test DayRow uses for its approve/reject chip.
+  const pendingOtDays = (monthly?.days ?? []).filter(
+    (d) => d.overtimeApprovalStatus === "pending" && d.pendingOvertimeMinutes > 0,
+  )
+  const missedCheckoutDays = (monthly?.days ?? []).filter(isMissedCheckout)
+  const visibleDays =
+    dayFilter === "pendingOvertime" ? pendingOtDays
+    : dayFilter === "missedCheckout" ? missedCheckoutDays
+    : monthly?.days ?? []
 
   // Reaching this screen at all already requires superAdmin/manager/hr (the
   // (admin) layout redirects anyone else, and the API re-checks), so the only
@@ -535,6 +625,23 @@ export default function MonthlyAttendanceScreen() {
             <ChevronRight size={18} color={colors.text.secondary} strokeWidth={2} />
           </Pressable>
         </View>
+
+        <FilterChip
+          label="Pending overtime"
+          count={pendingOtDays.length}
+          icon={Clock}
+          tone={palette.warning.default}
+          active={dayFilter === "pendingOvertime"}
+          onPress={() => setDayFilter((f) => (f === "pendingOvertime" ? null : "pendingOvertime"))}
+        />
+        <FilterChip
+          label="Missed checkout"
+          count={missedCheckoutDays.length}
+          icon={LogOut}
+          tone={palette.error.default}
+          active={dayFilter === "missedCheckout"}
+          onPress={() => setDayFilter((f) => (f === "missedCheckout" ? null : "missedCheckout"))}
+        />
       </View>
 
       {/* Day list */}
@@ -550,7 +657,7 @@ export default function MonthlyAttendanceScreen() {
         </View>
       ) : (
         <FlatList
-          data={monthly?.days ?? []}
+          data={visibleDays}
           keyExtractor={(day) => day.date}
           renderItem={({ item, index }) => (
             <AnimatedListItem index={index}>
@@ -572,7 +679,13 @@ export default function MonthlyAttendanceScreen() {
           onRefresh={refetch}
           ListEmptyComponent={
             <View style={styles.center}>
-              <AppText color="tertiary">No days to show for this month.</AppText>
+              <AppText color="tertiary">
+                {dayFilter === "pendingOvertime"
+                  ? "No overtime awaiting approval this month."
+                  : dayFilter === "missedCheckout"
+                    ? "No missed checkouts this month."
+                    : "No days to show for this month."}
+              </AppText>
             </View>
           }
         />
@@ -591,7 +704,7 @@ export default function MonthlyAttendanceScreen() {
           record={toAttendanceRecord(editTarget, monthly.staffId, monthly.staffName)}
           date={editTarget.date}
           onClose={() => setEditTarget(null)}
-          onSaved={refetch}
+          onSaved={handleSaved}
         />
       )}
 
@@ -600,7 +713,7 @@ export default function MonthlyAttendanceScreen() {
           record={toAttendanceRecord(otApprovalTarget, monthly.staffId, monthly.staffName)}
           date={otApprovalTarget.date}
           onClose={() => setOtApprovalTarget(null)}
-          onSaved={refetch}
+          onSaved={handleSaved}
         />
       )}
 
@@ -661,6 +774,15 @@ const styles = StyleSheet.create({
     borderRadius: radii.full,
     alignItems: "center",
     justifyContent: "center",
+  },
+  filterChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[1],
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[1] + 2,
+    borderRadius: radii.full,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   monthPill: {
     paddingHorizontal: spacing[4],

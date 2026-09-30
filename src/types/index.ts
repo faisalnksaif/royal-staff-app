@@ -604,6 +604,8 @@ export interface MonthlyAttendanceDay {
   breakExcessMinutes: number
   /** Excused from the payroll deduction by a manager/HR/superAdmin. */
   breakExcessWaived: boolean
+  /** Minutes the last checkout fell before shift end (0 within the 5-min grace) - deducted from pay. */
+  earlyCheckoutMinutes: number
   isOnLeave: boolean
   leaveType: string | null
   isOffDay: boolean
@@ -628,6 +630,7 @@ export interface MonthlyAttendanceSummary {
   totalApprovedOvertimeMinutes: number
   totalPendingOvertimeMinutes: number
   totalBreakExcessMinutes: number
+  totalEarlyCheckoutMinutes: number
   missedCheckoutDays: number
 }
 
@@ -1492,6 +1495,12 @@ export interface PayslipBreakExcessDetail {
   amount: number
 }
 
+export interface PayslipEarlyCheckoutDetail {
+  date: string
+  minutes: number
+  amount: number
+}
+
 export interface PayslipPenaltyDetail {
   reason: string
   amount: number
@@ -1523,6 +1532,10 @@ export interface Payslip {
   /** Comes off overtime first, then basic - never incentives. */
   breakExcessDeduction?: number
   waivedBreakExcessMinutes?: number
+  earlyCheckoutMinutes?: number
+  earlyCheckoutDetails?: PayslipEarlyCheckoutDetail[]
+  /** Comes out of whatever basic + overtime break excess left - never incentives. */
+  earlyCheckoutDeduction?: number
   penaltyAmount: number
   penaltyDetails: PayslipPenaltyDetail[]
   advanceDeducted: number
@@ -1531,8 +1544,21 @@ export interface Payslip {
   /** True when generated before the month ended - covers only up to periodEnd. */
   isPartial: boolean
   periodEnd: string
+  /** 'generated' is a regenerable draft; 'finalized' (approved) and 'paid' lock the month. */
+  status: PayslipStatus
   generatedAt: string
+  approvedAt?: string
+  /** Past days never checked out of, as of generation - approval is refused while any remain. */
+  missedCheckoutDates?: string[]
 }
+
+/** Missed checkouts for a month across staff with an active salary structure (staffId = user_id). */
+export interface MissedCheckoutsResult {
+  totalDays: number
+  staff: { staffId: number; staffName: string; dates: string[] }[]
+}
+
+export type PayslipStatus = "generated" | "finalized" | "paid"
 
 /** Read-only month-to-date projection - never a persisted payroll record. */
 export interface PayrollPreview {
@@ -1555,6 +1581,9 @@ export interface PayrollPreview {
   breakExcessDetails: PayslipBreakExcessDetail[]
   breakExcessDeduction: number
   waivedBreakExcessMinutes: number
+  earlyCheckoutMinutes: number
+  earlyCheckoutDetails: PayslipEarlyCheckoutDetail[]
+  earlyCheckoutDeduction: number
   penaltyAmount: number
   penaltyDetails: PayslipPenaltyDetail[]
   advanceDeducted: number
@@ -1566,7 +1595,10 @@ export interface PayrollPreview {
   netPay: number
   isPartial: boolean
   isPreview: true
+  /** Past days never checked out of - must be fixed before the month's payroll can be approved. */
+  missedCheckoutDates: string[]
   asOf: string
+  /** Payroll for this month is approved - nothing more can change it. */
   payrollAlreadyGenerated: boolean
   projected: {
     basicPayEarned: number

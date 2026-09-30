@@ -1,5 +1,5 @@
 import api from "./apiClient"
-import type { SalaryStructure, SalaryStructureResponse, Payslip, SalaryAdvance, SalaryAdvanceStatus, GenerateAllPayrollResult, PayrollPreview, SalaryIncentive, SalaryPenalty } from "../types"
+import type { SalaryStructure, SalaryStructureResponse, Payslip, SalaryAdvance, SalaryAdvanceStatus, GenerateAllPayrollResult, PayrollPreview, SalaryIncentive, SalaryPenalty, MissedCheckoutsResult } from "../types"
 
 interface ProposeStructurePayload {
   staffId: number
@@ -80,6 +80,26 @@ async function generatePayroll(staffId: number, month: number, year: number): Pr
     path: "/salary/payroll/generate",
     method: "POST",
     body: { staffId, month, year },
+    secure: true,
+    format: "json",
+  })
+  return data as { success: boolean; data: Payslip }
+}
+
+async function getMissedCheckouts(month: number, year: number): Promise<{ success: boolean; data: MissedCheckoutsResult }> {
+  const { data } = await api.http.request({
+    path: `/salary/payroll/missed-checkouts?month=${month}&year=${year}`,
+    method: "GET",
+    secure: true,
+    format: "json",
+  })
+  return data as { success: boolean; data: MissedCheckoutsResult }
+}
+
+async function approvePayroll(payslipId: string): Promise<{ success: boolean; data: Payslip }> {
+  const { data } = await api.http.request({
+    path: `/salary/payroll/${payslipId}/approve`,
+    method: "POST",
     secure: true,
     format: "json",
   })
@@ -342,6 +362,8 @@ export const salaryService = {
   getStructureHistory,
   generatePayroll,
   generateAllPayroll,
+  approvePayroll,
+  getMissedCheckouts,
   previewPayroll,
   getIncentives,
   addIncentive,

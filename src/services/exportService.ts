@@ -162,8 +162,26 @@ async function exportStaffCustomers(
   )
 }
 
+/**
+ * Exports one month's payroll - a summary row per payslip plus a line-items
+ * sheet with the per-day deductions, overtime, incentives and penalties.
+ */
+async function exportPayroll(month: number, year: number): Promise<void> {
+  const qs = new URLSearchParams({ month: String(month), year: String(year) })
+  await downloadXlsx(`/salary/payslips/export?${qs.toString()}`, FALLBACK_FILENAME)
+}
+
+/** One staff member's payslip as a single-page A4 PDF, for printing. */
+async function exportPayslipPdf(staffId: number, month: number, year: number): Promise<void> {
+  const qs = new URLSearchParams({ staffId: String(staffId), month: String(month), year: String(year) })
+  // downloadXlsx only saves whatever blob comes back; the server names it .pdf.
+  await downloadXlsx(`/salary/payslips/pdf?${qs.toString()}`, "payslip.pdf")
+}
+
 export const exportService = {
   exportFollowups,
   exportCustomers,
   exportStaffCustomers,
+  exportPayroll,
+  exportPayslipPdf,
 }

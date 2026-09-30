@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react"
 import { View, FlatList, ActivityIndicator, StyleSheet, Pressable, TextInput, ScrollView } from "react-native"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useRouter } from "expo-router"
-import { Check, X, Plus, RefreshCw, Wallet, Clock, Banknote, History, TrendingUp, MinusCircle, Trash2, CalendarClock, ChevronLeft, ChevronRight, ChevronDown, Search, Users } from "lucide-react-native"
+import { Check, X, Plus, RefreshCw, Wallet, Clock, Banknote, History, TrendingUp, MinusCircle, Trash2, CalendarClock, ChevronLeft, ChevronRight, ChevronDown, Search, Users, LogOut, Download } from "lucide-react-native"
 import Toast from "react-native-toast-message"
 import moment from "moment"
 import BackButton from "../../components/shared/BackButton"
@@ -23,8 +23,9 @@ import { useRole } from "../../hooks/useRole"
 import { spacing, colors as palette, radii } from "../../constants/theme"
 import { salaryService } from "../../services/salaryService"
 import { staffService } from "../../services/staffService"
+import { exportService } from "../../services/exportService"
 import useAuthStore from "../../stores/useAuthStore"
-import type { SalaryStructure, SalaryAdvance, SalaryAdvanceStatus, SalaryStructureStatus, GenerateAllPayrollResult, Payslip, SalaryIncentive, SalaryPenalty, PayrollPreview } from "../../types"
+import type { SalaryStructure, SalaryAdvance, SalaryAdvanceStatus, SalaryStructureStatus, GenerateAllPayrollResult, Payslip, SalaryIncentive, SalaryPenalty, PayrollPreview, MissedCheckoutsResult } from "../../types"
 
 function salaryErrorMessage(e: unknown, fallback: string): string {
   return (e as Error)?.message ?? fallback
@@ -754,12 +755,19 @@ function GenerateAllPayrollModal({
   initialPeriod?: moment.Moment
 }) {
   const { colors } = useTheme()
+  const openMonthlyAttendance = useOpenMonthlyAttendance()
   const [month, setMonth] = useState(String(moment().month() + 1))
   const [year, setYear] = useState(String(moment().year()))
   const [error, setError] = useState("")
+  const [checking, setChecking] = useState(false)
+  // Set when the month has missed checkouts: the modal switches to asking
+  // for them to be fixed first, with "generate anyway" as the way past.
+  const [missed, setMissed] = useState<MissedCheckoutsResult | null>(null)
 
   useEffect(() => {
-    if (!visible || !initialPeriod) return
+    if (!visible) return
+    setMissed(null)
+    if (!initialPeriod) return
     setMonth(String(initialPeriod.month() + 1))
     setYear(String(initialPeriod.year()))
   }, [visible])
@@ -771,7 +779,7 @@ function GenerateAllPayrollModal({
   })
 
   function reset() {
-    setMonth(String(moment().month() + 1)); setYear(String(moment().year())); setError("")
+    setMonth(String(moment().month() + 1)); setYear(String(moment().year())); setError(""); setMissed(null)
   }
 
   function validate() {
@@ -781,19 +789,73 @@ function GenerateAllPayrollModal({
     return null
   }
 
-  function handleSubmit() {
+  async function handleSubmit() {
     const err = validate()
     if (err) { setError(err); return }
     setError("")
+    setChecking(true)
+    try {
+      const res = await salaryService.getMissedCheckouts(Number(month), Number(year))
+      if (res.data.totalDays > 0) { setMissed(res.data); return }
+    } catch (e) {
+      setError(salaryErrorMessage(e, "Couldn't check for missed checkouts"))
+      return
+    } finally {
+      setChecking(false)
+    }
     mutation.mutate()
+  }
+
+  function fix(staffId: number) {
+    openMonthlyAttendance(staffId, Number(month), Number(year), "missedCheckout")
+    onClose()
+    reset()
   }
 
   if (!visible) return null
 
+  if (missed) {
+    const period = moment({ year: Number(year), month: Number(month) - 1 }).format("MMMM YYYY")
+    return (
+      <Popup title="Fix missed checkouts first" onClose={onClose}>
+        <AppText variant="body" color="secondary" style={{ marginBottom: spacing[3] }}>
+          {missed.totalDays} day{missed.totalDays === 1 ? "" : "s"} in {period} {missed.totalDays === 1 ? "has" : "have"} no checkout, so those hours aren't counted. Fix them before generating - payroll for these staff can't be approved until you do.
+        </AppText>
+        <View style={{ marginBottom: spacing[3] }}>
+          {missed.staff.map((m) => (
+            <Pressable
+              key={m.staffId}
+              onPress={() => fix(m.staffId)}
+              style={[styles.payrollFailRow, { borderBottomColor: colors.border }]}
+            >
+              <AppText variant="bodySmall">{toTitleCase(m.staffName)}</AppText>
+              <AppText variant="caption" style={{ flex: 1, textAlign: "right", color: palette.error.default }} numberOfLines={1}>
+                {formatDates(m.dates)}  Fix ›
+              </AppText>
+            </Pressable>
+          ))}
+        </View>
+        {error ? (
+          <AppText variant="caption" style={{ color: palette.error.default, marginBottom: spacing[2] }}>
+            {error}
+          </AppText>
+        ) : null}
+        <View style={styles.modalActions}>
+          <AppButton label="Back" variant="ghost" onPress={() => setMissed(null)} />
+          <AppButton
+            label={mutation.isPending ? "Generating…" : "Generate drafts anyway"}
+            onPress={() => mutation.mutate()}
+            disabled={mutation.isPending}
+          />
+        </View>
+      </Popup>
+    )
+  }
+
   return (
     <Popup title="Generate Payroll for All Staff" onClose={onClose}>
       <AppText variant="body" color="secondary" style={{ marginBottom: spacing[4] }}>
-        Runs payroll for every staff member with an active salary structure for the given month. Staff without an active structure, or with payroll already generated, are skipped individually.
+        Generates draft payroll for every staff member with an active salary structure for the given month. Existing drafts are regenerated with the latest figures; staff whose payroll is already approved, or without an active structure, are skipped.
       </AppText>
 
       <View style={styles.monthYearRow}>
@@ -828,9 +890,9 @@ function GenerateAllPayrollModal({
       ) : null}
 
       <AppButton
-        label={mutation.isPending ? "Generating…" : "Generate for All Staff"}
+        label={checking ? "Checking attendance…" : mutation.isPending ? "Generating…" : "Generate for All Staff"}
         onPress={handleSubmit}
-        disabled={mutation.isPending}
+        disabled={checking || mutation.isPending}
         style={{ marginTop: spacing[4] }}
       />
     </Popup>
@@ -1298,7 +1360,56 @@ function PreviewStat({ icon: Icon, label, value, tone }: {
   )
 }
 
+/**
+ * Opens the monthly attendance page on the given staff member and month,
+ * filtered to the days that need attention (overtime awaiting approval, or
+ * missed checkouts). Salary keys staff by Users.user_id, so that's what's
+ * passed - the attendance page maps it to its own Staff.id.
+ */
+function useOpenMonthlyAttendance() {
+  const router = useRouter()
+  return (userId: number, month: number, year: number, filter: "pendingOvertime" | "missedCheckout") =>
+    router.push({
+      pathname: "/(admin)/attendance-monthly",
+      params: {
+        userId: String(userId),
+        month: moment({ year, month: month - 1 }).format("YYYY-MM"),
+        filter,
+      },
+    })
+}
+
+/** "2026-09-29" list -> "29 Sep, 30 Sep". */
+function formatDates(dates: string[]): string {
+  return dates.map((d) => moment(d, "YYYY-MM-DD").format("D MMM")).join(", ")
+}
+
+/**
+ * Missed checkouts block approval: those days' hours are unknown, so overtime
+ * and early-checkout figures for them can't be trusted. Tapping jumps to the
+ * monthly attendance page filtered to them, where the sessions are edited.
+ */
+function MissedCheckoutNotice({ dates, onFix }: { dates: string[]; onFix?: () => void }) {
+  if (dates.length === 0) return null
+  const content = (
+    <>
+      <LogOut size={14} color={palette.error.default} strokeWidth={1.75} />
+      <AppText variant="caption" style={{ color: palette.error.default, flex: 1 }}>
+        Missed checkout on {formatDates(dates)} - fix {dates.length > 1 ? "these days" : "this day"} before approving payroll.
+        {onFix ? "  Fix ›" : ""}
+      </AppText>
+    </>
+  )
+  const style = [styles.previewNotice, { backgroundColor: palette.error.default + "18" }]
+  return onFix ? (
+    <Pressable onPress={onFix} style={style}>{content}</Pressable>
+  ) : (
+    <View style={style}>{content}</View>
+  )
+}
+
 function PreviewResult({ preview }: { preview: PayrollPreview }) {
+  const openMonthlyAttendance = useOpenMonthlyAttendance()
   const { colors } = useTheme()
   const monthStart = moment(`${preview.year}-${preview.month}-01`, "YYYY-M-DD")
   const asOf = moment(preview.asOf, "YYYY-MM-DD")
@@ -1349,10 +1460,15 @@ function PreviewResult({ preview }: { preview: PayrollPreview }) {
         <View style={[styles.previewNotice, { backgroundColor: palette.warning.default + "18" }]}>
           <Clock size={14} color={palette.warning.default} strokeWidth={1.75} />
           <AppText variant="caption" style={{ color: palette.warning.default, flex: 1 }}>
-            Payroll for this month has already been generated - this preview is informational only.
+            Payroll for this month has already been approved - this preview is informational only.
           </AppText>
         </View>
       )}
+
+      <MissedCheckoutNotice
+        dates={preview.missedCheckoutDates ?? []}
+        onFix={() => openMonthlyAttendance(preview.staffId, preview.month, preview.year, "missedCheckout")}
+      />
 
       <View style={styles.previewStats}>
         <PreviewStat icon={Banknote} label="Per day" value={`₹${formatAmount(preview.perDayPay)}`} />
@@ -1394,12 +1510,16 @@ function PreviewResult({ preview }: { preview: PayrollPreview }) {
           breakExcessMinutes={preview.breakExcessMinutes}
           breakExcessDetails={preview.breakExcessDetails}
           waivedBreakExcessMinutes={preview.waivedBreakExcessMinutes}
+          earlyCheckoutDeduction={preview.earlyCheckoutDeduction}
+          earlyCheckoutMinutes={preview.earlyCheckoutMinutes}
+          earlyCheckoutDetails={preview.earlyCheckoutDetails}
           penaltyAmount={preview.penaltyAmount}
           penaltyDetails={preview.penaltyDetails}
           advanceDeducted={preview.advanceDeducted}
           grossPay={preview.grossPay}
           netPay={preview.netPay}
           expanded
+          onPendingOvertimePress={() => openMonthlyAttendance(preview.staffId, preview.month, preview.year, "pendingOvertime")}
         />
       </View>
     </View>
@@ -1530,11 +1650,26 @@ function PayrollPreviewTab() {
 // one payslip for its full breakdown. Staff list is a side panel on tablet and
 // sits under the month overview on phone.
 
+function isApproved(p: Payslip): boolean {
+  return p.status === "finalized" || p.status === "paid"
+}
+
 function sumBy(items: Payslip[], pick: (p: Payslip) => number | undefined): number {
   return items.reduce((acc, p) => acc + (pick(p) ?? 0), 0)
 }
 
-function PayslipListRow({ item, selected, onPress }: { item: Payslip; selected: boolean; onPress: () => void }) {
+function PayslipListRow({
+  item,
+  selected,
+  missedDates = [],
+  onPress,
+}: {
+  item: Payslip
+  selected: boolean
+  /** Current missed checkouts for this staff member's month - blocks approval. */
+  missedDates?: string[]
+  onPress: () => void
+}) {
   const { colors } = useTheme()
   const name = toTitleCase(item.staffName ?? `Staff #${item.staffId}`)
   return (
@@ -1550,11 +1685,23 @@ function PayslipListRow({ item, selected, onPress }: { item: Payslip; selected: 
         <AppText
           variant="caption"
           numberOfLines={1}
-          style={{ color: item.isPartial ? palette.warning.default : (colors.text.tertiary as string) }}
+          style={{
+            color: isApproved(item)
+              ? palette.success.default
+              : missedDates.length > 0
+                ? palette.error.default
+                : item.isPartial
+                ? palette.warning.default
+                : (colors.text.tertiary as string),
+          }}
         >
-          {item.isPartial
-            ? `Partial · up to ${moment(item.periodEnd, "YYYY-MM-DD").format("D MMM")}`
-            : `Generated ${moment(item.generatedAt).format("D MMM")}`}
+          {isApproved(item)
+            ? `Approved${item.approvedAt ? ` ${moment(item.approvedAt).format("D MMM")}` : ""}`
+            : missedDates.length > 0
+              ? `Draft · ${missedDates.length} missed checkout${missedDates.length > 1 ? "s" : ""}`
+              : item.isPartial
+              ? `Draft · up to ${moment(item.periodEnd, "YYYY-MM-DD").format("D MMM")}`
+              : `Draft · generated ${moment(item.generatedAt).format("D MMM")}`}
         </AppText>
       </View>
       <AppText variant="bodyMedium" style={[styles.tabularAmount, { color: selected ? colors.accent : colors.text.primary }]}>
@@ -1567,14 +1714,17 @@ function PayslipListRow({ item, selected, onPress }: { item: Payslip; selected: 
 function PayrollMonthOverview({
   period,
   payslips,
+  missedCheckouts,
   onGenerate,
 }: {
   period: moment.Moment
   payslips: Payslip[]
+  missedCheckouts?: MissedCheckoutsResult
   onGenerate: () => void
 }) {
   const { colors } = useTheme()
   const partialCount = payslips.filter((p) => p.isPartial).length
+  const draftCount = payslips.filter((p) => !isApproved(p)).length
 
   if (payslips.length === 0) {
     return (
@@ -1595,7 +1745,7 @@ function PayrollMonthOverview({
 
   const totalNet = sumBy(payslips, (p) => p.netPay)
   const totalGross = sumBy(payslips, (p) => p.grossPay)
-  const totalDeductions = sumBy(payslips, (p) => (p.deductionAmount ?? 0) + (p.breakExcessDeduction ?? 0) + (p.penaltyAmount ?? 0))
+  const totalDeductions = sumBy(payslips, (p) => (p.deductionAmount ?? 0) + (p.breakExcessDeduction ?? 0) + (p.earlyCheckoutDeduction ?? 0) + (p.penaltyAmount ?? 0))
   const totalOvertime = sumBy(payslips, (p) => p.overtimePay)
   const totalAdvances = sumBy(payslips, (p) => p.advanceDeducted)
 
@@ -1607,10 +1757,19 @@ function PayrollMonthOverview({
           <AppText variant="heading1" style={{ color: colors.accent }}>₹{formatAmount(totalNet)}</AppText>
           <AppText variant="caption" color="tertiary">
             {payslips.length} payslip{payslips.length === 1 ? "" : "s"}
-            {partialCount > 0 ? ` · ${partialCount} partial` : ""}
+            {draftCount > 0 ? ` · ${draftCount} awaiting approval` : " · all approved"}
           </AppText>
         </View>
       </View>
+
+      {(missedCheckouts?.totalDays ?? 0) > 0 && (
+        <View style={[styles.previewNotice, { backgroundColor: palette.error.default + "18" }]}>
+          <LogOut size={14} color={palette.error.default} strokeWidth={1.75} />
+          <AppText variant="caption" style={{ color: palette.error.default, flex: 1 }}>
+            {missedCheckouts!.totalDays} missed checkout{missedCheckouts!.totalDays === 1 ? "" : "s"} across {missedCheckouts!.staff.length} staff - their payroll can't be approved until fixed. Open a payslip to fix it.
+          </AppText>
+        </View>
+      )}
 
       {partialCount > 0 && (
         <View style={[styles.previewNotice, { backgroundColor: palette.warning.default + "18" }]}>
@@ -1641,18 +1800,73 @@ function PayrollMonthOverview({
   )
 }
 
-function PayslipDetail({ item, onBack }: { item: Payslip; onBack: () => void }) {
+function PayslipDetail({ item, missedDates = [], onBack }: { item: Payslip; missedDates?: string[]; onBack: () => void }) {
   const { colors } = useTheme()
+  const queryClient = useQueryClient()
+  const openMonthlyAttendance = useOpenMonthlyAttendance()
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [actionError, setActionError] = useState("")
+  const [downloading, setDownloading] = useState(false)
   const monthLabel = moment(`${item.year}-${item.month}-01`, "YYYY-M-DD").format("MMMM YYYY")
   const overtimeHours = (item.overtimeMinutes ?? 0) / 60
   const absenceDays = item.deductionDetails?.length ?? 0
+  const approved = isApproved(item)
+  const staffName = toTitleCase(item.staffName ?? `Staff #${item.staffId}`)
+
+  async function handleDownload() {
+    setDownloading(true)
+    try {
+      await exportService.exportPayslipPdf(item.staffId, item.month, item.year)
+    } catch (e) {
+      Toast.show({ type: "error", text1: salaryErrorMessage(e, "Failed to download payslip") })
+    } finally {
+      setDownloading(false)
+    }
+  }
+
+  // Regeneration updates the same record in place, so the selection survives the refetch.
+  const regenerateMutation = useMutation({
+    mutationFn: () => salaryService.generatePayroll(item.staffId, item.month, item.year),
+    onSuccess: () => {
+      setActionError("")
+      queryClient.invalidateQueries({ queryKey: ["salary-payslips-all"] })
+      Toast.show({ type: "success", text1: `Payroll regenerated for ${staffName}` })
+    },
+    onError: (e) => setActionError(salaryErrorMessage(e, "Failed to regenerate payroll")),
+  })
+
+  const approveMutation = useMutation({
+    mutationFn: () => salaryService.approvePayroll(item.id),
+    onSuccess: () => {
+      setConfirmOpen(false)
+      setActionError("")
+      queryClient.invalidateQueries({ queryKey: ["salary-payslips-all"] })
+      Toast.show({ type: "success", text1: `Payroll approved for ${staffName}` })
+    },
+    onError: (e) => {
+      setConfirmOpen(false)
+      setActionError(salaryErrorMessage(e, "Failed to approve payroll"))
+    },
+  })
 
   return (
     <View style={{ gap: spacing[4] }}>
-      <Pressable onPress={onBack} hitSlop={8} style={[styles.metaItem, { alignSelf: "flex-start" }]}>
-        <ChevronLeft size={16} color={colors.accent} strokeWidth={2} />
-        <AppText variant="bodyMedium" style={{ color: colors.accent }}>{monthLabel} overview</AppText>
-      </Pressable>
+      <View style={[styles.metaItem, { justifyContent: "space-between" }]}>
+        <Pressable onPress={onBack} hitSlop={8} style={styles.metaItem}>
+          <ChevronLeft size={16} color={colors.accent} strokeWidth={2} />
+          <AppText variant="bodyMedium" style={{ color: colors.accent }}>{monthLabel} overview</AppText>
+        </Pressable>
+        <Pressable
+          onPress={handleDownload}
+          disabled={downloading}
+          style={[styles.addBtn, { borderWidth: 1, borderColor: colors.border, marginLeft: 0 }]}
+        >
+          {downloading
+            ? <ActivityIndicator size="small" color={colors.accent} />
+            : <Download size={16} color={colors.text.secondary} strokeWidth={2} />}
+          <AppText variant="caption" color="secondary">Payslip PDF</AppText>
+        </Pressable>
+      </View>
 
       <View style={[styles.previewHero, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <View style={{ gap: spacing[1] }}>
@@ -1666,13 +1880,62 @@ function PayslipDetail({ item, onBack }: { item: Payslip; onBack: () => void }) 
         </View>
       </View>
 
-      {item.isPartial && (
-        <View style={[styles.previewNotice, { backgroundColor: palette.warning.default + "18" }]}>
-          <Clock size={14} color={palette.warning.default} strokeWidth={1.75} />
-          <AppText variant="caption" style={{ color: palette.warning.default, flex: 1 }}>
-            Partial payslip - covers only up to {moment(item.periodEnd, "YYYY-MM-DD").format("D MMM")}.
+      {approved ? (
+        <View style={[styles.previewNotice, { backgroundColor: palette.success.default + "18" }]}>
+          <Check size={14} color={palette.success.default} strokeWidth={2} />
+          <AppText variant="caption" style={{ color: palette.success.default, flex: 1 }}>
+            Approved{item.approvedAt ? ` ${moment(item.approvedAt).format("D MMM YYYY, h:mm A")}` : ""} - this month is locked for {staffName}.
           </AppText>
         </View>
+      ) : (
+        <View style={{ gap: spacing[2] }}>
+          <MissedCheckoutNotice
+            dates={missedDates}
+            onFix={() => openMonthlyAttendance(item.staffId, item.month, item.year, "missedCheckout")}
+          />
+          <View style={[styles.previewNotice, { backgroundColor: palette.warning.default + "18" }]}>
+            <Clock size={14} color={palette.warning.default} strokeWidth={1.75} />
+            <AppText variant="caption" style={{ color: palette.warning.default, flex: 1 }}>
+              {item.isPartial
+                ? `Draft - covers only up to ${moment(item.periodEnd, "YYYY-MM-DD").format("D MMM")}. Regenerate after the month ends to approve it.`
+                : "Draft - review the breakdown, then approve to lock this month. Regenerate first if anything changed."}
+            </AppText>
+          </View>
+          <View style={styles.modalActions}>
+            <AppButton
+              label={regenerateMutation.isPending ? "Regenerating…" : "Regenerate"}
+              variant="ghost"
+              onPress={() => regenerateMutation.mutate()}
+              disabled={regenerateMutation.isPending || approveMutation.isPending}
+            />
+            {!item.isPartial && missedDates.length === 0 && (
+              <AppButton
+                label="Approve"
+                onPress={() => setConfirmOpen(true)}
+                disabled={regenerateMutation.isPending || approveMutation.isPending}
+              />
+            )}
+          </View>
+          {actionError ? (
+            <AppText variant="caption" style={{ color: palette.error.default }}>{actionError}</AppText>
+          ) : null}
+        </View>
+      )}
+
+      {confirmOpen && (
+        <Popup title="Approve payroll" onClose={() => setConfirmOpen(false)}>
+          <AppText variant="body" color="secondary" style={{ marginBottom: spacing[4] }}>
+            Approve ₹{formatAmount(item.netPay)} for {staffName} for {monthLabel}? After approval this payroll can't be regenerated, and no incentives, penalties, advances or attendance changes can be made for the month.
+          </AppText>
+          <View style={styles.modalActions}>
+            <AppButton label="Cancel" variant="ghost" onPress={() => setConfirmOpen(false)} />
+            <AppButton
+              label={approveMutation.isPending ? "Approving…" : "Approve"}
+              onPress={() => approveMutation.mutate()}
+              disabled={approveMutation.isPending}
+            />
+          </View>
+        </Popup>
       )}
 
       <View style={styles.previewStats}>
@@ -1715,12 +1978,17 @@ function PayslipDetail({ item, onBack }: { item: Payslip; onBack: () => void }) 
           breakExcessMinutes={item.breakExcessMinutes}
           breakExcessDetails={item.breakExcessDetails}
           waivedBreakExcessMinutes={item.waivedBreakExcessMinutes}
+          earlyCheckoutDeduction={item.earlyCheckoutDeduction}
+          earlyCheckoutMinutes={item.earlyCheckoutMinutes}
+          earlyCheckoutDetails={item.earlyCheckoutDetails}
           penaltyAmount={item.penaltyAmount ?? 0}
           penaltyDetails={item.penaltyDetails}
           advanceDeducted={item.advanceDeducted ?? 0}
           grossPay={item.grossPay ?? item.basicPay + item.incentives}
           netPay={item.netPay}
           expanded
+          // Pending overtime can't be approved once payroll is approved, so there's nothing to go do.
+          onPendingOvertimePress={approved ? undefined : () => openMonthlyAttendance(item.staffId, item.month, item.year, "pendingOvertime")}
         />
       </View>
     </View>
@@ -1794,6 +2062,7 @@ function PayrollTab() {
   const [q, setQ] = useState("")
   const [generateOpen, setGenerateOpen] = useState(false)
   const [lastResult, setLastResult] = useState<GenerateAllPayrollResult | null>(null)
+  const [downloading, setDownloading] = useState(false)
   const scrollRef = useRef<ScrollView>(null)
 
   const month = period.month() + 1
@@ -1817,9 +2086,28 @@ function PayrollTab() {
     : payslips
   const selected = payslips.find((p) => p.id === selectedId) ?? null
 
+  // Live, not the snapshot on each payslip - a fixed day should clear its
+  // warning without regenerating first.
+  const missedQuery = useQuery({
+    queryKey: ["salary-missed-checkouts", month, year],
+    queryFn: () => salaryService.getMissedCheckouts(month, year),
+  })
+  const missedByStaff = new Map((missedQuery.data?.data.staff ?? []).map((m) => [m.staffId, m.dates]))
+
   function changePeriod(next: moment.Moment) {
     setPeriod(next)
     setSelectedId(null)
+  }
+
+  async function handleDownload() {
+    setDownloading(true)
+    try {
+      await exportService.exportPayroll(month, year)
+    } catch (e) {
+      Toast.show({ type: "error", text1: salaryErrorMessage(e, "Failed to download payroll") })
+    } finally {
+      setDownloading(false)
+    }
   }
 
   function handleSuccess(result: GenerateAllPayrollResult) {
@@ -1849,7 +2137,7 @@ function PayrollTab() {
       {isTablet ? (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: spacing[4] }}>
           {filtered.map((p) => (
-            <PayslipListRow key={p.id} item={p} selected={p.id === selectedId} onPress={() => setSelectedId(p.id)} />
+            <PayslipListRow key={p.id} item={p} selected={p.id === selectedId} missedDates={missedByStaff.get(p.staffId)} onPress={() => setSelectedId(p.id)} />
           ))}
           {payslipsQuery.isLoading && <ActivityIndicator color={colors.accent} style={{ marginVertical: spacing[6] }} />}
           {!payslipsQuery.isLoading && filtered.length === 0 && (
@@ -1860,7 +2148,7 @@ function PayrollTab() {
         </ScrollView>
       ) : (
         filtered.map((p) => (
-          <PayslipListRow key={p.id} item={p} selected={false} onPress={() => setSelectedId(p.id)} />
+          <PayslipListRow key={p.id} item={p} selected={false} missedDates={missedByStaff.get(p.staffId)} onPress={() => setSelectedId(p.id)} />
         ))
       )}
     </View>
@@ -1873,11 +2161,23 @@ function PayrollTab() {
         <AppText variant="caption" color="tertiary">Generated payslips by month</AppText>
       </View>
       <MonthStepper value={period} onChange={changePeriod} />
-      <Pressable onPress={() => payslipsQuery.refetch()} hitSlop={8} style={{ padding: spacing[2] }}>
+      <Pressable onPress={() => { payslipsQuery.refetch(); missedQuery.refetch() }} hitSlop={8} style={{ padding: spacing[2] }}>
         {payslipsQuery.isRefetching
           ? <ActivityIndicator size="small" color={colors.accent} />
           : <RefreshCw size={18} color={colors.text.tertiary} strokeWidth={1.75} />}
       </Pressable>
+      {payslips.length > 0 && (
+        <Pressable
+          onPress={handleDownload}
+          disabled={downloading}
+          style={[styles.addBtn, { borderWidth: 1, borderColor: colors.border, marginLeft: 0 }]}
+        >
+          {downloading
+            ? <ActivityIndicator size="small" color={colors.accent} />
+            : <Download size={16} color={colors.text.secondary} strokeWidth={2} />}
+          <AppText variant="caption" color="secondary">Download</AppText>
+        </Pressable>
+      )}
       <Pressable onPress={() => setGenerateOpen(true)} style={[styles.addBtn, { backgroundColor: colors.accent, marginLeft: 0 }]}>
         <Wallet size={16} color="#fff" strokeWidth={2.5} />
         <AppText variant="caption" style={{ color: "#fff" }}>Generate</AppText>
@@ -1886,7 +2186,7 @@ function PayrollTab() {
   )
 
   const body = selected ? (
-    <PayslipDetail item={selected} onBack={() => setSelectedId(null)} />
+    <PayslipDetail item={selected} missedDates={missedByStaff.get(selected.staffId)} onBack={() => setSelectedId(null)} />
   ) : payslipsQuery.isLoading ? (
     <ActivityIndicator size="large" color={colors.accent} style={styles.center} />
   ) : payslipsQuery.isError ? (
@@ -1897,7 +2197,7 @@ function PayrollTab() {
   ) : (
     <View style={{ gap: spacing[4] }}>
       {lastResult && <GenerateResultCard result={lastResult} onDismiss={() => setLastResult(null)} />}
-      <PayrollMonthOverview period={period} payslips={payslips} onGenerate={() => setGenerateOpen(true)} />
+      <PayrollMonthOverview period={period} payslips={payslips} missedCheckouts={missedQuery.data?.data} onGenerate={() => setGenerateOpen(true)} />
       {!isTablet && payslips.length > 0 && (
         <View>
           <AppText variant="bodyMedium" style={{ marginBottom: spacing[2] }}>Payslips</AppText>
@@ -1954,10 +2254,7 @@ export default function SalaryScreen() {
     { label: "Penalties", value: "penalties", icon: MinusCircle },
     { label: "Advances", value: "advances", icon: Clock },
     { label: "Payroll", value: "payroll", icon: History },
-    // "Up to today" is a superAdmin-only read of in-progress pay.
-    ...(isSuperAdmin
-      ? [{ label: "Up to Today", value: "preview" as SalaryView, icon: CalendarClock }]
-      : []),
+    { label: "Up to Today", value: "preview", icon: CalendarClock },
   ]
 
   return (
@@ -1996,7 +2293,7 @@ export default function SalaryScreen() {
       {view === "penalties" && <PenaltiesTab canImpose={isSuperAdmin} />}
       {view === "advances" && <AdvancesTab />}
       {view === "payroll" && <PayrollTab />}
-      {view === "preview" && isSuperAdmin && <PayrollPreviewTab />}
+      {view === "preview" && <PayrollPreviewTab />}
     </View>
   )
 }
