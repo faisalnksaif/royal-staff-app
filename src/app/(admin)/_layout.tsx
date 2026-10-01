@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react"
 import { View, Pressable, ScrollView, StyleSheet, Platform, StatusBar, Modal, Animated, TouchableWithoutFeedback } from "react-native"
 import { Stack, useRouter, usePathname } from "expo-router"
-import { MessageCircleMore, CalendarCheck, CalendarClock, CalendarOff, CalendarRange, ClipboardCheck, Trophy, Award, Users, Settings, Settings2, LogOut, UsersRound, Bell, ChevronLeft, ChevronRight, IdCard, Radar, ListChecks, BriefcaseBusiness, MessageSquareQuote, Presentation, ThumbsUp, Star, Wallet } from "lucide-react-native"
+import { MessageCircleMore, CalendarCheck, CalendarClock, CalendarOff, CalendarRange, ClipboardCheck, Trophy, Award, Users, Settings, Settings2, LogOut, UsersRound, Bell, ChevronLeft, ChevronRight, IdCard, Radar, ListChecks, BriefcaseBusiness, MessageSquareQuote, Presentation, ThumbsUp, Star, Wallet, HandCoins } from "lucide-react-native"
 import { AdminDrawerContext } from "../../contexts/adminDrawer"
 import { useQuery } from "@tanstack/react-query"
 import AppText from "../../components/ui/AppText"
@@ -28,6 +28,7 @@ type NavItem = {
 const NAV_ITEMS: NavItem[] = [
   { label: "Follow Up Dashboard", href: "/(admin)",                   icon: MessageCircleMore, matchExact: true,  roles: ["superAdmin", "manager"], section: "overview" },
   { label: "Customers",           href: "/(admin)/customers-with-debt",     icon: UsersRound,        matchExact: false, roles: ["superAdmin", "manager"], section: "overview" },
+  { label: "Sales & Collection",  href: "/(admin)/sales-collection",  icon: HandCoins,         matchExact: false, roles: ["superAdmin", "manager"], section: "overview" },
 
   { label: "Attendance",          href: "/(admin)/attendance",        icon: CalendarCheck,     matchExact: false, section: "team" },
   { label: "Monthly Attendance",  href: "/(admin)/attendance-monthly", icon: CalendarRange,    matchExact: false, section: "team" },

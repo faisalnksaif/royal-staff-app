@@ -1789,3 +1789,81 @@ export interface WorkSummary {
   onTimeRate: number
   completionRate: number
 }
+
+// ─── Sales Collection ────────────────────────────────────────────────────────
+// Per sales executive: a month's bills and what was collected towards them
+// within the window (backend BillCollectionAllocator decides which bill each
+// payment paid). Manager/superAdmin only.
+
+export interface SalesCollectionExecutive {
+  /** `staff:<id>`, `name:<rowbest name>` or `unscraped` */
+  key: string
+  name: string
+  staffId: number | null
+  /** false for Super Admin, unmatched names and unscraped bills */
+  isStaff: boolean
+}
+
+export interface SalesCollectionStaffRow extends SalesCollectionExecutive {
+  bills: number
+  customers: number
+  sales: number
+  collected: number
+  sharedCollected: number
+  sharedReceipts: number
+  /** collected x incentiveRate; 0 when not a staff member */
+  incentive: number
+}
+
+export interface SalesCollectionSummary {
+  month: string
+  windowDays: number
+  incentiveRate: number
+  windowClosesOn: string
+  windowOpen: boolean
+  totals: { bills: number; customers: number; sales: number; collected: number; incentive: number }
+  staff: SalesCollectionStaffRow[]
+}
+
+export interface SalesCollectionReceiptShare {
+  executiveKey: string
+  executiveName: string
+  billVoucherId: number
+  billNumber: string | null
+  billDate: string
+  amount: number
+}
+
+export interface SalesCollectionBillReceipt {
+  voucherId: number
+  voucherNumber: string | null
+  date: string
+  receiptAmount: number
+  allocated: number
+  shares: SalesCollectionReceiptShare[]
+  isShared: boolean
+}
+
+export interface SalesCollectionBill {
+  voucherId: number
+  voucherNumber: string | null
+  date: string
+  ledgerId: number
+  customerName: string
+  amount: number
+  collected: number
+  pending: number
+  windowEndsOn: string
+  windowOpen: boolean
+  receipts: SalesCollectionBillReceipt[]
+}
+
+export interface SalesCollectionDetail {
+  month: string
+  windowDays: number
+  incentiveRate: number
+  windowClosesOn: string
+  windowOpen: boolean
+  executive: SalesCollectionStaffRow
+  bills: SalesCollectionBill[]
+}
