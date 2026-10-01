@@ -5,6 +5,7 @@ import type { AppError } from "../types"
 
 let authToken: string | null = null
 let unauthorizedHandler: (() => void) | null = null
+let tokenRefreshedHandler: ((token: string) => void) | null = null
 let handlingUnauthorized = false
 
 export function setAuthToken(token: string | null): void {
@@ -13,6 +14,10 @@ export function setAuthToken(token: string | null): void {
 
 export function setUnauthorizedHandler(handler: () => void): void {
   unauthorizedHandler = handler
+}
+
+export function setTokenRefreshedHandler(handler: (token: string) => void): void {
+  tokenRefreshedHandler = handler
 }
 
 // ─── HttpClient instance ──────────────────────────────────────────────────────
@@ -34,7 +39,16 @@ httpClient.instance.interceptors.request.use(
 
 // ─── Response interceptor: normalise errors ──────────────────────────────────
 httpClient.instance.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Sliding session: the backend re-issues a day-old token on any authed
+    // call. Only adopt it while still logged in with the token that was sent.
+    const refreshed = response.headers["x-refreshed-token"]
+    if (typeof refreshed === "string" && refreshed && authToken) {
+      authToken = refreshed
+      tokenRefreshedHandler?.(refreshed)
+    }
+    return response
+  },
   async (error: AxiosError<{ message?: string; error?: string; success?: boolean }>) => {
     const status = error.response?.status
     let data = error.response?.data

@@ -9,7 +9,7 @@ import { ThemeProvider, useTheme } from "../providers/ThemeProvider"
 import { QueryProvider } from "../providers/QueryProvider"
 import { toastConfig } from "../components/shared/ToastConfig"
 import { fontAssets } from "../constants/fonts"
-import { setUnauthorizedHandler } from "../services/apiClient"
+import { setUnauthorizedHandler, setTokenRefreshedHandler } from "../services/apiClient"
 import useAuthStore from "../stores/useAuthStore"
 import { usePushNotifications } from "../hooks/usePushNotifications"
 
@@ -45,6 +45,9 @@ export default function RootLayout() {
     setUnauthorizedHandler(() => {
       useAuthStore.getState().clearAuth()
       router.replace("/(auth)/login")
+    })
+    setTokenRefreshedHandler((token) => {
+      if (useAuthStore.getState().token) useAuthStore.setState({ token })
     })
   }, [])
 
