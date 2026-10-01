@@ -1,5 +1,6 @@
 import api, { setAuthToken } from "./apiClient"
 import type { UserResponse } from "./generated/Api"
+import { disableWebPush } from "./webPush"
 
 async function login(
   email: string,
@@ -25,6 +26,8 @@ async function register(
 }
 
 async function logout(): Promise<void> {
+  // Needs the auth token, so it has to run before it's cleared.
+  await disableWebPush()
   setAuthToken(null)
 }
 

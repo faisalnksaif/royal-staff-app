@@ -7,6 +7,7 @@ import { useRouter } from "expo-router"
 import { useQueryClient } from "@tanstack/react-query"
 import { authService } from "../services/authService"
 import useAuthStore from "../stores/useAuthStore"
+import { syncWebPushIfGranted } from "../services/webPush"
 
 /** Payload shapes the backend attaches to its pushes. */
 type NotificationData = {
@@ -186,6 +187,58 @@ export function usePushNotifications(enabled: boolean) {
       notificationListener.current?.remove()
       responseListener.current?.remove()
     }
+  }, [enabled])
+
+  // Web (PWA): pushes arrive through the service worker in public/sw.js,
+  // which posts "push-received" / "notification-tap" messages to open
+  // windows. A tap with no window open launches the app with the payload in
+  // `?notification=` instead - read once here, held until the user is loaded.
+  const pendingWebTap = useRef<NotificationData | null>(null)
+  if (!IS_NATIVE && pendingWebTap.current === null && typeof window !== "undefined") {
+    const params = new URLSearchParams(window.location.search)
+    const raw = params.get("notification")
+    if (raw) {
+      try {
+        pendingWebTap.current = JSON.parse(raw)
+      } catch {
+        // malformed - ignore
+      }
+      params.delete("notification")
+      const query = params.toString()
+      window.history.replaceState(null, "", window.location.pathname + (query ? `?${query}` : ""))
+    }
+  }
+
+  useEffect(() => {
+    if (IS_NATIVE || !enabled) return
+    if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return
+
+    // Permission granted on an earlier visit - keep the backend's copy current.
+    syncWebPushIfGranted().catch(() => {})
+
+    if (pendingWebTap.current) {
+      const data = pendingWebTap.current
+      pendingWebTap.current = null
+      handleNotificationTap(data, roleRef.current, router, queryClient)
+    }
+
+    function onMessage(event: MessageEvent) {
+      const msg = event.data as { type?: string; data?: NotificationData } | null
+      if (msg?.type === "push-received") {
+        queryClient.invalidateQueries({ queryKey: ["staff-outstanding"] })
+        queryClient.invalidateQueries({ queryKey: ["staff-followups"] })
+        queryClient.invalidateQueries({ queryKey: ["customer-followups"] })
+        queryClient.invalidateQueries({ queryKey: ["notifications"] })
+        if (isWorkNotification(msg.data)) {
+          queryClient.invalidateQueries({ queryKey: ["work"] })
+        }
+      } else if (msg?.type === "notification-tap") {
+        handleNotificationTap(msg.data ?? {}, roleRef.current, router, queryClient)
+      }
+    }
+
+    navigator.serviceWorker.addEventListener("message", onMessage)
+    return () => navigator.serviceWorker.removeEventListener("message", onMessage)
   }, [enabled])
 
   // Cold start: a tap that launched the app from a killed state never reaches

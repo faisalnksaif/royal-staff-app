@@ -12,6 +12,7 @@ import { fontAssets } from "../constants/fonts"
 import { setUnauthorizedHandler, setTokenRefreshedHandler } from "../services/apiClient"
 import useAuthStore from "../stores/useAuthStore"
 import { usePushNotifications } from "../hooks/usePushNotifications"
+import WebPushPrompt from "../components/shared/WebPushPrompt"
 
 SplashScreen.preventAutoHideAsync()
 
@@ -33,6 +34,7 @@ function RootStack() {
         <Stack.Screen name="notifications" />
         <Stack.Screen name="feedback/[token]" />
       </Stack>
+      <WebPushPrompt enabled={user != null} />
     </>
   )
 }

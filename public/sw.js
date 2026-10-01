@@ -19,6 +19,51 @@ self.addEventListener("activate", (event) => {
   )
 })
 
+// Web Push. The backend sends {title, body, data}; `data` is the same payload
+// native pushes carry, so the app routes taps with the same logic.
+self.addEventListener("push", (event) => {
+  let payload = {}
+  try {
+    payload = event.data ? event.data.json() : {}
+  } catch (e) {
+    payload = { body: event.data ? event.data.text() : "" }
+  }
+  const title = payload.title || "Royal Pulse"
+  const data = payload.data || {}
+
+  event.waitUntil(
+    Promise.all([
+      self.registration.showNotification(title, {
+        body: payload.body || "",
+        icon: "/icons/icon-192.png",
+        badge: "/icons/icon-192.png",
+        data,
+      }),
+      // Let an open app refresh its lists, like the native received-listener.
+      self.clients
+        .matchAll({ type: "window", includeUncontrolled: true })
+        .then((clients) => clients.forEach((c) => c.postMessage({ type: "push-received", data }))),
+    ])
+  )
+})
+
+// Tap: focus an open window and hand it the payload, or open a fresh one with
+// the payload in the URL (the app picks it up once the user is loaded).
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close()
+  const data = event.notification.data || {}
+
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      const client = clients.find((c) => new URL(c.url).origin === self.location.origin)
+      if (client) {
+        return client.focus().then(() => client.postMessage({ type: "notification-tap", data }))
+      }
+      return self.clients.openWindow("/?notification=" + encodeURIComponent(JSON.stringify(data)))
+    })
+  )
+})
+
 // Old bundles pile up across deploys (every build has new hashed filenames).
 async function trimAssetCache() {
   const cache = await caches.open(ASSET_CACHE)
