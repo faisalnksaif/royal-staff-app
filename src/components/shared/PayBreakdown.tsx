@@ -22,7 +22,7 @@ import type {
  *
  *   basicPayEarned = basicPay - attendance deductions
  *   grossPay       = basicPayEarned + overtimePay - breakExcessDeduction
- *                    - earlyCheckoutDeduction + incentives
+ *                    - earlyCheckoutDeduction + incentives + leaveEncashment
  *   netPay         = grossPay - penalties - advances
  *
  * Basic and incentives are shown as separate strands because they behave
@@ -54,6 +54,9 @@ export interface PayBreakdownProps {
   deductionDetails?: PayslipDeductionDetail[]
   incentives: number
   incentiveDetails?: PayslipIncentiveDetail[]
+  /** December only: unused paid leave paid out at year end. */
+  leaveEncashmentAmount?: number
+  leaveEncashmentDays?: number
   overtimePay?: number
   overtimeMinutes?: number
   hourlyRate?: number
@@ -151,6 +154,8 @@ export default function PayBreakdown({
   deductionDetails = [],
   incentives,
   incentiveDetails = [],
+  leaveEncashmentAmount = 0,
+  leaveEncashmentDays = 0,
   overtimePay = 0,
   overtimeMinutes = 0,
   hourlyRate = 0,
@@ -207,6 +212,18 @@ export default function PayBreakdown({
                 indent
               />
             ))}
+        </>
+      )}
+
+      {/* Year-end payout of unused paid leave - December only */}
+      {leaveEncashmentAmount > 0 && (
+        <>
+          <View style={styles.sectionGap} />
+          <Row
+            label={`Leave encashment · ${leaveEncashmentDays} day${leaveEncashmentDays !== 1 ? "s" : ""}`}
+            amount={leaveEncashmentAmount}
+            sign="plus"
+          />
         </>
       )}
 

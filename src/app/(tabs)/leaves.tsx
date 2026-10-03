@@ -69,6 +69,7 @@ function BalanceCard({ staffId }: { staffId?: number }) {
   const remaining = balance?.leaveBalance ?? 0
   const usedThisMonth = balance?.leaveUsedThisMonth ?? 0
   const noShows = balance?.noShowDaysThisYear ?? 0
+  const paidLeave = balance?.paidLeave
   const overBy = remaining < 0 ? -remaining : 0
   const isOver = overBy > 0
   const rawRatio = total > 0 ? used / total : 0
@@ -126,6 +127,12 @@ function BalanceCard({ staffId }: { staffId?: number }) {
           {noShows > 0 && (
             <AppText variant="caption" color="tertiary">
               Includes {noShows} absent day{noShows !== 1 ? "s" : ""} with no leave requested.
+            </AppText>
+          )}
+          {paidLeave && (
+            <AppText variant="caption" color="secondary" style={{ marginTop: spacing[1] }}>
+              Paid leave: {paidLeave.balance} day{paidLeave.balance !== 1 ? "s" : ""} available
+              {paidLeave.carriedForward > 0 ? ` (${paidLeave.carriedForward} carried forward)` : ""}. Absences beyond this are unpaid; unused days are encashed in December.
             </AppText>
           )}
         </>

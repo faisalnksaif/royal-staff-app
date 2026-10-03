@@ -66,8 +66,13 @@ export default function WebPushPrompt({ enabled }: { enabled: boolean }) {
           text2: "Allow them for this site in your browser settings",
         })
       }
-    } catch {
-      Toast.show({ type: "error", text1: "Couldn't turn on notifications", text2: "Please try again" })
+    } catch (e) {
+      Toast.show({
+        type: "error",
+        text1: "Couldn't turn on notifications",
+        text2: (e as Error)?.message || "Please try again",
+        visibilityTime: 8000,
+      })
     } finally {
       setBusy(false)
     }

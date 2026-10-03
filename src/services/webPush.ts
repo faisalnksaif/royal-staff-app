@@ -63,22 +63,46 @@ async function getPublicKey(): Promise<string> {
  * launch - the backend keys subscriptions by endpoint.
  */
 async function subscribeAndSave(): Promise<void> {
-  const registration = await navigator.serviceWorker.ready
+  const registration = await step("service worker", () => navigator.serviceWorker.ready)
   let subscription = await registration.pushManager.getSubscription()
   if (!subscription) {
-    const publicKey = await getPublicKey()
-    subscription = await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(publicKey) as BufferSource,
-    })
+    const publicKey = await step("server key", getPublicKey)
+    subscription = await step("subscribe", () =>
+      registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey) as BufferSource,
+      })
+    )
   }
-  await api.http.request({
-    path: "/auth/web-push-subscription",
-    method: "PUT",
-    secure: true,
-    format: "json",
-    body: subscription.toJSON(),
-  })
+  await step("save", () =>
+    api.http.request({
+      path: "/auth/web-push-subscription",
+      method: "PUT",
+      secure: true,
+      format: "json",
+      body: subscription!.toJSON(),
+    })
+  )
+}
+
+/**
+ * Labels a failure with the step it happened in plus the underlying reason
+ * (server error text or HTTP status for API calls), so "couldn't turn on"
+ * on a user's phone says what actually went wrong.
+ */
+async function step<T>(name: string, fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn()
+  } catch (e: any) {
+    const reason =
+      e?.response?.data?.error ??
+      (e?.response?.status ? `HTTP ${e.response.status}` : undefined) ??
+      e?.error?.error ??
+      (e?.status ? `HTTP ${e.status}` : undefined) ??
+      e?.message ??
+      String(e)
+    throw new Error(`${name}: ${reason}`)
+  }
 }
 
 /**

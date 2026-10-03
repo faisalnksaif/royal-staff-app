@@ -1501,6 +1501,8 @@ function PreviewResult({ preview }: { preview: PayrollPreview }) {
           deductionDetails={preview.deductionDetails}
           incentives={preview.incentives}
           incentiveDetails={preview.incentiveDetails}
+          leaveEncashmentAmount={preview.leaveEncashmentAmount}
+          leaveEncashmentDays={preview.leaveEncashmentDays}
           overtimePay={preview.overtimePay}
           overtimeMinutes={preview.overtimeMinutes}
           hourlyRate={preview.hourlyRate}
@@ -1969,6 +1971,8 @@ function PayslipDetail({ item, missedDates = [], onBack }: { item: Payslip; miss
           deductionDetails={item.deductionDetails}
           incentives={item.incentives}
           incentiveDetails={item.incentiveDetails}
+          leaveEncashmentAmount={item.leaveEncashmentAmount}
+          leaveEncashmentDays={item.leaveEncashmentDays}
           overtimePay={item.overtimePay}
           overtimeMinutes={item.overtimeMinutes}
           hourlyRate={item.hourlyRate}

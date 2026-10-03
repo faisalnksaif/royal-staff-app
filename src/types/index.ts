@@ -873,6 +873,13 @@ export interface LeaveBalance {
   /** Absences with no leave requested. Already included in totalRequestedThisYear. */
   noShowDaysThisYear: number
   recommendedMonthlyLimit: number
+  /** What payroll pays for: 1 day accrues monthly, unused days carry forward, resets each January. */
+  paidLeave?: {
+    balance: number
+    carriedForward: number
+    accruedThisMonth: number
+    usedThisMonth: number
+  }
 }
 
 export type MeetingAttendanceStatus = "present" | "absent" | "excused"
@@ -1474,6 +1481,8 @@ export interface PayslipDeductionDetail {
   type: "absent" | "half-day"
   reason: string
   days: number
+  /** Portion of `days` covered by paid leave - not deducted. */
+  paidLeaveDays?: number
   amount: number
 }
 
@@ -1524,6 +1533,14 @@ export interface Payslip {
   /** Attendance-driven deductions only (absence + half-day). */
   deductionAmount: number
   deductionDetails: PayslipDeductionDetail[]
+  /** Paid-leave balance for the month - absent on payslips from before paid leave. */
+  paidLeaveOpening?: number
+  paidLeaveAccrued?: number
+  paidLeaveUsed?: number
+  paidLeaveClosing?: number
+  /** December only: the year-end paid-leave balance paid out. Added to gross. */
+  leaveEncashmentDays?: number
+  leaveEncashmentAmount?: number
   hourlyRate?: number
   overtimeMinutes?: number
   overtimeDetails?: PayslipOvertimeDetail[]
@@ -1590,6 +1607,14 @@ export interface PayrollPreview {
   penaltyAmount: number
   penaltyDetails: PayslipPenaltyDetail[]
   advanceDeducted: number
+  /** Paid-leave balance for the month - absent on payslips from before paid leave. */
+  paidLeaveOpening?: number
+  paidLeaveAccrued?: number
+  paidLeaveUsed?: number
+  paidLeaveClosing?: number
+  /** December only: the year-end paid-leave balance paid out. Added to gross. */
+  leaveEncashmentDays?: number
+  leaveEncashmentAmount?: number
   unpaidAbsenceDays: number
   halfDays: number
   daysInMonth: number
