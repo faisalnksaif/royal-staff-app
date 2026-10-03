@@ -11,6 +11,7 @@ import type {
   PayslipOvertimeDetail,
   PayslipBreakExcessDetail,
   PayslipEarlyCheckoutDetail,
+  PayslipLateArrivalDetail,
 } from "../../types"
 
 /**
@@ -72,7 +73,7 @@ export interface PayBreakdownProps {
   earlyCheckoutDetails?: PayslipEarlyCheckoutDetail[]
   lateArrivalDeduction?: number
   lateArrivalMinutes?: number
-  lateArrivalDetails?: PayslipEarlyCheckoutDetail[]
+  lateArrivalDetails?: PayslipLateArrivalDetail[]
   penaltyAmount: number
   penaltyDetails?: PayslipPenaltyDetail[]
   advanceDeducted: number
@@ -316,13 +317,13 @@ export default function PayBreakdown({
             waivedBreakExcessMinutes <= 0 &&
             earlyCheckoutDeduction <= 0 && <View style={styles.sectionGap} />}
           <Row
-            label={`Late arrival · ${formatMinutes(lateArrivalMinutes)}`}
+            label={`Late arrival · ${formatMinutes(lateArrivalMinutes)} charged`}
             amount={lateArrivalDeduction}
             sign="minus"
           />
           {expanded &&
             lateArrivalDetails.map((l) => (
-              <Row key={l.date} label={`${formatDay(l.date)} · ${formatMinutes(l.minutes)} late`} amount={l.amount} indent />
+              <Row key={l.date} label={`${formatDay(l.date)} · ${formatMinutes(l.lateMinutes ?? l.minutes)} late, ${formatMinutes(l.minutes)} charged`} amount={l.amount} indent />
             ))}
         </>
       )}

@@ -1513,6 +1513,16 @@ export interface PayslipEarlyCheckoutDetail {
   amount: number
 }
 
+/** One day's late arrival. Only the minutes past the threshold are charged. */
+export interface PayslipLateArrivalDetail {
+  date: string
+  /** How late they actually were. */
+  lateMinutes?: number
+  /** Charged minutes - lateMinutes past the threshold. */
+  minutes: number
+  amount: number
+}
+
 export interface PayslipPenaltyDetail {
   reason: string
   amount: number
@@ -1559,7 +1569,7 @@ export interface Payslip {
   /** Per-minute charge for arriving late past the negligible threshold; half-days excluded. */
   lateArrivalDeduction?: number
   lateArrivalMinutes?: number
-  lateArrivalDetails?: PayslipEarlyCheckoutDetail[]
+  lateArrivalDetails?: PayslipLateArrivalDetail[]
   penaltyAmount: number
   penaltyDetails: PayslipPenaltyDetail[]
   advanceDeducted: number
@@ -1611,7 +1621,7 @@ export interface PayrollPreview {
   /** Per-minute charge for arriving late past the negligible threshold; half-days excluded. */
   lateArrivalDeduction: number
   lateArrivalMinutes: number
-  lateArrivalDetails: PayslipEarlyCheckoutDetail[]
+  lateArrivalDetails: PayslipLateArrivalDetail[]
   penaltyAmount: number
   penaltyDetails: PayslipPenaltyDetail[]
   advanceDeducted: number
