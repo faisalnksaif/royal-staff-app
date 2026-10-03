@@ -22,7 +22,8 @@ import type {
  *
  *   basicPayEarned = basicPay - attendance deductions
  *   grossPay       = basicPayEarned + overtimePay - breakExcessDeduction
- *                    - earlyCheckoutDeduction + incentives + leaveEncashment
+ *                    - earlyCheckoutDeduction - lateArrivalDeduction
+ *                    + incentives + leaveEncashment
  *   netPay         = grossPay - penalties - advances
  *
  * Basic and incentives are shown as separate strands because they behave
@@ -69,6 +70,9 @@ export interface PayBreakdownProps {
   earlyCheckoutDeduction?: number
   earlyCheckoutMinutes?: number
   earlyCheckoutDetails?: PayslipEarlyCheckoutDetail[]
+  lateArrivalDeduction?: number
+  lateArrivalMinutes?: number
+  lateArrivalDetails?: PayslipEarlyCheckoutDetail[]
   penaltyAmount: number
   penaltyDetails?: PayslipPenaltyDetail[]
   advanceDeducted: number
@@ -168,6 +172,9 @@ export default function PayBreakdown({
   earlyCheckoutDeduction = 0,
   earlyCheckoutMinutes = 0,
   earlyCheckoutDetails = [],
+  lateArrivalDeduction = 0,
+  lateArrivalMinutes = 0,
+  lateArrivalDetails = [],
   penaltyAmount,
   penaltyDetails = [],
   advanceDeducted,
@@ -296,6 +303,26 @@ export default function PayBreakdown({
           {expanded &&
             earlyCheckoutDetails.map((e) => (
               <Row key={e.date} label={`${formatDay(e.date)} · ${formatMinutes(e.minutes)} early`} amount={e.amount} indent />
+            ))}
+        </>
+      )}
+
+      {/* Late arrival - off whatever basic + overtime the above left; half-days excluded */}
+      {lateArrivalDeduction > 0 && (
+        <>
+          {overtimePay <= 0 &&
+            pendingOvertimeMinutes <= 0 &&
+            breakExcessDeduction <= 0 &&
+            waivedBreakExcessMinutes <= 0 &&
+            earlyCheckoutDeduction <= 0 && <View style={styles.sectionGap} />}
+          <Row
+            label={`Late arrival · ${formatMinutes(lateArrivalMinutes)}`}
+            amount={lateArrivalDeduction}
+            sign="minus"
+          />
+          {expanded &&
+            lateArrivalDetails.map((l) => (
+              <Row key={l.date} label={`${formatDay(l.date)} · ${formatMinutes(l.minutes)} late`} amount={l.amount} indent />
             ))}
         </>
       )}

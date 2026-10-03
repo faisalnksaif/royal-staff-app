@@ -1556,6 +1556,10 @@ export interface Payslip {
   earlyCheckoutDetails?: PayslipEarlyCheckoutDetail[]
   /** Comes out of whatever basic + overtime break excess left - never incentives. */
   earlyCheckoutDeduction?: number
+  /** Per-minute charge for arriving late past the negligible threshold; half-days excluded. */
+  lateArrivalDeduction?: number
+  lateArrivalMinutes?: number
+  lateArrivalDetails?: PayslipEarlyCheckoutDetail[]
   penaltyAmount: number
   penaltyDetails: PayslipPenaltyDetail[]
   advanceDeducted: number
@@ -1604,6 +1608,10 @@ export interface PayrollPreview {
   earlyCheckoutMinutes: number
   earlyCheckoutDetails: PayslipEarlyCheckoutDetail[]
   earlyCheckoutDeduction: number
+  /** Per-minute charge for arriving late past the negligible threshold; half-days excluded. */
+  lateArrivalDeduction: number
+  lateArrivalMinutes: number
+  lateArrivalDetails: PayslipEarlyCheckoutDetail[]
   penaltyAmount: number
   penaltyDetails: PayslipPenaltyDetail[]
   advanceDeducted: number

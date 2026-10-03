@@ -1515,6 +1515,9 @@ function PreviewResult({ preview }: { preview: PayrollPreview }) {
           earlyCheckoutDeduction={preview.earlyCheckoutDeduction}
           earlyCheckoutMinutes={preview.earlyCheckoutMinutes}
           earlyCheckoutDetails={preview.earlyCheckoutDetails}
+          lateArrivalDeduction={preview.lateArrivalDeduction}
+          lateArrivalMinutes={preview.lateArrivalMinutes}
+          lateArrivalDetails={preview.lateArrivalDetails}
           penaltyAmount={preview.penaltyAmount}
           penaltyDetails={preview.penaltyDetails}
           advanceDeducted={preview.advanceDeducted}
@@ -1747,7 +1750,7 @@ function PayrollMonthOverview({
 
   const totalNet = sumBy(payslips, (p) => p.netPay)
   const totalGross = sumBy(payslips, (p) => p.grossPay)
-  const totalDeductions = sumBy(payslips, (p) => (p.deductionAmount ?? 0) + (p.breakExcessDeduction ?? 0) + (p.earlyCheckoutDeduction ?? 0) + (p.penaltyAmount ?? 0))
+  const totalDeductions = sumBy(payslips, (p) => (p.deductionAmount ?? 0) + (p.breakExcessDeduction ?? 0) + (p.earlyCheckoutDeduction ?? 0) + (p.lateArrivalDeduction ?? 0) + (p.penaltyAmount ?? 0))
   const totalOvertime = sumBy(payslips, (p) => p.overtimePay)
   const totalAdvances = sumBy(payslips, (p) => p.advanceDeducted)
 
@@ -1985,6 +1988,9 @@ function PayslipDetail({ item, missedDates = [], onBack }: { item: Payslip; miss
           earlyCheckoutDeduction={item.earlyCheckoutDeduction}
           earlyCheckoutMinutes={item.earlyCheckoutMinutes}
           earlyCheckoutDetails={item.earlyCheckoutDetails}
+          lateArrivalDeduction={item.lateArrivalDeduction}
+          lateArrivalMinutes={item.lateArrivalMinutes}
+          lateArrivalDetails={item.lateArrivalDetails}
           penaltyAmount={item.penaltyAmount ?? 0}
           penaltyDetails={item.penaltyDetails}
           advanceDeducted={item.advanceDeducted ?? 0}
