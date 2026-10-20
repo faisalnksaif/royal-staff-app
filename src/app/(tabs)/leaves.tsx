@@ -31,7 +31,7 @@ import { spacing, colors as palette, radii } from "../../constants/theme"
 import { leaveService } from "../../services/leaveService"
 import useAuthStore from "../../stores/useAuthStore"
 import { useTablet } from "../../hooks/useTablet"
-import type { LeaveRequest, LeaveStatus, RequestableLeaveType } from "../../types"
+import type { LeaveRequest, LeaveStatus, RequestableLeaveType, HalfDaySession } from "../../types"
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -47,6 +47,19 @@ const FILTERS: Array<{ label: string; value: LeaveStatus | "all" }> = [
   { label: "Pending",  value: "pending" },
   { label: "Approved", value: "approved" },
   { label: "Rejected", value: "rejected" },
+]
+
+const HALF_DAY_LABEL: Record<HalfDaySession, string> = {
+  first: "First half",
+  second: "Second half",
+}
+
+type Duration = "full" | HalfDaySession
+
+const DURATIONS: Array<{ label: string; value: Duration }> = [
+  { label: "Full day(s)", value: "full" },
+  { label: "First half", value: "first" },
+  { label: "Second half", value: "second" },
 ]
 
 // ─── BalanceCard ──────────────────────────────────────────────────────────────
@@ -156,26 +169,32 @@ function RequestModal({
   const [startDate, setStartDate] = useState<Date | null>(null)
   const [endDate, setEndDate] = useState<Date | null>(null)
   const [leaveType, setLeaveType] = useState<RequestableLeaveType>("Personal")
+  const [duration, setDuration] = useState<Duration>("full")
   const [reason, setReason] = useState("")
   const [error, setError] = useState("")
+
+  const isHalfDay = duration !== "full"
 
   const mutation = useMutation({
     mutationFn: () => leaveService.requestLeave({
       startDate: moment(startDate).format("YYYY-MM-DD"),
-      endDate: moment(endDate).format("YYYY-MM-DD"),
+      // A half-day covers the one selected date.
+      endDate: moment(isHalfDay ? startDate : endDate).format("YYYY-MM-DD"),
       leaveType,
       reason,
+      halfDaySession: duration !== "full" ? duration : undefined,
     }),
     onSuccess: () => { onSuccess(); onClose(); reset() },
     onError: (e) => setError((e as Error).message ?? "Request failed"),
   })
 
   function reset() {
-    setStartDate(null); setEndDate(null); setLeaveType("Personal"); setReason(""); setError("")
+    setStartDate(null); setEndDate(null); setLeaveType("Personal"); setDuration("full"); setReason(""); setError("")
   }
 
   function validate() {
-    if (!startDate) return "Please select a start date"
+    if (!startDate) return isHalfDay ? "Please select a date" : "Please select a start date"
+    if (isHalfDay) return reason.trim() ? null : "Please provide a reason"
     if (!endDate) return "Please select an end date"
     if (moment(endDate).isBefore(moment(startDate), "day")) return "End date must be after start date"
     if (!reason.trim()) return "Please provide a reason"
@@ -221,28 +240,65 @@ function RequestModal({
           ))}
         </View>
 
+        {/* Duration */}
+        <AppText variant="caption" color="tertiary" style={styles.fieldLabel}>Duration</AppText>
+        <View style={styles.typeRow}>
+          {DURATIONS.map((d) => (
+            <Pressable
+              key={d.value}
+              onPress={() => setDuration(d.value)}
+              style={[
+                styles.typeChip,
+                {
+                  borderColor: duration === d.value ? colors.accent : colors.border,
+                  backgroundColor: duration === d.value ? colors.accent + "18" : "transparent",
+                },
+              ]}
+            >
+              <AppText
+                variant={duration === d.value ? "bodyMedium" : "body"}
+                style={{ color: duration === d.value ? colors.accent : colors.text.secondary }}
+              >
+                {d.label}
+              </AppText>
+            </Pressable>
+          ))}
+        </View>
+
         {/* Start date */}
         <View style={styles.fieldLabel}>
           <DatePickerField
-            label="Start Date"
+            label={isHalfDay ? "Date" : "Start Date"}
             value={startDate}
             onChange={setStartDate}
-            placeholder="Select start date"
+            placeholder={isHalfDay ? "Select date" : "Select start date"}
           />
         </View>
 
         {/* End date */}
-        <View style={styles.fieldLabel}>
-          <DatePickerField
-            label="End Date"
-            value={endDate}
-            onChange={setEndDate}
-            placeholder="Select end date"
-          />
-        </View>
+        {!isHalfDay && (
+          <View style={styles.fieldLabel}>
+            <DatePickerField
+              label="End Date"
+              value={endDate}
+              onChange={setEndDate}
+              placeholder="Select end date"
+            />
+          </View>
+        )}
 
         {/* Day count */}
-        {startDate && endDate && !moment(endDate).isBefore(moment(startDate), "day") && (
+        {duration !== "full" && startDate && (
+          <View style={[styles.dayCount, { backgroundColor: colors.accentSubtle }]}>
+            <AppText variant="bodyMedium" style={{ color: colors.accent }}>
+              ½ day · {HALF_DAY_LABEL[duration]}
+            </AppText>
+            <AppText variant="caption" color="secondary">
+              {moment(startDate).format("D MMM YYYY")}
+            </AppText>
+          </View>
+        )}
+        {!isHalfDay && startDate && endDate && !moment(endDate).isBefore(moment(startDate), "day") && (
           <View style={[styles.dayCount, { backgroundColor: colors.accentSubtle }]}>
             <AppText variant="bodyMedium" style={{ color: colors.accent }}>
               {moment(endDate).diff(moment(startDate), "days") + 1} day{moment(endDate).diff(moment(startDate), "days") + 1 !== 1 ? "s" : ""}
@@ -350,6 +406,9 @@ function LeaveCard({
 
   const pills: ListRowPill[] = [
     { key: "type", label: item.leaveType, color: colors.accent, bgColor: colors.accentSubtle },
+    ...(item.halfDaySession
+      ? [{ key: "half", label: HALF_DAY_LABEL[item.halfDaySession], color: colors.accent, bgColor: colors.accentSubtle }]
+      : []),
     { key: "status", label: status.label, color: status.color, bgColor: status.color + "22" },
   ]
 
@@ -377,7 +436,9 @@ function LeaveCard({
         <View key="dates" style={styles.metaRow}>
           <Calendar size={14} color={colors.text.tertiary} strokeWidth={1.5} />
           <AppText variant="body" style={{ color: colors.text.secondary as string }}>
-            {moment(item.startDate).format("D MMM")} – {moment(item.endDate).format("D MMM YYYY")}
+            {item.halfDaySession
+              ? moment(item.startDate).format("D MMM YYYY")
+              : `${moment(item.startDate).format("D MMM")} – ${moment(item.endDate).format("D MMM YYYY")}`}
           </AppText>
         </View>,
         ...(item.reason

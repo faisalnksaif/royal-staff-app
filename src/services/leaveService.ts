@@ -1,5 +1,5 @@
 import api from "./apiClient"
-import type { LeaveRequest, LeaveStatsOverview, LeaveBalance, LeaveStatus, RequestableLeaveType } from "../types"
+import type { LeaveRequest, LeaveStatsOverview, LeaveBalance, LeaveStatus, RequestableLeaveType, HalfDaySession } from "../types"
 
 async function getLeaves(status?: LeaveStatus): Promise<{ success: boolean; data: { count: number; leaves: LeaveRequest[] } }> {
   const qs = status ? `?status=${status}` : ""
@@ -80,6 +80,8 @@ interface RequestLeavePayload {
   endDate: string
   leaveType: RequestableLeaveType
   reason: string
+  // Half-day request: startDate === endDate, this half of the shift off.
+  halfDaySession?: HalfDaySession
 }
 
 async function getMyLeaves(status?: LeaveStatus): Promise<{ success: boolean; data: { count: number; leaves: LeaveRequest[] } }> {

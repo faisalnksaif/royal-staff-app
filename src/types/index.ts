@@ -821,6 +821,8 @@ export type LeaveStatus = "pending" | "approved" | "rejected" | "cancelled"
 export type LeaveType = "Personal" | "Medical" | "Attendance"
 // The subset a user may actually request. "Attendance" is excluded by design.
 export type RequestableLeaveType = Exclude<LeaveType, "Attendance">
+// Which half of the shift a requested half-day leave takes off.
+export type HalfDaySession = "first" | "second"
 
 export interface LeaveRequest {
   id: string
@@ -830,6 +832,8 @@ export interface LeaveRequest {
   startDate: string
   endDate: string
   numberOfDays: number
+  /** Set only on a staff-requested half-day (numberOfDays 0.5, one date). */
+  halfDaySession?: HalfDaySession | null
   reason: string
   status: LeaveStatus
   approvedAt?: string | null
