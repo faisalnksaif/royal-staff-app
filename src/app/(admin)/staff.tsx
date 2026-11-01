@@ -7,9 +7,14 @@ import {
   StyleSheet,
   Pressable,
   ScrollView,
+  StyleProp,
+  ViewStyle,
 } from "react-native"
-import { Pencil, ChevronDown, Check, Clock, Building2 } from "lucide-react-native"
+import { Pencil, ChevronDown, Check, Clock, Building2, UserPlus } from "lucide-react-native"
+import Toast from "react-native-toast-message"
+import moment from "moment"
 import BackButton from "../../components/shared/BackButton"
+import DatePickerField from "../../components/shared/DatePickerField"
 import RefreshButton from "../../components/shared/RefreshButton"
 import AnimatedListItem from "../../components/shared/AnimatedListItem"
 import TimeInput from "../../components/shared/TimeInput"
@@ -52,6 +57,9 @@ function StaffRow({
       </View>
       <View style={styles.staffInfo}>
         <AppText variant="bodyMedium">{toTitleCase(staff.name)}</AppText>
+        <AppText variant="caption" color={staff.hasLogin ? "secondary" : "tertiary"} numberOfLines={1}>
+          {staff.hasLogin ? staff.email : "No login"}
+        </AppText>
         <View style={styles.staffMetaRow}>
           <AppText variant="caption" color="secondary">
             {department ? department.name : "No department"}
@@ -73,6 +81,71 @@ function StaffRow({
   )
 }
 
+// ─── PickerField ────────────────────────────────────────────────────────────
+
+function PickerField({
+  label, value, emptyLabel, options, onChange, style,
+}: {
+  label: string
+  value: string | undefined
+  emptyLabel: string
+  options: { value: string; label: string }[]
+  onChange: (value: string | undefined) => void
+  style?: StyleProp<ViewStyle>
+}) {
+  const { colors } = useTheme()
+  const [open, setOpen] = useState(false)
+  const selected = options.find((o) => o.value === value) ?? null
+
+  function pick(next: string | undefined) {
+    onChange(next)
+    setOpen(false)
+  }
+
+  return (
+    <View style={style}>
+      <AppText variant="caption" color="tertiary" style={{ marginBottom: spacing[2] }}>{label}</AppText>
+      <Pressable
+        onPress={() => setOpen((v) => !v)}
+        style={[styles.shiftField, { borderColor: colors.border as string }]}
+      >
+        <AppText variant="body">{selected ? selected.label : emptyLabel}</AppText>
+        <ChevronDown
+          size={18}
+          color={colors.text.tertiary}
+          strokeWidth={2}
+          style={{ transform: [{ rotate: open ? "180deg" : "0deg" }] }}
+        />
+      </Pressable>
+
+      {open && (
+        <View style={[styles.shiftOptions, { borderColor: colors.border as string }]}>
+          <ScrollView showsVerticalScrollIndicator={false}>
+            <Pressable onPress={() => pick(undefined)} style={styles.shiftOption}>
+              <AppText variant="body">{emptyLabel}</AppText>
+              {!value && <Check size={16} color={colors.accent} strokeWidth={2} />}
+            </Pressable>
+            {options.map((o) => (
+              <Pressable key={o.value} onPress={() => pick(o.value)} style={styles.shiftOption}>
+                <AppText variant="body">{o.label}</AppText>
+                {value === o.value && <Check size={16} color={colors.accent} strokeWidth={2} />}
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+    </View>
+  )
+}
+
+function departmentOptions(departments: DepartmentResponse[]) {
+  return departments.map((d) => ({ value: d._id, label: d.name }))
+}
+
+function shiftOptions(shifts: ShiftResponse[]) {
+  return shifts.map((s) => ({ value: s._id, label: `${s.name} (${s.startTime}–${s.endTime1})` }))
+}
+
 // ─── EditStaffModal ─────────────────────────────────────────────────────────
 
 function EditStaffModal({
@@ -86,14 +159,11 @@ function EditStaffModal({
 }) {
   const { colors } = useTheme()
   const [departmentId, setDepartmentId] = useState<string | undefined>(staff.departmentId ?? undefined)
-  const [deptPickerOpen, setDeptPickerOpen] = useState(false)
   const [shiftId, setShiftId] = useState<string | undefined>(staff.shiftId ?? undefined)
-  const [shiftPickerOpen, setShiftPickerOpen] = useState(false)
   const [scoringRole, setScoringRole] = useState<ScoringRole>(staff.scoringRole ?? "executive")
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState("")
 
-  const selectedShift = shifts.find((s) => s._id === shiftId) ?? null
   const selectedDepartment = departments.find((d) => d._id === departmentId) ?? null
   // Leader roles only exist for some departments (Store) - fall back to
   // executive when the chosen department doesn't offer the current role.
@@ -116,45 +186,23 @@ function EditStaffModal({
 
   return (
     <Popup title={toTitleCase(staff.name)} onClose={onClose}>
-      <AppText variant="caption" color="tertiary" style={{ marginBottom: spacing[2] }}>Department</AppText>
-      <Pressable
-        onPress={() => setDeptPickerOpen((v) => !v)}
-        style={[styles.shiftField, { borderColor: colors.border as string }]}
-      >
-        <AppText variant="body">
-          {selectedDepartment ? selectedDepartment.name : "No department"}
-        </AppText>
-        <ChevronDown
-          size={18}
-          color={colors.text.tertiary}
-          strokeWidth={2}
-          style={{ transform: [{ rotate: deptPickerOpen ? "180deg" : "0deg" }] }}
+      {staff.hasLogin === false && (
+        <CreateLoginSection
+          staff={staff}
+          onCreated={() => {
+            onSaved()
+            onClose()
+          }}
         />
-      </Pressable>
-
-      {deptPickerOpen && (
-        <View style={[styles.shiftOptions, { borderColor: colors.border as string }]}>
-          <ScrollView showsVerticalScrollIndicator={false}>
-            <Pressable
-              onPress={() => { setDepartmentId(undefined); setDeptPickerOpen(false) }}
-              style={styles.shiftOption}
-            >
-              <AppText variant="body">No department</AppText>
-              {!departmentId && <Check size={16} color={colors.accent} strokeWidth={2} />}
-            </Pressable>
-            {departments.map((dept) => (
-              <Pressable
-                key={dept._id}
-                onPress={() => { setDepartmentId(dept._id); setDeptPickerOpen(false) }}
-                style={styles.shiftOption}
-              >
-                <AppText variant="body">{dept.name}</AppText>
-                {departmentId === dept._id && <Check size={16} color={colors.accent} strokeWidth={2} />}
-              </Pressable>
-            ))}
-          </ScrollView>
-        </View>
       )}
+
+      <PickerField
+        label="Department"
+        value={departmentId}
+        emptyLabel="No department"
+        options={departmentOptions(departments)}
+        onChange={setDepartmentId}
+      />
 
       {availableRoles.length > 1 && (
         <>
@@ -172,45 +220,14 @@ function EditStaffModal({
         </>
       )}
 
-      <AppText variant="caption" color="tertiary" style={{ marginTop: spacing[4], marginBottom: spacing[2] }}>Shift</AppText>
-      <Pressable
-        onPress={() => setShiftPickerOpen((v) => !v)}
-        style={[styles.shiftField, { borderColor: colors.border as string }]}
-      >
-        <AppText variant="body">
-          {selectedShift ? `${selectedShift.name} (${selectedShift.startTime}–${selectedShift.endTime1})` : "Default shift"}
-        </AppText>
-        <ChevronDown
-          size={18}
-          color={colors.text.tertiary}
-          strokeWidth={2}
-          style={{ transform: [{ rotate: shiftPickerOpen ? "180deg" : "0deg" }] }}
-        />
-      </Pressable>
-
-      {shiftPickerOpen && (
-        <View style={[styles.shiftOptions, { borderColor: colors.border as string }]}>
-          <ScrollView showsVerticalScrollIndicator={false}>
-            <Pressable
-              onPress={() => { setShiftId(undefined); setShiftPickerOpen(false) }}
-              style={styles.shiftOption}
-            >
-              <AppText variant="body">Default shift</AppText>
-              {!shiftId && <Check size={16} color={colors.accent} strokeWidth={2} />}
-            </Pressable>
-            {shifts.map((shift) => (
-              <Pressable
-                key={shift._id}
-                onPress={() => { setShiftId(shift._id); setShiftPickerOpen(false) }}
-                style={styles.shiftOption}
-              >
-                <AppText variant="body">{shift.name} ({shift.startTime}–{shift.endTime1})</AppText>
-                {shiftId === shift._id && <Check size={16} color={colors.accent} strokeWidth={2} />}
-              </Pressable>
-            ))}
-          </ScrollView>
-        </View>
-      )}
+      <PickerField
+        label="Shift"
+        value={shiftId}
+        emptyLabel="Default shift"
+        options={shiftOptions(shifts)}
+        onChange={setShiftId}
+        style={{ marginTop: spacing[4] }}
+      />
 
       {error ? (
         <AppText variant="caption" style={{ color: palette.error.default, marginTop: spacing[3] }}>
@@ -221,6 +238,236 @@ function EditStaffModal({
       <View style={{ marginTop: spacing[5] }}>
         <AppButton label={isSaving ? "Saving…" : "Save Changes"} onPress={handleSave} disabled={isSaving} />
       </View>
+    </Popup>
+  )
+}
+
+// ─── CreateLoginSection ─────────────────────────────────────────────────────
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+// For staff with no User login yet - saved on its own, separate from the
+// department/shift "Save Changes" below.
+function CreateLoginSection({
+  staff, onCreated,
+}: {
+  staff: StaffResponse
+  onCreated: () => void
+}) {
+  const { colors } = useTheme()
+  const [email, setEmail] = useState(staff.email ?? "")
+  const [password, setPassword] = useState("")
+  const [isSaving, setIsSaving] = useState(false)
+  const [error, setError] = useState("")
+
+  async function handleCreate() {
+    if (!EMAIL_RE.test(email.trim())) {
+      setError("Enter a valid email")
+      return
+    }
+    if (password.length < 4) {
+      setError("Password must be at least 4 characters")
+      return
+    }
+    setIsSaving(true)
+    setError("")
+    try {
+      await staffService.createStaffLogin(staff.id, { email: email.trim(), password })
+      Toast.show({ type: "success", text1: `Login created for ${toTitleCase(staff.name)}` })
+      onCreated()
+    } catch (e) {
+      setError((e as Error).message ?? "Failed to create login")
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  return (
+    <View
+      style={{
+        marginBottom: spacing[4],
+        paddingBottom: spacing[4],
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: colors.border as string,
+      }}
+    >
+      <AppText variant="caption" color="tertiary" style={{ marginBottom: spacing[2] }}>
+        No login yet - set an email and password so they can sign in
+      </AppText>
+      <View style={{ gap: spacing[3] }}>
+        <AppInput
+          label="Email"
+          value={email}
+          onChangeText={setEmail}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        <AppInput
+          label="Password"
+          value={password}
+          onChangeText={setPassword}
+          placeholder="At least 4 characters"
+          secureTextEntry
+          autoCapitalize="none"
+        />
+      </View>
+      {error ? (
+        <AppText variant="caption" style={{ color: palette.error.default, marginTop: spacing[2] }}>
+          {error}
+        </AppText>
+      ) : null}
+      <View style={{ marginTop: spacing[3] }}>
+        <AppButton label={isSaving ? "Creating…" : "Create Login"} onPress={handleCreate} disabled={isSaving} />
+      </View>
+    </View>
+  )
+}
+
+// ─── AddStaffModal ──────────────────────────────────────────────────────────
+
+function AddStaffModal({
+  shifts, departments, canSetSalary, onClose, onCreated,
+}: {
+  shifts: ShiftResponse[]
+  departments: DepartmentResponse[]
+  canSetSalary: boolean
+  onClose: () => void
+  onCreated: () => void
+}) {
+  const [name, setName] = useState("")
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [phone, setPhone] = useState("")
+  const [departmentId, setDepartmentId] = useState<string | undefined>(undefined)
+  const [shiftId, setShiftId] = useState<string | undefined>(undefined)
+  const [joiningDate, setJoiningDate] = useState<Date | null>(new Date())
+  const [basicPay, setBasicPay] = useState("")
+  const [isSaving, setIsSaving] = useState(false)
+  const [error, setError] = useState("")
+
+  function validate(): string | null {
+    if (!name.trim()) return "Name is required"
+    if (!EMAIL_RE.test(email.trim())) return "Enter a valid email"
+    if (password.length < 4) return "Password must be at least 4 characters"
+    if (basicPay.trim() && !(Number(basicPay) > 0)) return "Salary must be a number greater than 0"
+    return null
+  }
+
+  async function handleCreate() {
+    const validationError = validate()
+    if (validationError) {
+      setError(validationError)
+      return
+    }
+    setIsSaving(true)
+    setError("")
+    try {
+      const res = await staffService.createStaff({
+        name: name.trim(),
+        email: email.trim(),
+        password,
+        phone: phone.trim() || undefined,
+        departmentId,
+        shiftId,
+        joiningDate: joiningDate ? moment(joiningDate).format("YYYY-MM-DD") : undefined,
+        basicPay: canSetSalary && basicPay.trim() ? Number(basicPay) : undefined,
+      })
+      if (res.warning) {
+        Toast.show({ type: "error", text1: res.warning })
+      } else {
+        Toast.show({
+          type: "success",
+          text1: `${name.trim()} added`,
+          text2: basicPay.trim() ? "Salary is pending approval" : undefined,
+        })
+      }
+      onCreated()
+      onClose()
+    } catch (e) {
+      setError((e as Error).message ?? "Failed to add staff")
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  return (
+    <Popup title="Add Staff" onClose={onClose}>
+      <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        <View style={{ gap: spacing[3] }}>
+          <AppInput label="Name" value={name} onChangeText={setName} placeholder="Full name" />
+          <AppInput
+            label="Email"
+            value={email}
+            onChangeText={setEmail}
+            placeholder="Used to log in"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          <AppInput
+            label="Password"
+            value={password}
+            onChangeText={setPassword}
+            placeholder="At least 4 characters"
+            secureTextEntry
+            autoCapitalize="none"
+          />
+          <AppInput
+            label="Phone (optional)"
+            value={phone}
+            onChangeText={setPhone}
+            keyboardType="phone-pad"
+          />
+        </View>
+
+        <PickerField
+          label="Department"
+          value={departmentId}
+          emptyLabel="No department"
+          options={departmentOptions(departments)}
+          onChange={setDepartmentId}
+          style={{ marginTop: spacing[4] }}
+        />
+        <PickerField
+          label="Shift"
+          value={shiftId}
+          emptyLabel="Default shift"
+          options={shiftOptions(shifts)}
+          onChange={setShiftId}
+          style={{ marginTop: spacing[4] }}
+        />
+
+        <View style={{ marginTop: spacing[4] }}>
+          <DatePickerField label="Joining date" value={joiningDate} onChange={setJoiningDate} />
+        </View>
+
+        {canSetSalary && (
+          <View style={{ marginTop: spacing[4] }}>
+            <AppInput
+              label="Basic pay / month (optional)"
+              value={basicPay}
+              onChangeText={setBasicPay}
+              keyboardType="numeric"
+              placeholder="Leave empty to set later"
+            />
+          </View>
+        )}
+
+        <AppText variant="caption" color="tertiary" style={{ marginTop: spacing[3] }}>
+          Face enrollment for attendance can be done later from the attendance screen.
+        </AppText>
+
+        {error ? (
+          <AppText variant="caption" style={{ color: palette.error.default, marginTop: spacing[3] }}>
+            {error}
+          </AppText>
+        ) : null}
+
+        <View style={{ marginTop: spacing[5], marginBottom: spacing[2] }}>
+          <AppButton label={isSaving ? "Adding…" : "Add Staff"} onPress={handleCreate} disabled={isSaving} />
+        </View>
+      </ScrollView>
     </Popup>
   )
 }
@@ -595,6 +842,7 @@ export default function StaffScreen() {
 
   const [search, setSearch] = useState("")
   const [editTarget, setEditTarget] = useState<StaffResponse | null>(null)
+  const [addStaffOpen, setAddStaffOpen] = useState(false)
   const [manageShiftsOpen, setManageShiftsOpen] = useState(false)
   const [manageDepartmentsOpen, setManageDepartmentsOpen] = useState(false)
 
@@ -626,6 +874,11 @@ export default function StaffScreen() {
           <AppText variant="heading3">Staff</AppText>
           <AppText variant="caption" color="tertiary">Department &amp; shift assignment</AppText>
         </View>
+        {canEdit && (
+          <Pressable onPress={() => setAddStaffOpen(true)} hitSlop={8} style={styles.editBtn}>
+            <UserPlus size={20} color={colors.text.tertiary} strokeWidth={1.75} />
+          </Pressable>
+        )}
         <Pressable onPress={() => setManageDepartmentsOpen(true)} hitSlop={8} style={styles.editBtn}>
           <Building2 size={20} color={colors.text.tertiary} strokeWidth={1.75} />
         </Pressable>
@@ -677,6 +930,19 @@ export default function StaffScreen() {
           departments={departments}
           onClose={() => setEditTarget(null)}
           onSaved={() => {
+            refetch()
+            queryClient.invalidateQueries({ queryKey: ["staff"] })
+          }}
+        />
+      )}
+
+      {addStaffOpen && (
+        <AddStaffModal
+          shifts={shifts}
+          departments={departments}
+          canSetSalary={isAdmin}
+          onClose={() => setAddStaffOpen(false)}
+          onCreated={() => {
             refetch()
             queryClient.invalidateQueries({ queryKey: ["staff"] })
           }}

@@ -37,4 +37,44 @@ async function updateStaff(
   return data
 }
 
-export const staffService = { getStaff, getStaffOptions, updateStaff }
+export interface CreateStaffPayload {
+  name: string
+  email: string
+  password: string
+  phone?: string
+  departmentId?: string
+  shiftId?: string
+  joiningDate?: string // YYYY-MM-DD
+  basicPay?: number // superAdmin/manager only
+}
+
+async function createStaff(
+  payload: CreateStaffPayload
+): Promise<{ success: boolean; warning?: string; data: Partial<StaffResponse> }> {
+  const { data } = await api.http.request<{ success: boolean; warning?: string; data: Partial<StaffResponse> }>({
+    path: "/staff",
+    method: "POST",
+    body: payload,
+    type: ContentType.Json,
+    secure: true,
+    format: "json",
+  })
+  return data
+}
+
+async function createStaffLogin(
+  id: number,
+  payload: { email: string; password: string }
+): Promise<{ success: boolean; data: { id: number; email: string; hasLogin: boolean } }> {
+  const { data } = await api.http.request<{ success: boolean; data: { id: number; email: string; hasLogin: boolean } }>({
+    path: `/staff/${id}/login`,
+    method: "POST",
+    body: payload,
+    type: ContentType.Json,
+    secure: true,
+    format: "json",
+  })
+  return data
+}
+
+export const staffService = { getStaff, getStaffOptions, updateStaff, createStaff, createStaffLogin }

@@ -9,7 +9,8 @@ import { ThemeProvider, useTheme } from "../providers/ThemeProvider"
 import { QueryProvider } from "../providers/QueryProvider"
 import { toastConfig } from "../components/shared/ToastConfig"
 import { fontAssets } from "../constants/fonts"
-import { setUnauthorizedHandler, setTokenRefreshedHandler } from "../services/apiClient"
+import { Platform } from "react-native"
+import { setUnauthorizedHandler, setTokenRefreshedHandler, setTokenRecoveryHandler } from "../services/apiClient"
 import useAuthStore from "../stores/useAuthStore"
 import { usePushNotifications } from "../hooks/usePushNotifications"
 import WebPushPrompt from "../components/shared/WebPushPrompt"
@@ -51,6 +52,27 @@ export default function RootLayout() {
     setTokenRefreshedHandler((token) => {
       if (useAuthStore.getState().token) useAuthStore.setState({ token })
     })
+    setTokenRecoveryHandler(async (rejectedToken) => {
+      await useAuthStore.persist.rehydrate()
+      const { token } = useAuthStore.getState()
+      return token != null && token !== rejectedToken
+    })
+  }, [])
+
+  // Each tab/PWA window keeps its own copy of the token in memory. Without
+  // this, a window opened before a login keeps sending the old token - and
+  // its next state write puts that old token back into storage for everyone.
+  useEffect(() => {
+    if (Platform.OS !== "web") return
+    const reread = () => { useAuthStore.persist.rehydrate() }
+    const onStorage = (e: StorageEvent) => { if (e.key === "auth-storage") reread() }
+    const onVisible = () => { if (document.visibilityState === "visible") reread() }
+    window.addEventListener("storage", onStorage)
+    document.addEventListener("visibilitychange", onVisible)
+    return () => {
+      window.removeEventListener("storage", onStorage)
+      document.removeEventListener("visibilitychange", onVisible)
+    }
   }, [])
 
   useEffect(() => {

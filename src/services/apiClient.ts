@@ -6,6 +6,7 @@ import type { AppError } from "../types"
 let authToken: string | null = null
 let unauthorizedHandler: (() => void) | null = null
 let tokenRefreshedHandler: ((token: string) => void) | null = null
+let tokenRecoveryHandler: ((rejectedToken: string | null) => Promise<boolean>) | null = null
 let handlingUnauthorized = false
 
 export function setAuthToken(token: string | null): void {
@@ -18,6 +19,15 @@ export function setUnauthorizedHandler(handler: () => void): void {
 
 export function setTokenRefreshedHandler(handler: (token: string) => void): void {
   tokenRefreshedHandler = handler
+}
+
+/**
+ * Called on a 401 before logging out. Resolves true when it found a different,
+ * newer token (another tab or window logged in or refreshed since this one
+ * loaded) - the request is then retried with it instead of ending the session.
+ */
+export function setTokenRecoveryHandler(handler: (rejectedToken: string | null) => Promise<boolean>): void {
+  tokenRecoveryHandler = handler
 }
 
 // ─── HttpClient instance ──────────────────────────────────────────────────────
@@ -62,6 +72,18 @@ httpClient.instance.interceptors.response.use(
         data = JSON.parse(await data.text())
       } catch {
         data = undefined
+      }
+    }
+
+    // A 401 may only mean this tab is holding a stale token - recover the
+    // current one from storage and retry once before treating it as a logout.
+    const config = error.config as (InternalAxiosRequestConfig & { _authRetried?: boolean }) | undefined
+    if (status === 401 && config && !config._authRetried && tokenRecoveryHandler) {
+      const sent = String(config.headers?.["Authorization"] ?? "").replace(/^Bearer /, "") || null
+      if (await tokenRecoveryHandler(sent) && authToken) {
+        config._authRetried = true
+        config.headers["Authorization"] = `Bearer ${authToken}`
+        return httpClient.instance.request(config)
       }
     }
 

@@ -27,6 +27,7 @@ export interface StaffResponse {
   hasPhoto?: boolean
   photoCount?: number
   role?: UserRole
+  hasLogin?: boolean // only set by GET /staff
   scoringRole?: ScoringRole
   createdAt: string
   updatedAt: string

@@ -66,7 +66,9 @@ const useAuthStore = create<AuthState>()(
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({ user: state.user, token: state.token }),
       onRehydrateStorage: () => (state) => {
-        if (state?.token) setAuthToken(state.token)
+        // Also runs on re-reads triggered by other tabs, so a logout there
+        // must clear the token here too, not just a login set it.
+        setAuthToken(state?.token ?? null)
         useAuthStore.setState({ hasHydrated: true })
       },
     }
