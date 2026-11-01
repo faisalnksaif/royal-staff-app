@@ -110,4 +110,21 @@ async function holdCustomer(ledgerId: number, payload: HoldCustomerPayload): Pro
   return data.data
 }
 
-export const mappingService = { getMappings, getStaffOptions, reassign, holdCustomer }
+export interface DeleteCustomerResult {
+  ledger_id: number
+  name: string
+  entries_deleted: number
+}
+
+async function deleteCustomer(ledgerId: number, reason: string): Promise<DeleteCustomerResult> {
+  const { data } = await api.http.request<{ success: boolean; data: DeleteCustomerResult }>({
+    path: `/ledger/customers/${ledgerId}`,
+    method: "DELETE",
+    body: { reason },
+    secure: true,
+    format: "json",
+  })
+  return data.data
+}
+
+export const mappingService = { getMappings, getStaffOptions, reassign, holdCustomer, deleteCustomer }

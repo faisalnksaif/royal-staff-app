@@ -12,7 +12,7 @@ import {
   ScrollView,
 } from "react-native"
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { Search, ChevronDown, X, Ban } from "lucide-react-native"
+import { Search, ChevronDown, X, Ban, Trash2 } from "lucide-react-native"
 import DrawerMenuButton from "../../components/shared/DrawerMenuButton"
 import StaffPickerModal from "../../components/shared/StaffPickerModal"
 import AppText from "../../components/ui/AppText"
@@ -114,6 +114,89 @@ function HoldModal({
   )
 }
 
+// ─── Delete modal ─────────────────────────────────────────────────────────────
+
+function DeleteModal({
+  visible,
+  item,
+  isDeleting,
+  error,
+  onConfirm,
+  onClose,
+}: {
+  visible: boolean
+  item: CustomerMapping | null
+  isDeleting: boolean
+  error: string | null
+  onConfirm: (ledgerId: number, reason: string) => void
+  onClose: () => void
+}) {
+  const { colors } = useTheme()
+  const [reason, setReason] = useState("")
+
+  useEffect(() => {
+    if (visible) setReason("")
+  }, [visible, item?.ledger_id])
+
+  const canSubmit = !!reason.trim() && !isDeleting
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.modalOverlay} onPress={onClose}>
+        <Pressable style={[styles.modalBox, { backgroundColor: colors.background.primary, borderColor: colors.border, padding: spacing[5] }]}>
+          <AppText variant="heading3" style={{ marginBottom: spacing[1] }}>Delete Customer</AppText>
+          <AppText variant="caption" color="secondary" style={{ marginBottom: spacing[3] }}>
+            {item?.name} · ₹{formatAmount(item?.balance ?? 0)}
+          </AppText>
+          <AppText variant="caption" color="secondary" style={{ marginBottom: spacing[4] }}>
+            For duplicates already deleted in Rowbest. The customer and all their entries are hidden from every
+            report. If they still exist in Rowbest this will be refused.
+          </AppText>
+
+          <TextInput
+            style={[styles.reasonInput, { color: colors.text.primary, borderColor: colors.border, backgroundColor: colors.background.secondary }]}
+            placeholder="Reason, e.g. duplicate of ... (required)"
+            placeholderTextColor={colors.text.tertiary as string}
+            value={reason}
+            onChangeText={setReason}
+            multiline
+            numberOfLines={3}
+          />
+
+          {error ? (
+            <AppText variant="caption" style={{ color: palette.error.default, marginBottom: spacing[2] }}>{error}</AppText>
+          ) : null}
+
+          <View style={{ flexDirection: "row", gap: spacing[3], marginTop: spacing[2] }}>
+            <TouchableOpacity
+              style={[styles.modalBtn, { borderColor: colors.border, flex: 1 }]}
+              onPress={onClose}
+            >
+              <AppText variant="bodyMedium" color="secondary">Cancel</AppText>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modalBtn, {
+                flex: 1,
+                backgroundColor: palette.error.default,
+                borderColor: "transparent",
+                opacity: canSubmit ? 1 : 0.4,
+              }]}
+              onPress={() => item && onConfirm(item.ledger_id, reason.trim())}
+              disabled={!canSubmit}
+            >
+              {isDeleting ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <AppText variant="bodyMedium" style={{ color: "#fff" }}>Delete</AppText>
+              )}
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  )
+}
+
 const PAGE_SIZE = 50
 
 
@@ -124,11 +207,13 @@ function MappingRow({
   staff,
   onReassign,
   onHold,
+  onDelete,
 }: {
   item: CustomerMapping
   staff: StaffOption[]
   onReassign: (ledgerId: number, current: number | null) => void
   onHold: (item: CustomerMapping) => void
+  onDelete: (item: CustomerMapping) => void
 }) {
   const { colors } = useTheme()
   const router = useRouter()
@@ -198,6 +283,13 @@ function MappingRow({
       >
         <Ban size={16} color={item.on_hold ? palette.error.default : colors.text.tertiary as string} strokeWidth={1.75} />
       </TouchableOpacity>
+      <TouchableOpacity
+        onPress={() => onDelete(item)}
+        hitSlop={8}
+        style={styles.holdBtn}
+      >
+        <Trash2 size={16} color={colors.text.tertiary as string} strokeWidth={1.75} />
+      </TouchableOpacity>
     </TouchableOpacity>
   )
 }
@@ -221,6 +313,8 @@ export default function MappingsScreen() {
   const [pickerCurrentStaffId, setPickerCurrentStaffId] = useState<number | null>(null)
 
   const [holdModalItem, setHoldModalItem] = useState<CustomerMapping | null>(null)
+  const [deleteModalItem, setDeleteModalItem] = useState<CustomerMapping | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const {
     data,
@@ -296,6 +390,32 @@ export default function MappingsScreen() {
       setHoldModalItem(null)
     },
   })
+
+  const { mutate: deleteCustomer, isPending: isDeleting } = useMutation({
+    mutationFn: ({ ledgerId, reason }: { ledgerId: number; reason: string }) =>
+      mappingService.deleteCustomer(ledgerId, reason),
+    onSuccess: (result) => {
+      // Gone from every cached list variant, not just the current one.
+      qc.setQueriesData<typeof data>({ queryKey: ["mappings"] }, (old) => {
+        if (!old) return old
+        return {
+          ...old,
+          pages: old.pages.map((page) => ({
+            ...page,
+            data: page.data.filter((m) => m.ledger_id !== result.ledger_id),
+            pagination: { ...page.pagination, total: Math.max(0, page.pagination.total - 1) },
+          })),
+        }
+      })
+      setDeleteModalItem(null)
+    },
+    onError: (err: { message?: string }) => setDeleteError(err?.message ?? "Failed to delete customer"),
+  })
+
+  function openDelete(item: CustomerMapping) {
+    setDeleteError(null)
+    setDeleteModalItem(item)
+  }
 
   function handleHoldConfirm(ledgerId: number, hold: boolean, reason: string) {
     holdCustomer({ ledgerId, hold, reason })
@@ -431,7 +551,7 @@ export default function MappingsScreen() {
           data={items}
           keyExtractor={(item) => String(item.ledger_id)}
           renderItem={({ item }) => (
-            <MappingRow item={item} staff={staff} onReassign={openPicker} onHold={setHoldModalItem} />
+            <MappingRow item={item} staff={staff} onReassign={openPicker} onHold={setHoldModalItem} onDelete={openDelete} />
           )}
           onEndReached={() => { if (hasNextPage && !isFetchingNextPage) fetchNextPage() }}
           onEndReachedThreshold={0.3}
@@ -465,6 +585,16 @@ export default function MappingsScreen() {
         item={holdModalItem}
         onConfirm={handleHoldConfirm}
         onClose={() => setHoldModalItem(null)}
+      />
+
+      {/* Delete modal */}
+      <DeleteModal
+        visible={deleteModalItem !== null}
+        item={deleteModalItem}
+        isDeleting={isDeleting}
+        error={deleteError}
+        onConfirm={(ledgerId, reason) => { setDeleteError(null); deleteCustomer({ ledgerId, reason }) }}
+        onClose={() => setDeleteModalItem(null)}
       />
     </View>
   )
