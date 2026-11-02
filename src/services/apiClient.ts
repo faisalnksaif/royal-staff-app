@@ -9,6 +9,16 @@ let tokenRefreshedHandler: ((token: string) => void) | null = null
 let tokenRecoveryHandler: ((rejectedToken: string | null) => Promise<boolean>) | null = null
 let handlingUnauthorized = false
 
+/** The token's issued-at time in seconds, or 0 when it can't be read. */
+function tokenIssuedAt(token: string): number {
+  try {
+    const payload = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")
+    return Number(JSON.parse(atob(payload)).iat) || 0
+  } catch {
+    return 0
+  }
+}
+
 export function setAuthToken(token: string | null): void {
   authToken = token
 }
@@ -51,9 +61,13 @@ httpClient.instance.interceptors.request.use(
 httpClient.instance.interceptors.response.use(
   (response) => {
     // Sliding session: the backend re-issues a day-old token on any authed
-    // call. Only adopt it while still logged in with the token that was sent.
+    // call. Only adopt it while still logged in, and only if it is newer than
+    // the one held: a browser-cached response can replay an old, expired one.
     const refreshed = response.headers["x-refreshed-token"]
-    if (typeof refreshed === "string" && refreshed && authToken) {
+    if (
+      typeof refreshed === "string" && refreshed && authToken &&
+      tokenIssuedAt(refreshed) > tokenIssuedAt(authToken)
+    ) {
       authToken = refreshed
       tokenRefreshedHandler?.(refreshed)
     }
